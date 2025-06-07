@@ -57,7 +57,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
         }
-        const options = { method, headers };
+        const options = { 
+        method, 
+        headers,
+        cache: 'no-cache', // 【重要】新增此行，禁止浏览器缓存API请求
+    };
         if (body) options.body = JSON.stringify(body);
         const response = await fetch(`/api/${endpoint}`, options);
         if (response.status === 204) return null;
