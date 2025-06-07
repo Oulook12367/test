@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
-    
 </head>
 <body class="is-loading">
     <div id="login-container">
@@ -23,12 +22,12 @@
     <div id="app-layout" style="display: none;">
         <aside class="sidebar">
             <div class="sidebar-header">
-              <h2>分类</h2>
-                </div>
+                <h2>分类</h2>
+            </div>
             <ul id="category-nav" class="category-nav"></ul>
         </aside>
 
-       <div class="main-content">
+        <div class="main-content">
             <header>
                 <div class="search-bar">
                     <select id="search-engine">
@@ -59,17 +58,95 @@
             <main id="bookmarks-grid"></main>
         </div>
     </div>
-
-
+    
     <input type="file" id="import-file-input" accept=".html,.htm" style="display: none;">
 
-   
-    
-  <div id="modal-backdrop" class="modal-backdrop">
-        <div id="bookmark-modal" class="modal"> </div>
-        <div id="user-management-modal" class="modal"> </div>
-        <div id="category-management-modal" class="modal"> </div>
-        <div id="confirm-modal" class="modal no-animation"> </div>
+    <div id="modal-backdrop" class="modal-backdrop">
+        <div id="bookmark-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn">&times;</span>
+                <h2 id="bookmark-modal-title"></h2>
+                <form id="bookmark-form">
+                    <input type="hidden" id="bm-id">
+                    <label for="bm-name">名称:</label>
+                    <input type="text" id="bm-name" required>
+                    <label for="bm-url">网址 (URL):</label>
+                    <input type="url" id="bm-url" placeholder="https://example.com" required>
+                    <label for="bm-desc">描述:</label>
+                    <textarea id="bm-desc" rows="2"></textarea>
+                    <label for="bm-icon">图标 URL (可选):</label>
+                    <input type="url" id="bm-icon" placeholder="将自动获取，也可自定义">
+                    <label for="bm-category">分类:</label>
+                    <select id="bm-category" required></select>
+                    <button type="submit">确认</button>
+                    <p class="modal-error-message"></p>
+                </form>
+            </div>
+        </div>
+        
+        <div id="user-management-modal" class="modal">
+             <div class="modal-content large">
+                <span class="close-btn">&times;</span>
+                <h2>用户管理</h2>
+                <div class="user-management-panel">
+                    <div class="user-list-container">
+                        <h3>用户列表</h3>
+                        <ul id="user-list"></ul>
+                    </div>
+                    <div class="user-form-container">
+                        <h3 id="user-form-title">添加新用户</h3>
+                        <form id="user-form">
+                            <input type="hidden" id="user-form-username-hidden">
+                            <label for="user-form-username">用户名:</label>
+                            <input type="text" id="user-form-username" required>
+                            <label for="user-form-password">密码:</label>
+                            <input type="password" id="user-form-password">
+                            
+                            <label>角色:</label>
+                            <div id="user-form-roles" class="checkbox-group horizontal"></div>
+                            
+                            <label>可见分类:</label>
+                            <div id="user-form-categories" class="checkbox-group"></div>
+
+                            <div class="user-form-buttons">
+                                <button type="submit">保存用户</button>
+                                <button type="button" id="user-form-clear-btn" class="secondary">新增用户</button>
+                            </div>
+                            <p class="modal-error-message"></p>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="category-management-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn">&times;</span>
+                <h2>管理分类</h2>
+                <div class="category-manager">
+                    <p class="modal-error-message" id="category-error-message"></p>
+                    <ul id="category-manager-list"></ul>
+                    <div class="category-manager-actions">
+                        <form id="add-category-form">
+                            <input type="text" id="new-category-name" placeholder="输入新分类名称..." required>
+                            <button type="submit">添加</button>
+                        </form>
+                        <button id="bulk-delete-cat-btn" class="secondary danger">删除选中</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="confirm-modal" class="modal no-animation">
+            <div class="modal-content small">
+                <h3 id="confirm-title"></h3>
+                <p id="confirm-text"></p>
+                <div class="confirm-buttons">
+                    <button id="confirm-btn-yes">确认</button>
+                    <button id="confirm-btn-no" class="secondary">取消</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>
