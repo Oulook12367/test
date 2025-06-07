@@ -2,9 +2,6 @@
   "name": "your-navi-project",
   "version": "1.0.0",
   "private": true,
-  "scripts": {
-    "start": "wrangler pages dev public"
-  },
   "dependencies": {
     "@hono/jwt": "^1.0.0",
     "hono": "^4.4.6",
