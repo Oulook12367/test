@@ -1,9 +1,9 @@
 // functions/[[path]].js
 
-// 不再需要 import { Hono } from 'hono';
-import { sign, verify } from 'jose'; // 直接从 jose 导入
+// 关键改动: 导入新的类和函数
+import { SignJWT, jwtVerify } from 'jose';
 
-// --- 辅助函数 (基本不变, 签名稍有调整) ---
+// --- 辅助函数 ---
 const JWT_SECRET = () => new TextEncoder().encode(globalThis.JWT_SECRET_STRING);
 
 const hashPassword = async (password) => {
@@ -57,7 +57,8 @@ const authenticateRequest = async (request, env, requiredRole) => {
     }
     const token = authHeader.substring(7);
     try {
-        const { payload } = await verify(token, await JWT_SECRET());
+        // 关键改动: 使用 jwtVerify
+        const { payload } = await jwtVerify(token, await JWT_SECRET());
         if (!payload) {
             throw new Error("无效的 payload");
         }
@@ -84,7 +85,6 @@ export async function onRequest(context) {
     const { request, env } = context;
     const url = new URL(request.url);
     
-    // 把环境变量中的密钥字符串挂载到全局，方便JWT_SECRET函数访问
     globalThis.JWT_SECRET_STRING = env.JWT_SECRET;
 
     // --- 路由匹配 ---
@@ -105,7 +105,8 @@ export async function onRequest(context) {
         const payload = { sub: user.username, roles: user.roles };
         const expirationTime = noExpiry && user.permissions?.canSetNoExpiry ? '20y' : '15m';
         
-        const token = await new sign(payload)
+        // 关键改动: 使用 SignJWT
+        const token = await new SignJWT(payload)
             .setProtectedHeader({ alg: 'HS256' })
             .setExpirationTime(expirationTime)
             .sign(await JWT_SECRET());
@@ -126,6 +127,9 @@ export async function onRequest(context) {
         }
         
         const user = data.users[payload.sub];
+        if (!user.permissions?.visibleCategories) {
+             return jsonResponse({ categories: [], bookmarks: [] });
+        }
         const visibleCategories = data.categories.filter(cat => user.permissions.visibleCategories.includes(cat.id));
         const visibleCategoryIds = visibleCategories.map(cat => cat.id);
         const visibleBookmarks = data.bookmarks.filter(bm => visibleCategoryIds.includes(bm.categoryId));
