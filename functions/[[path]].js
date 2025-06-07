@@ -23,16 +23,36 @@ const getSiteData = async (env) => {
                     username: 'admin',
                     passwordHash: adminPasswordHash,
                     roles: ['admin'],
-                    permissions: { canSetNoExpiry: true, visibleCategories: [defaultCatId] }
+                    permissions: { 
+                        canSetNoExpiry: true, 
+                        visibleCategories: [defaultCatId],
+                        canEditBookmarks: true,
+                        canEditCategories: true,
+                        canEditUsers: true
+                    }
                 }
             },
             categories: [{id: defaultCatId, name: '默认分类'}],
             bookmarks: []
         };
     }
-    for (const user in data.users) {
-        if (!data.users[user].permissions) {
-            data.users[user].permissions = { visibleCategories: [] };
+    // Ensure all users have a complete permissions object
+    for (const username in data.users) {
+        const user = data.users[username];
+        if (!user.permissions) {
+            user.permissions = {};
+        }
+        user.permissions = {
+            canSetNoExpiry: user.permissions.canSetNoExpiry || false,
+            visibleCategories: user.permissions.visibleCategories || [],
+            canEditBookmarks: user.permissions.canEditBookmarks || false,
+            canEditCategories: user.permissions.canEditCategories || false,
+            canEditUsers: user.permissions.canEditUsers || false,
+        };
+        if(user.roles && user.roles.includes('admin')){
+            user.permissions.canEditBookmarks = true;
+            user.permissions.canEditCategories = true;
+            user.permissions.canEditUsers = true;
         }
     }
     return data;
@@ -54,19 +74,31 @@ const saveSiteData = async (env, data) => {
     await env.NAVI_DATA.put('data', JSON.stringify(data));
 };
 
-const authenticateRequest = async (request, env, requiredRole) => {
+// Updated Auth Middleware to check specific permissions
+const authenticateRequest = async (request, env, requiredPermission) => {
     const authHeader = request.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return { error: '认证失败：缺少 Token', status: 401 };
-    }
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return { error: '认证失败：缺少 Token', status: 401 };
+    
     const token = authHeader.substring(7);
     try {
         const { payload } = await jwtVerify(token, await JWT_SECRET());
-        if (!payload) { throw new Error("无效的 payload"); }
-        if (requiredRole && !payload.roles?.includes(requiredRole)) {
+        if (!payload) throw new Error("无效的 payload");
+        
+        const data = await getSiteData(env);
+        const user = data.users[payload.sub];
+        if (!user) return { error: '用户不存在', status: 401 };
+
+        // Admin always has permission
+        if (user.roles.includes('admin')) {
+            return { payload: user, status: 200 };
+        }
+
+        // Check for specific permission if required
+        if (requiredPermission && !user.permissions[requiredPermission]) {
             return { error: '权限不足', status: 403 };
         }
-        return { payload };
+        
+        return { payload: user };
     } catch (e) {
         return { error: '认证失败：无效或已过期的 Token', status: 401 };
     }
@@ -97,8 +129,6 @@ export async function onRequest(context) {
     
     globalThis.JWT_SECRET_STRING = env.JWT_SECRET;
     
-    // --- API Routes ---
-    
     // Login
     if (path === '/login' && request.method === 'POST') {
         const { username, password, noExpiry } = await request.json();
@@ -110,17 +140,16 @@ export async function onRequest(context) {
         const payload = { sub: user.username, roles: user.roles };
         const expirationTime = noExpiry && user.permissions?.canSetNoExpiry ? '365d' : '15m';
         const token = await new SignJWT(payload).setProtectedHeader({ alg: 'HS256' }).setExpirationTime(expirationTime).sign(await JWT_SECRET());
-        return jsonResponse({ token, user: { username: user.username, roles: user.roles, permissions: user.permissions } });
+        return jsonResponse({ token, user });
     }
     
     // Get Data
     if (path === '/data' && request.method === 'GET') {
         const authResult = await authenticateRequest(request, env);
         if (authResult.error) return jsonResponse({ error: authResult.error }, authResult.status);
-        const { payload } = authResult;
         const data = await getSiteData(env);
-        const currentUser = data.users[payload.sub];
-        if (payload.roles.includes('admin')) {
+        const currentUser = data.users[authResult.payload.username];
+        if (currentUser.roles.includes('admin')) {
             return jsonResponse(data);
         }
         const visibleCategories = data.categories.filter(cat => currentUser.permissions?.visibleCategories?.includes(cat.id));
@@ -131,7 +160,7 @@ export async function onRequest(context) {
     
     // Bookmarks CRUD
     if (path.startsWith('/bookmarks')) {
-        const authResult = await authenticateRequest(request, env, 'admin');
+        const authResult = await authenticateRequest(request, env, 'canEditBookmarks');
         if (authResult.error) return jsonResponse({ error: authResult.error }, authResult.status);
         const data = await getSiteData(env);
         if (request.method === 'POST' && path === '/bookmarks') {
@@ -164,7 +193,7 @@ export async function onRequest(context) {
         const { oldPassword, newPassword } = await request.json();
         if (!oldPassword || !newPassword || newPassword.length < 6) return jsonResponse({ error: '新密码无效或长度不足6位' }, 400);
         const data = await getSiteData(env);
-        const username = authResult.payload.sub;
+        const username = authResult.payload.username;
         const user = data.users[username];
         const oldPasswordHash = await hashPassword(oldPassword);
         if (user.passwordHash !== oldPasswordHash) return jsonResponse({ error: '旧密码不正确' }, 403);
@@ -175,7 +204,7 @@ export async function onRequest(context) {
     
     // User Management
     if (path.startsWith('/users')) {
-        const authResult = await authenticateRequest(request, env, 'admin');
+        const authResult = await authenticateRequest(request, env, 'canEditUsers');
         if (authResult.error) return jsonResponse(authResult, authResult.status);
         const data = await getSiteData(env);
         if (request.method === 'GET' && path === '/users') {
@@ -212,7 +241,7 @@ export async function onRequest(context) {
     
     // Categories CRUD
     if (path.startsWith('/categories')) {
-        const authResult = await authenticateRequest(request, env, 'admin');
+        const authResult = await authenticateRequest(request, env, 'canEditCategories');
         if (authResult.error) return jsonResponse({ error: authResult.error }, authResult.status);
         const data = await getSiteData(env);
         if (request.method === 'POST' && path === '/categories') {
