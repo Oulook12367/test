@@ -617,38 +617,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 setTimeout(() => e.target.classList.add('dragging'), 0);
             }
         });
-        container.addEventListener('dragend', e => {
+
+        container.addEventListener('dragend', () => {
             if (draggedItem) {
                 draggedItem.classList.remove('dragging');
-                draggedItem = null;
             }
+            const placeholder = container.querySelector('.drag-placeholder');
+            if(placeholder) placeholder.remove();
+            draggedItem = null;
         });
+        
         container.addEventListener('dragover', e => {
             e.preventDefault();
-            const afterElement = getDragAfterElement(container, e.clientY);
-            const currentGap = container.querySelector('.drag-over-gap');
-            if (currentGap) currentGap.remove();
-            const gap = document.createElement('div');
-            gap.className = 'drag-over-gap';
-            if (afterElement == null) {
-                container.appendChild(gap);
-            } else {
-                container.insertBefore(gap, afterElement);
-            }
-        });
-        container.addEventListener('dragleave', e => {
-            if (e.relatedTarget && !container.contains(e.relatedTarget)) {
-                const currentGap = container.querySelector('.drag-over-gap');
-                if (currentGap) currentGap.remove();
-            }
-        });
-        container.addEventListener('drop', async e => {
-            e.preventDefault();
-            const currentGap = container.querySelector('.drag-over-gap');
-            if (currentGap) currentGap.remove();
             if (!draggedItem) return;
 
-            const itemsArray = getItemsArray(); // Get the current array reference
+            const placeholder = container.querySelector('.drag-placeholder');
+            if (!placeholder) {
+                const newPlaceholder = draggedItem.cloneNode(true);
+                newPlaceholder.classList.add('drag-placeholder');
+                newPlaceholder.classList.remove('dragging');
+                container.appendChild(newPlaceholder);
+            }
+
+            const afterElement = getDragAfterElement(container, e.clientY);
+            const activePlaceholder = container.querySelector('.drag-placeholder');
+            if (activePlaceholder) {
+                 if (afterElement == null) {
+                    container.appendChild(activePlaceholder);
+                } else {
+                    container.insertBefore(activePlaceholder, afterElement);
+                }
+            }
+        });
+        
+        container.addEventListener('drop', async e => {
+            e.preventDefault();
+            const placeholder = container.querySelector('.drag-placeholder');
+            if (placeholder) placeholder.remove();
+            if (!draggedItem) return;
+
+            const itemsArray = getItemsArray();
             const fromId = draggedItem.dataset.id;
             const fromIndex = itemsArray.findIndex(item => item.id === fromId);
             const afterElement = getDragAfterElement(container, e.clientY);
@@ -658,16 +666,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const toIndex = toId ? itemsArray.findIndex(item => item.id === toId) : itemsArray.length;
             if (fromIndex > -1) {
                 const [itemToMove] = itemsArray.splice(fromIndex, 1);
-                const adjustedToIndex = (fromIndex < toIndex) ? toIndex - 1 : toIndex;
+                const adjustedToIndex = (fromIndex < toIndex && toIndex > 0) ? toIndex - 1 : toIndex;
                 itemsArray.splice(adjustedToIndex, 0, itemToMove);
                 renderUI();
                 await persistOrder();
             }
+            draggedItem.classList.remove('dragging');
+            draggedItem = null;
         });
     };
     
     const getDragAfterElement = (container, y) => {
-        const draggableElements = [...container.querySelectorAll(`${container === bookmarksGrid ? 'a' : 'li'}[draggable="true"]`)];
+        const draggableElements = [...container.querySelectorAll(`${itemSelectorFromContainer(container)}:not(.dragging):not(.drag-placeholder)`)];
         return draggableElements.reduce((closest, child) => {
             const box = child.getBoundingClientRect();
             const offset = y - box.top - box.height / 2;
@@ -679,8 +689,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }, { offset: Number.NEGATIVE_INFINITY }).element;
     };
     
+    const itemSelectorFromContainer = (container) => {
+        return container === bookmarksGrid ? 'a.bookmark-card[draggable="true"]' : 'li[draggable="true"]';
+    }
+    
     setupDragDrop(categoryNav, 'li[draggable="true"]', () => allCategories);
-    setupDragDrop(bookmarksGrid, 'a[draggable="true"]', () => allBookmarks);
+    setupDragDrop(bookmarksGrid, 'a.bookmark-card[draggable="true"]', () => allBookmarks);
 
     // --- Initial Load ---
     applyTheme(localStorage.getItem('theme') || 'light-theme');
