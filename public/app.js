@@ -720,7 +720,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         allCategories.push(...newCategories);
         allBookmarks.push(...newBookmarks);
-        await persistData();
+        await persistOrder();
         await loadData();
     };
 
