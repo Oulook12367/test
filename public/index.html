@@ -5,8 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的导航页</title>
     <link rel="stylesheet" href="style.css">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
+    <!-- Login Screen -->
     <div id="login-container" class="container">
         <h2>登录</h2>
         <form id="login-form">
@@ -21,6 +24,7 @@
         </form>
     </div>
 
+    <!-- Main Content -->
     <div id="main-content" class="container" style="display: none;">
         <header>
             <div class="search-bar">
@@ -31,13 +35,101 @@
                 </select>
                 <input type="search" id="local-search" placeholder="搜索书签或在网络上搜索...">
             </div>
-            <button id="theme-toggle">切换主题</button>
-            <button id="logout-btn">退出登录</button>
+            <div class="header-buttons">
+                <div id="admin-actions" class="admin-only" style="display: none;">
+                    <button id="add-bookmark-btn" title="添加书签"><i class="fas fa-plus"></i></button>
+                    <button id="user-management-btn" title="用户管理"><i class="fas fa-users"></i></button>
+                </div>
+                <button id="change-password-btn" title="修改密码"><i class="fas fa-key"></i></button>
+                <button id="theme-toggle" title="切换主题"><i class="fas fa-sun"></i></button>
+                <button id="logout-btn" title="退出登录"><i class="fas fa-sign-out-alt"></i></button>
+            </div>
         </header>
 
         <nav id="category-nav"></nav>
-
         <main id="bookmarks-grid"></main>
+    </div>
+    
+    <!-- All Modals -->
+    <div id="modal-backdrop" class="modal-backdrop" style="display: none;">
+        <!-- Add/Edit Bookmark Modal -->
+        <div id="bookmark-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn">&times;</span>
+                <h2 id="bookmark-modal-title"></h2>
+                <form id="bookmark-form">
+                    <input type="hidden" id="bm-id">
+                    <label for="bm-name">名称:</label>
+                    <input type="text" id="bm-name" required>
+                    <label for="bm-url">网址 (URL):</label>
+                    <input type="url" id="bm-url" placeholder="https://example.com" required>
+                    <label for="bm-desc">描述:</label>
+                    <textarea id="bm-desc" rows="2"></textarea>
+                    <label for="bm-icon">图标 URL (可选):</label>
+                    <input type="url" id="bm-icon" placeholder="将自动获取，也可自定义">
+                    <label for="bm-category">分类:</label>
+                    <select id="bm-category" required></select>
+                    <button type="submit">确认</button>
+                    <p class="modal-error-message"></p>
+                </form>
+            </div>
+        </div>
+        <!-- Change Password Modal -->
+        <div id="change-password-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn">&times;</span>
+                <h2>修改密码</h2>
+                <form id="change-password-form">
+                    <label for="old-password">旧密码:</label>
+                    <input type="password" id="old-password" required>
+                    <label for="new-password">新密码 (至少6位):</label>
+                    <input type="password" id="new-password" required minlength="6">
+                    <button type="submit">确认修改</button>
+                    <p class="modal-error-message"></p>
+                </form>
+            </div>
+        </div>
+        <!-- User Management Modal -->
+        <div id="user-management-modal" class="modal">
+             <div class="modal-content large">
+                <span class="close-btn">&times;</span>
+                <h2>用户管理</h2>
+                <div class="user-management-panel">
+                    <div class="user-list-container">
+                        <h3>用户列表</h3>
+                        <ul id="user-list"></ul>
+                    </div>
+                    <div class="user-form-container">
+                        <h3 id="user-form-title">添加新用户</h3>
+                        <form id="user-form">
+                            <input type="hidden" id="user-form-username-hidden">
+                            <label for="user-form-username">用户名:</label>
+                            <input type="text" id="user-form-username" required>
+                            <label for="user-form-password">密码 (留空则不修改):</label>
+                            <input type="password" id="user-form-password">
+                            <label>可见分类:</label>
+                            <div id="user-form-categories" class="checkbox-group"></div>
+                            <div class="user-form-buttons">
+                                <button type="submit">保存用户</button>
+                                <button type="button" id="user-form-clear-btn">清空表单</button>
+                            </div>
+                            <p class="modal-error-message"></p>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Custom Confirm Dialog -->
+        <div id="confirm-modal" class="modal">
+            <div class="modal-content small">
+                <h3 id="confirm-title"></h3>
+                <p id="confirm-text"></p>
+                <div class="confirm-buttons">
+                    <button id="confirm-btn-yes">确认</button>
+                    <button id="confirm-btn-no" class="secondary">取消</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>
