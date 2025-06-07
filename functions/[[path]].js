@@ -3,10 +3,10 @@
 import { Hono } from 'hono';
 import { sign, verify } from 'hono/jwt';
 
-// 关键改动: 移除了 .basePath('/api')
+// 初始化 Hono 应用 (无 basepath)
 const app = new Hono();
 
-// --- 认证中间件 (无改动) ---
+// --- 认证中间件 ---
 const authMiddleware = (role) => {
   return async (c, next) => {
     const authHeader = c.req.header('Authorization');
@@ -28,7 +28,11 @@ const authMiddleware = (role) => {
   };
 };
 
-// --- 辅助函数 (无改动) ---
+// =======================================================
+// ↓↓↓ 这是上次被我误删的函数体，现已恢复 ↓↓↓
+// =======================================================
+
+// --- 辅助函数 ---
 const hashPassword = async (password) => {
     const encoder = new TextEncoder();
     const data = encoder.encode(password);
@@ -41,7 +45,14 @@ const getSiteData = async (c) => {
     if (!data) {
         const adminPasswordHash = await hashPassword('admin123');
         return {
-            users: {'admin': {username: 'admin', passwordHash: adminPasswordHash, roles: ['admin'], permissions: { canSetNoExpiry: true }}},
+            users: {
+                'admin': {
+                    username: 'admin',
+                    passwordHash: adminPasswordHash,
+                    roles: ['admin'],
+                    permissions: { canSetNoExpiry: true }
+                }
+            },
             categories: [],
             bookmarks: []
         };
@@ -49,9 +60,28 @@ const getSiteData = async (c) => {
     return data;
 };
 
-const saveSiteData = async (c, data) => { /* ...代码不变... */ };
+const saveSiteData = async (c, data) => {
+    const currentData = await c.env.NAVI_DATA.get('data');
+    if (currentData) {
+        const timestamp = new Date().toISOString();
+        await c.env.NAVI_BACKUPS.put(`backup-${timestamp}`, currentData);
+        const backups = await c.env.NAVI_BACKUPS.list({ prefix: "backup-" });
+        if (backups.keys.length > 10) {
+            const sortedKeys = backups.keys.sort((a, b) => a.name.localeCompare(b.name));
+            for (let i = 0; i < sortedKeys.length - 10; i++) {
+                await c.env.NAVI_BACKUPS.delete(sortedKeys[i].name);
+            }
+        }
+    }
+    await c.env.NAVI_DATA.put('data', JSON.stringify(data));
+};
 
-// --- API 路由 (无改动, 路径已经是 /login, /data 等) ---
+// =======================================================
+// ↑↑↑ 函数体恢复结束 ↑↑↑
+// =======================================================
+
+
+// --- API 路由 ---
 app.post('/login', async (c) => {
     const { username, password, noExpiry } = await c.req.json();
     const data = await getSiteData(c);
@@ -77,7 +107,24 @@ app.get('/data', authMiddleware(), async (c) => {
     return c.json({ categories: visibleCategories, bookmarks: visibleBookmarks });
 });
 
-app.post('/bookmarks', authMiddleware('admin'), async (c) => { /* ...代码不变... */ });
-app.put('/bookmarks/:id', authMiddleware('admin'), async (c) => { /* ...代码不变... */ });
+app.post('/bookmarks', authMiddleware('admin'), async (c) => {
+    const bookmark = await c.req.json();
+    const data = await getSiteData(c);
+    bookmark.id = `bm-${Date.now()}`;
+    data.bookmarks.push(bookmark);
+    await saveSiteData(c, data);
+    return c.json(bookmark, 201);
+});
+
+app.put('/bookmarks/:id', authMiddleware('admin'), async (c) => {
+    const { id } = c.req.param();
+    const updatedBookmark = await c.req.json();
+    const data = await getSiteData(c);
+    const index = data.bookmarks.findIndex(bm => bm.id === id);
+    if (index === -1) return c.json({ error: 'Not Found' }, 404);
+    data.bookmarks[index] = { ...data.bookmarks[index], ...updatedBookmark };
+    await saveSiteData(c, data);
+    return c.json(data.bookmarks[index]);
+});
 
 export const onRequest = app.fetch;
