@@ -146,14 +146,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    logoutButton.addEventListener('click', () => {
-        if (isGuestView) {
-            showLoginPage();
-        } else {
-            localStorage.removeItem('jwt_token');
-            checkLoginStatus();
-        }
-    });
+   
+/**
+ * @description 登出并彻底重置应用状态
+ */
+const logoutAndReset = () => {
+    // 1. 清除存储的凭证
+    localStorage.removeItem('jwt_token');
+
+    // 2. 清除所有内存中的状态变量
+    allBookmarks = [];
+    allCategories = [];
+    allUsers = [];
+    currentUser = null;
+    isGuestView = false;
+
+    // 3. 强制将UI重置到登录页面，而不是依赖 checkLoginStatus 去判断
+    //    这确保了用户登出后总能回到一个确定的、干净的起点。
+    showLoginPage(); 
+};
+
+logoutButton.addEventListener('click', () => {
+    // 当处于公共访客视图时，此按钮的功能是“去登录”
+    if (isGuestView) {
+        showLoginPage();
+    } else {
+        // 当处于登录状态时，此按钮的功能是“退出登录”
+        logoutAndReset();
+    }
+});
 
 
      // --- Data Loading & UI Rendering ---
