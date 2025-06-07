@@ -1,114 +1,150 @@
 // functions/[[path]].js
-import { Hono } from 'hono';
-import { sign, verify } from 'hono/jwt';
-// 初始化 Hono 应用
-const app = new Hono();
-// --- 认证中间件 ---
-const authMiddleware = (role) => {
-return async (c, next) => {
-const authHeader = c.req.header('Authorization');
-if (!authHeader || !authHeader.startsWith('Bearer ')) {
-return c.json({ error: '认证失败：缺少 Token' }, 401);
-}
-const token = authHeader.substring(7);
-try {
-const decodedPayload = await verify(token, c.env.JWT_SECRET);
-if (!decodedPayload) {
-throw new Error("无效的 payload");
-}
-if (role && !decodedPayload.roles?.includes(role)) {
-return c.json({ error: '权限不足' }, 403);
-}
-c.set('jwtPayload', decodedPayload);
-await next();
-} catch (e) {
-return c.json({ error: '认证失败：无效或已过期的 Token' }, 401);
-}
-};
-};
-// --- 辅助函数 ---
+
+// 不再需要 import { Hono } from 'hono';
+import { sign, verify } from 'jose'; // 直接从 jose 导入
+
+// --- 辅助函数 (基本不变, 签名稍有调整) ---
+const JWT_SECRET = () => new TextEncoder().encode(globalThis.JWT_SECRET_STRING);
+
 const hashPassword = async (password) => {
-const encoder = new TextEncoder();
-const data = encoder.encode(password);
-const hash = await crypto.subtle.digest('SHA-256', data);
-return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 };
-const getSiteData = async (c) => {
-let data = await c.env.NAVI_DATA.get('data', { type: 'json' });
-if (!data) {
-const adminPasswordHash = await hashPassword('admin123');
-return {
-users: {
-'admin': {
-username: 'admin',
-passwordHash: adminPasswordHash,
-roles: ['admin'],
-permissions: { canSetNoExpiry: true }
-}
-},
-categories: [],
-bookmarks: []
+
+const getSiteData = async (env) => {
+    let data = await env.NAVI_DATA.get('data', { type: 'json' });
+    if (!data) {
+        const adminPasswordHash = await hashPassword('admin123');
+        return {
+            users: {
+                'admin': {
+                    username: 'admin',
+                    passwordHash: adminPasswordHash,
+                    roles: ['admin'],
+                    permissions: { canSetNoExpiry: true }
+                }
+            },
+            categories: [],
+            bookmarks: []
+        };
+    }
+    return data;
 };
-}
-return data;
+
+const saveSiteData = async (env, data) => {
+    const currentData = await env.NAVI_DATA.get('data');
+    if (currentData) {
+        const timestamp = new Date().toISOString();
+        await env.NAVI_BACKUPS.put(`backup-${timestamp}`, currentData);
+        const backups = await env.NAVI_BACKUPS.list({ prefix: "backup-" });
+        if (backups.keys.length > 10) {
+            const sortedKeys = backups.keys.sort((a, b) => a.name.localeCompare(b.name));
+            for (let i = 0; i < sortedKeys.length - 10; i++) {
+                await env.NAVI_BACKUPS.delete(sortedKeys[i].name);
+            }
+        }
+    }
+    await env.NAVI_DATA.put('data', JSON.stringify(data));
 };
-const saveSiteData = async (c, data) => {
-const currentData = await c.env.NAVI_DATA.get('data');
-if (currentData) {
-const timestamp = new Date().toISOString();
-await c.env.NAVI_BACKUPS.put(`backup-${timestamp}`, currentData);
-const backups = await c.env.NAVI_BACKUPS.list({ prefix: "backup-" });
-if (backups.keys.length > 10) {
-const sortedKeys = backups.keys.sort((a, b) => a.name.localeCompare(b.name));
-for (let i = 0; i < sortedKeys.length - 10; i++) {
-await c.env.NAVI_BACKUPS.delete(sortedKeys[i].name);
-}
-}
-}
-await c.env.NAVI_DATA.put('data', JSON.stringify(data));
+
+// --- 原生认证函数 ---
+const authenticateRequest = async (request, env, requiredRole) => {
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return { error: '认证失败：缺少 Token', status: 401 };
+    }
+    const token = authHeader.substring(7);
+    try {
+        const { payload } = await verify(token, await JWT_SECRET());
+        if (!payload) {
+            throw new Error("无效的 payload");
+        }
+        if (requiredRole && !payload.roles?.includes(requiredRole)) {
+            return { error: '权限不足', status: 403 };
+        }
+        return { payload }; // 认证成功
+    } catch (e) {
+        return { error: '认证失败：无效或已过期的 Token', status: 401 };
+    }
 };
-// --- API 路由 ---
-app.post('/login', async (c) => {
-const { username, password, noExpiry } = await c.req.json();
-const data = await getSiteData(c);
-const user = data.users[username];
-if (!user) return c.json({ error: '用户名或密码错误' }, 401);
-const passwordHash = await hashPassword(password);
-if (user.passwordHash !== passwordHash) {
-return c.json({ error: '用户名或密码错误' }, 401);
+
+// --- JSON 响应的辅助函数 ---
+const jsonResponse = (data, status = 200) => {
+    return new Response(JSON.stringify(data), {
+        status: status,
+        headers: { 'Content-Type': 'application/json;charset=UTF-8' }
+    });
+};
+
+
+// --- 主入口函数：原生路由逻辑 ---
+export async function onRequest(context) {
+    const { request, env } = context;
+    const url = new URL(request.url);
+    
+    // 把环境变量中的密钥字符串挂载到全局，方便JWT_SECRET函数访问
+    globalThis.JWT_SECRET_STRING = env.JWT_SECRET;
+
+    // --- 路由匹配 ---
+
+    // 登录
+    if (url.pathname === '/login' && request.method === 'POST') {
+        const { username, password, noExpiry } = await request.json();
+        const data = await getSiteData(env);
+        const user = data.users[username];
+
+        if (!user) return jsonResponse({ error: '用户名或密码错误' }, 401);
+
+        const passwordHash = await hashPassword(password);
+        if (user.passwordHash !== passwordHash) {
+            return jsonResponse({ error: '用户名或密码错误' }, 401);
+        }
+
+        const payload = { sub: user.username, roles: user.roles };
+        const expirationTime = noExpiry && user.permissions?.canSetNoExpiry ? '20y' : '15m';
+        
+        const token = await new sign(payload)
+            .setProtectedHeader({ alg: 'HS256' })
+            .setExpirationTime(expirationTime)
+            .sign(await JWT_SECRET());
+
+        return jsonResponse({ token, user: { username: user.username, roles: user.roles, permissions: user.permissions } });
+    }
+
+    // 获取数据
+    if (url.pathname === '/data' && request.method === 'GET') {
+        const authResult = await authenticateRequest(request, env);
+        if (authResult.error) return jsonResponse({ error: authResult.error }, authResult.status);
+        
+        const { payload } = authResult;
+        const data = await getSiteData(env);
+
+        if (payload.roles.includes('admin')) {
+            return jsonResponse(data);
+        }
+        
+        const user = data.users[payload.sub];
+        const visibleCategories = data.categories.filter(cat => user.permissions.visibleCategories.includes(cat.id));
+        const visibleCategoryIds = visibleCategories.map(cat => cat.id);
+        const visibleBookmarks = data.bookmarks.filter(bm => visibleCategoryIds.includes(bm.categoryId));
+        return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks });
+    }
+
+    // 添加书签
+    if (url.pathname === '/bookmarks' && request.method === 'POST') {
+        const authResult = await authenticateRequest(request, env, 'admin');
+        if (authResult.error) return jsonResponse({ error: authResult.error }, authResult.status);
+
+        const bookmark = await request.json();
+        const data = await getSiteData(env);
+        bookmark.id = `bm-${Date.now()}`;
+        data.bookmarks.push(bookmark);
+        await saveSiteData(env, data);
+        return jsonResponse(bookmark, 201);
+    }
+    
+    // 如果没有匹配的路由，返回 404
+    return new Response('Not Found', { status: 404 });
 }
-const payload = { sub: user.username, roles: user.roles, ...(noExpiry && user.permissions?.canSetNoExpiry ? {} : { exp: Math.floor(Date.now() / 1000) + 15 * 60 }) };
-const token = await sign(payload, c.env.JWT_SECRET);
-return c.json({ token, user: { username: user.username, roles: user.roles, permissions: user.permissions } });
-});
-app.get('/data', authMiddleware(), async (c) => {
-const payload = c.get('jwtPayload');
-const data = await getSiteData(c);
-if (payload.roles.includes('admin')) {
-return c.json(data);
-}
-const user = data.users[payload.sub];
-const visibleCategories = data.categories.filter(cat => user.permissions.visibleCategories.includes(cat.id));
-const visibleCategoryIds = visibleCategories.map(cat => cat.id);
-const visibleBookmarks = data.bookmarks.filter(bm => visibleCategoryIds.includes(bm.categoryId));
-return c.json({ categories: visibleCategories, bookmarks: visibleBookmarks });
-});
-app.post('/bookmarks', authMiddleware('admin'), async (c) => {
-const bookmark = await c.req.json();
-const data = await getSiteData(c);
-bookmark.id = `bm-${Date.now()}`;
-data.bookmarks.push(bookmark);
-await saveSiteData(c, data);
-return c.json(bookmark, 201);
-});
-app.put('/bookmarks/:id', authMiddleware('admin'), async (c) => {
-const { id } = c.req.param();
-const updatedBookmark = await c.req.json();
-const data = await getSiteData(c);
-const index = data.bookmarks.findIndex(bm => bm.id === id);
-if (index === -1) return c.json({ error: 'Not Found' }, 404);
-data.bookmarks[index] = { ...data.bookmarks[index], ...updatedBookmark };
-await saveSiteData(c, data);
-return c.json(data.bookmarks[index]);
-});
-export const onRequest = app.fetch;
