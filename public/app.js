@@ -598,7 +598,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Drag and Drop Logic ---
-    const persistOrder = async () => {
+     const persistOrder = async () => {
         try {
             await apiRequest('data', 'PUT', {
                 categories: allCategories,
@@ -606,11 +606,36 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } catch (error) {
             alert('顺序保存失败: ' + error.message);
-            await loadData();
+            await loadData(); // 保存失败时，从服务器重新加载以恢复顺序
         }
     };
 
-    const setupDragDrop = (container, itemSelector, getItemsArray) => {
+    const getDragAfterElement = (container, x, y) => {
+        const draggableElements = [...container.querySelectorAll(`${itemSelectorFromContainer(container)}:not(.dragging)`)];
+        
+        let closest = { offset: Number.POSITIVE_INFINITY, element: null };
+
+        for (const child of draggableElements) {
+            const box = child.getBoundingClientRect();
+            // 计算鼠标到元素中心的距离
+            const offsetX = x - (box.left + box.width / 2);
+            const offsetY = y - (box.top + box.height / 2);
+            const distance = Math.sqrt(offsetX * offsetX + offsetY * offsetY);
+
+            if (distance < closest.offset) {
+                closest = { offset: distance, element: child };
+            }
+        }
+        return closest.element;
+    };
+    
+    const itemSelectorFromContainer = (container) => {
+        return container === bookmarksGrid ? 'a.bookmark-card[draggable="true"]' : 'li[draggable="true"]';
+    };
+    
+    const setupDragDrop = (container, getItemsArray) => {
+        const itemSelector = itemSelectorFromContainer(container);
+        
         container.addEventListener('dragstart', e => {
             if (e.target.matches(itemSelector)) {
                 draggedItem = e.target;
@@ -631,70 +656,94 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             if (!draggedItem) return;
 
-            const placeholder = container.querySelector('.drag-placeholder');
+            // 创建或获取占位符
+            let placeholder = container.querySelector('.drag-placeholder');
             if (!placeholder) {
-                const newPlaceholder = draggedItem.cloneNode(true);
-                newPlaceholder.classList.add('drag-placeholder');
-                newPlaceholder.classList.remove('dragging');
-                container.appendChild(newPlaceholder);
+                placeholder = draggedItem.cloneNode(true);
+                placeholder.classList.add('drag-placeholder');
+                placeholder.classList.remove('dragging');
+                container.appendChild(placeholder);
             }
 
-            const afterElement = getDragAfterElement(container, e.clientY);
-            const activePlaceholder = container.querySelector('.drag-placeholder');
-            if (activePlaceholder) {
-                 if (afterElement == null) {
-                    container.appendChild(activePlaceholder);
+            // 找到最近的元素
+            const closestEl = getDragAfterElement(container, e.clientX, e.clientY);
+            
+            if (closestEl) {
+                const box = closestEl.getBoundingClientRect();
+                // 根据鼠标在最近元素上的位置，判断是在其前还是后插入占位符
+                const threshold = (container === categoryNav) ? box.top + box.height / 2 : box.left + box.width / 2;
+                const cursorPosition = (container === categoryNav) ? e.clientY : e.clientX;
+
+                if (cursorPosition < threshold) {
+                    container.insertBefore(placeholder, closestEl);
                 } else {
-                    container.insertBefore(activePlaceholder, afterElement);
+                    container.insertBefore(placeholder, closestEl.nextSibling);
                 }
+            } else {
+                 // 如果没有最近的元素（例如列表为空），则添加到末尾
+                container.appendChild(placeholder);
             }
         });
         
+        container.addEventListener('dragleave', e => {
+            if (e.relatedTarget && !container.contains(e.relatedTarget)) {
+                const placeholder = container.querySelector('.drag-placeholder');
+                if (placeholder) placeholder.remove();
+            }
+        });
+
         container.addEventListener('drop', async e => {
             e.preventDefault();
             const placeholder = container.querySelector('.drag-placeholder');
-            if (placeholder) placeholder.remove();
-            if (!draggedItem) return;
+            if (!placeholder || !draggedItem) {
+                if(placeholder) placeholder.remove();
+                return;
+            }
 
             const itemsArray = getItemsArray();
             const fromId = draggedItem.dataset.id;
             const fromIndex = itemsArray.findIndex(item => item.id === fromId);
-            const afterElement = getDragAfterElement(container, e.clientY);
-            const toId = afterElement ? afterElement.dataset.id : null;
-            if(fromId === toId) return;
 
-            const toIndex = toId ? itemsArray.findIndex(item => item.id === toId) : itemsArray.length;
-            if (fromIndex > -1) {
+            // 使用占位符的位置来确定目标索引
+            const children = Array.from(container.children);
+            const placeholderIndex = children.indexOf(placeholder);
+            
+            // 将 DOM 索引映射回数据数组索引
+            let toDataIndex = 0;
+            let visibleItemCount = 0;
+            for(let i=0; i < itemsArray.length; i++){
+                // 检查这个数据项是否在当前视图中可见
+                if (container.querySelector(`[data-id="${itemsArray[i].id}"]`)) {
+                    if (visibleItemCount === placeholderIndex) {
+                        break;
+                    }
+                    visibleItemCount++;
+                }
+                toDataIndex++;
+            }
+            // 如果占位符在最后，toDataIndex会是数组长度
+            if (placeholderIndex === visibleItemCount) {
+                toDataIndex = itemsArray.length;
+            }
+
+            // 清理
+            placeholder.remove();
+            draggedItem.classList.remove('dragging');
+            
+            if (fromIndex > -1 && fromIndex !== toDataIndex) {
                 const [itemToMove] = itemsArray.splice(fromIndex, 1);
-                const adjustedToIndex = (fromIndex < toIndex && toIndex > 0) ? toIndex - 1 : toIndex;
+                const adjustedToIndex = (fromIndex < toDataIndex) ? toDataIndex - 1 : toDataIndex;
                 itemsArray.splice(adjustedToIndex, 0, itemToMove);
+                
                 renderUI();
                 await persistOrder();
             }
-            draggedItem.classList.remove('dragging');
             draggedItem = null;
         });
     };
     
-    const getDragAfterElement = (container, y) => {
-        const draggableElements = [...container.querySelectorAll(`${itemSelectorFromContainer(container)}:not(.dragging):not(.drag-placeholder)`)];
-        return draggableElements.reduce((closest, child) => {
-            const box = child.getBoundingClientRect();
-            const offset = y - box.top - box.height / 2;
-            if (offset < 0 && offset > closest.offset) {
-                return { offset: offset, element: child };
-            } else {
-                return closest;
-            }
-        }, { offset: Number.NEGATIVE_INFINITY }).element;
-    };
-    
-    const itemSelectorFromContainer = (container) => {
-        return container === bookmarksGrid ? 'a.bookmark-card[draggable="true"]' : 'li[draggable="true"]';
-    }
-    
-    setupDragDrop(categoryNav, 'li[draggable="true"]', () => allCategories);
-    setupDragDrop(bookmarksGrid, 'a.bookmark-card[draggable="true"]', () => allBookmarks);
+    setupDragDrop(categoryNav, () => allCategories);
+    setupDragDrop(bookmarksGrid, () => allBookmarks);
 
     // --- Initial Load ---
     applyTheme(localStorage.getItem('theme') || 'light-theme');
