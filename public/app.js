@@ -1,4 +1,5 @@
-// --- 辅助函数 ---
+document.addEventListener('DOMContentLoaded', () => {
+    // --- 辅助函数 ---
     const escapeHTML = (str) => {
         if (typeof str !== 'string') return '';
         return str.replace(/[&<>"']/g, (match) => ({
@@ -129,7 +130,6 @@
     const loadData = async () => {
         const data = await apiRequest('data');
         const token = localStorage.getItem('jwt_token');
-
         if (data.isPublic) {
             isGuestView = true;
             currentUser = null;
@@ -141,11 +141,9 @@
         } else {
             throw new Error("需要认证。");
         }
-
         allCategories = data.categories || [];
         allBookmarks = data.bookmarks || [];
         allUsers = data.users || [];
-        
         renderUI();
     };
     
@@ -156,17 +154,27 @@
         if (categoryManagementModal.style.display === 'flex') renderCategoryManagerList();
         if (userManagementModal.style.display === 'flex') renderUserManagementPanel();
     };
-    
-    // The rest of the file is identical to the previous complete version
+
+    const updateButtonVisibility = () => {
+        addBookmarkBtn.style.display = !isGuestView && currentUser?.permissions?.canEditBookmarks ? 'flex' : 'none';
+        manageCategoriesBtn.style.display = !isGuestView && currentUser?.permissions?.canEditCategories ? 'block' : 'none';
+        userManagementBtn.style.display = !isGuestView && currentUser?.permissions?.canEditUsers ? 'flex' : 'none';
+        if (isGuestView) {
+            logoutButton.innerHTML = '<i class="fas fa-key"></i>';
+            logoutButton.title = '登录';
+        } else {
+            logoutButton.innerHTML = '<i class="fas fa-sign-out-alt"></i>';
+            logoutButton.title = '退出登录';
+        }
+    };
+
     const renderCategories = () => {
         const activeId = categoryNav.querySelector('.active')?.dataset.id || 'all';
         categoryNav.innerHTML = '';
-        
         const allLi = document.createElement('li');
         allLi.dataset.id = 'all';
         allLi.innerHTML = `<i class="fas fa-inbox"></i><span>全部书签</span>`;
         categoryNav.appendChild(allLi);
-
         allCategories.forEach(cat => {
             const li = document.createElement('li');
             li.dataset.id = cat.id;
@@ -176,7 +184,6 @@
             }
             categoryNav.appendChild(li);
         });
-        
         const newActiveLi = categoryNav.querySelector(`li[data-id="${activeId}"]`) || categoryNav.querySelector(`li[data-id="all"]`);
         newActiveLi.classList.add('active');
     };
@@ -184,7 +191,7 @@
     categoryNav.addEventListener('click', (e) => {
         const clickedLi = e.target.closest('li');
         if (!clickedLi || !categoryNav.contains(clickedLi)) return;
-        
+        if (clickedLi.classList.contains('dragging')) return;
         categoryNav.querySelector('.active')?.classList.remove('active');
         clickedLi.classList.add('active');
         renderBookmarks(clickedLi.dataset.id, localSearchInput.value);
@@ -195,31 +202,25 @@
         let filteredBookmarks = categoryId === 'all' 
             ? allBookmarks 
             : allBookmarks.filter(bm => bm.categoryId === categoryId);
-
         if (searchTerm) {
             const lower = searchTerm.toLowerCase();
             filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lower) || bm.url.toLowerCase().includes(lower));
         }
-
         if(filteredBookmarks.length === 0){
             bookmarksGrid.innerHTML = '<p class="empty-message">这里什么都没有...</p>';
             return;
         }
-
         filteredBookmarks.forEach(bm => {
             const card = document.createElement('a');
             card.href = bm.url;
             card.className = 'bookmark-card';
             card.target = '_blank';
             card.rel = 'noopener noreferrer';
-            
             if (!isGuestView && currentUser?.permissions?.canEditBookmarks) {
                 card.draggable = true;
                 card.dataset.id = bm.id;
             }
-
             const defaultIcon = `https://www.google.com/s2/favicons?domain=${new URL(bm.url).hostname}`;
-            
             const img = document.createElement('img');
             img.src = bm.icon || defaultIcon;
             img.alt = "";
@@ -229,11 +230,9 @@
             const p = document.createElement('p');
             p.textContent = bm.description || '';
             card.append(h3, p);
-            
             if (!isGuestView && currentUser?.permissions?.canEditBookmarks) {
                 const actions = document.createElement('div');
                 actions.className = 'bookmark-card-actions';
-                
                 const editBtn = document.createElement('button');
                 editBtn.title = '编辑';
                 editBtn.innerHTML = '<i class="fas fa-pencil-alt"></i>';
@@ -242,7 +241,6 @@
                     e.stopPropagation();
                     handleEditBookmark(bm);
                 });
-                
                 const deleteBtn = document.createElement('button');
                 deleteBtn.title = '删除';
                 deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
@@ -287,7 +285,6 @@
         bookmarkForm.querySelector('#bm-id').value = '';
         const categorySelect = bookmarkForm.querySelector('#bm-category');
         categorySelect.innerHTML = '';
-        
         const creatableCategories = allCategories.filter(cat => currentUser.permissions.visibleCategories.includes(cat.id));
         if (creatableCategories.length === 0) {
             alert('没有可添加书签的分类！请先创建分类，或在用户管理中获取分类权限。');
@@ -311,7 +308,6 @@
         bookmarkForm.querySelector('#bm-url').value = bookmark.url;
         bookmarkForm.querySelector('#bm-desc').value = bookmark.description || '';
         bookmarkForm.querySelector('#bm-icon').value = bookmark.icon || '';
-        
         const categorySelect = bookmarkForm.querySelector('#bm-category');
         categorySelect.innerHTML = '';
         const creatableCategories = allCategories.filter(cat => currentUser.permissions.visibleCategories.includes(cat.id));
@@ -319,9 +315,7 @@
             const option = document.createElement('option');
             option.value = cat.id;
             option.textContent = cat.name;
-            if (cat.id === bookmark.categoryId) {
-                option.selected = true;
-            }
+            if (cat.id === bookmark.categoryId) option.selected = true;
             categorySelect.appendChild(option);
         });
         showModal(bookmarkModal);
@@ -393,6 +387,7 @@
         const input = document.createElement('input');
         input.type = 'text';
         input.value = originalName;
+        input.className = 'inline-edit-input';
         nameSpan.style.display = 'none';
         editBtn.style.display = 'none';
         liElement.insertBefore(input, editBtn);
@@ -597,7 +592,6 @@
         }
     });
 
-    // --- Drag and Drop Logic ---
     const persistOrder = async () => {
         try {
             await apiRequest('data', 'PUT', {
