@@ -505,8 +505,9 @@ button.danger:hover {
 .dark-theme ::-webkit-scrollbar-thumb:hover { background: #666; }
 
 
+/* ... 在文件末尾添加以下新样式 ... */
 
-/* (新增) Drag-and-Drop 样式 */
+/* Drag-and-Drop 样式 */
 .bookmark-card.dragging,
 .category-nav li.dragging {
     opacity: 0.5;
@@ -518,14 +519,26 @@ button.danger:hover {
     border-color: var(--accent-dark);
 }
 
-/* 当拖拽悬停时，列表项之间的间隙 */
+/* 拖拽悬停时，列表项之间的占位符间隙 */
 .drag-over-gap {
-    height: 1.5rem; /* for bookmarks grid */
+    transition: height 0.1s ease-in-out;
+}
+#bookmarks-grid > .drag-over-gap {
+    height: 1.5rem;
+    grid-column: 1 / -1; /* 让占位符撑满一行 */
 }
 .sidebar .drag-over-gap {
-    height: 2.5rem; /* for categories list */
+    height: 2.5rem;
     background-color: var(--accent-light);
     opacity: 0.2;
     border-radius: 8px;
     margin-bottom: 0.5rem;
+}
+
+.inline-edit-input {
+    flex-grow: 1;
+    font-size: 1em;
+    padding: 2px 5px;
+    border: 1px solid var(--accent-light);
+    border-radius: 4px;
 }
