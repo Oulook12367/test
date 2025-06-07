@@ -35,10 +35,20 @@ body {
     margin: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    transition: background-color 0.3s ease, color 0.3s ease;
+  /* transition: background-color 0.3s ease, color 0.3s ease;*/
 }
-body.light-theme { background-color: var(--bg-light); color: var(--text-primary-light); }
-body.dark-theme { background-color: var(--bg-dark); color: var(--text-primary-dark); }
+body.light-theme { background-color: var(--bg-light); color: var(--text-primary-light);transition: background-color 0.3s ease, color 0.3s ease; }
+body.dark-theme { background-color: var(--bg-dark); color: var(--text-primary-dark);transition: background-color 0.3s ease, color 0.3s ease; }
+
+/* 初始加载状态控制 (这个样式很重要，请确保它存在) */
+body.is-loading {
+    transition: none !important; /* 加载时禁用所有过渡动画 */
+}
+body.is-loading #login-container,
+body.is-loading #app-layout {
+    visibility: hidden;
+    opacity: 0;
+}
 
 /* --- Login Page --- */
 #login-container {
