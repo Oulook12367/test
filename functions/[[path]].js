@@ -131,6 +131,11 @@ export async function onRequest(context) {
 
     if (apiPath === 'login' && request.method === 'POST') {
         const { username, password } = await request.json();
+     // 新增：明确禁止 public 用户登录
+        if (username.toLowerCase() === 'public') {
+            return jsonResponse({ error: '此为保留账户，禁止登录。' }, 403);
+        }
+        
         const data = await getSiteData(env);
         const user = data.users[username];
         if (!user || !user.salt) return jsonResponse({ error: '用户名或密码错误' }, 401);
