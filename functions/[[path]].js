@@ -74,7 +74,6 @@ const saveSiteData = async (env, data) => {
     await env.NAVI_DATA.put('data', JSON.stringify(data));
 };
 
-// Updated Auth Middleware to check specific permissions
 const authenticateRequest = async (request, env, requiredPermission) => {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) return { error: '认证失败：缺少 Token', status: 401 };
@@ -88,12 +87,10 @@ const authenticateRequest = async (request, env, requiredPermission) => {
         const user = data.users[payload.sub];
         if (!user) return { error: '用户不存在', status: 401 };
 
-        // Admin always has permission
         if (user.roles.includes('admin')) {
             return { payload: user, status: 200 };
         }
 
-        // Check for specific permission if required
         if (requiredPermission && !user.permissions[requiredPermission]) {
             return { error: '权限不足', status: 403 };
         }
