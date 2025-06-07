@@ -43,9 +43,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- State ---
     let allBookmarks = [], allCategories = [], allUsers = [], currentUser = null, isGuestView = false;
-    let draggedItem = null;
+    let categorySortable, bookmarkSortable; // SortableJS 实例
 
-    // --- API Helper ---
+
+// --- API Helper ---
     const apiRequest = async (endpoint, method = 'GET', body = null) => {
         const headers = { 'Content-Type': 'application/json' };
         const token = localStorage.getItem('jwt_token');
@@ -68,7 +69,19 @@ document.addEventListener('DOMContentLoaded', () => {
         return result;
     };
 
-    // --- Theme Logic ---
+     const persistOrder = async () => {
+        try {
+            await apiRequest('data', 'PUT', {
+                categories: allCategories,
+                bookmarks: allBookmarks
+            });
+        } catch (error) {
+            alert('顺序保存失败: ' + error.message);
+            await loadData();
+        }
+    };
+
+  // --- Theme Logic ---
     const applyTheme = (theme) => {
         const currentClass = document.body.className;
         document.body.className = theme;
@@ -83,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
         applyTheme(newTheme);
     });
 
-    // --- Authentication & UI Flow ---
+   // --- Authentication & UI Flow ---
     const showLoginPage = () => {
         appLayout.style.display = 'none';
         loginContainer.style.display = 'block';
@@ -102,7 +115,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    loginForm.addEventListener('submit', async (e) => {
+
+   loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         loginError.textContent = '';
         try {
@@ -126,7 +140,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- Data Loading & UI Rendering ---
+
+     // --- Data Loading & UI Rendering ---
     const loadData = async () => {
         const data = await apiRequest('data');
         const token = localStorage.getItem('jwt_token');
@@ -147,10 +162,11 @@ document.addEventListener('DOMContentLoaded', () => {
         renderUI();
     };
     
-    const renderUI = () => {
+   const renderUI = () => {
         updateButtonVisibility();
         renderCategories();
         renderBookmarks(categoryNav.querySelector('.active')?.dataset.id || 'all', localSearchInput.value);
+        initSortables(); // 每次渲染后都重新初始化拖拽
         if (categoryManagementModal.style.display === 'flex') renderCategoryManagerList();
         if (userManagementModal.style.display === 'flex') renderUserManagementPanel();
     };
@@ -168,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const renderCategories = () => {
+   const renderCategories = () => {
         const activeId = categoryNav.querySelector('.active')?.dataset.id || 'all';
         categoryNav.innerHTML = '';
         const allLi = document.createElement('li');
@@ -179,9 +195,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const li = document.createElement('li');
             li.dataset.id = cat.id;
             li.innerHTML = `<i class="fas fa-folder"></i><span>${escapeHTML(cat.name)}</span>`;
-            if (!isGuestView && currentUser?.permissions?.canEditCategories) {
-                li.draggable = true;
-            }
             categoryNav.appendChild(li);
         });
         const newActiveLi = categoryNav.querySelector(`li[data-id="${activeId}"]`) || categoryNav.querySelector(`li[data-id="all"]`);
@@ -190,7 +203,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     categoryNav.addEventListener('click', (e) => {
         const clickedLi = e.target.closest('li');
-        if (!clickedLi || !categoryNav.contains(clickedLi) || clickedLi.classList.contains('dragging')) return;
+        if (!clickedLi || !categoryNav.contains(clickedLi)) return;
+        if (clickedLi.classList.contains('sortable-ghost')) return;
         categoryNav.querySelector('.active')?.classList.remove('active');
         clickedLi.classList.add('active');
         renderBookmarks(clickedLi.dataset.id, localSearchInput.value);
@@ -215,10 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
             card.className = 'bookmark-card';
             card.target = '_blank';
             card.rel = 'noopener noreferrer';
-            if (!isGuestView && currentUser?.permissions?.canEditBookmarks) {
-                card.draggable = true;
-                card.dataset.id = bm.id;
-            }
+            card.dataset.id = bm.id;
             const defaultIcon = `https://www.google.com/s2/favicons?domain=${new URL(bm.url).hostname}`;
             const img = document.createElement('img');
             img.src = bm.icon || defaultIcon;
@@ -598,108 +609,67 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Drag and Drop Logic ---
-    // --- (核心修复) Drag and Drop Logic ---
-    const persistOrder = async () => {
-        try {
-            await apiRequest('data', 'PUT', {
-                categories: allCategories,
-                bookmarks: allBookmarks
+    const destroySortables = () => {
+        if (categorySortable) categorySortable.destroy();
+        if (bookmarkSortable) bookmarkSortable.destroy();
+    };
+    
+    const initSortables = () => {
+        destroySortables(); // 销毁旧实例，防止内存泄漏
+
+        if (isGuestView || !currentUser) return; // 公共模式或未登录，不启用拖拽
+
+        if (currentUser.permissions.canEditCategories) {
+            categorySortable = new Sortable(categoryNav, {
+                animation: 150,
+                filter: '[data-id="all"]', // “全部书签”项不可拖动
+                onEnd: (evt) => {
+                    if (evt.oldIndex === evt.newIndex) return;
+                    // old/newIndex - 1 是因为要排除掉“全部书签”这一项
+                    const itemToMove = allCategories.splice(evt.oldIndex - 1, 1)[0];
+                    allCategories.splice(evt.newIndex - 1, 0, itemToMove);
+                    persistOrder();
+                },
             });
-        } catch (error) {
-            alert('顺序保存失败: ' + error.message);
-            await loadData();
+        }
+        
+        if (currentUser.permissions.canEditBookmarks) {
+            bookmarkSortable = new Sortable(bookmarksGrid, {
+                animation: 150,
+                onEnd: (evt) => {
+                    if (evt.oldIndex === evt.newIndex) return;
+
+                    const activeCategoryId = categoryNav.querySelector('.active')?.dataset.id || 'all';
+                    
+                    // 获取当前视图的书签ID顺序
+                    const currentIdOrder = Array.from(evt.from.children).map(el => el.dataset.id);
+
+                    // 从旧的DOM顺序中找到被移动的书签ID
+                    const movedItemId = evt.item.dataset.id;
+                    
+                    // 创建一个新的ID顺序
+                    currentIdOrder.splice(evt.oldIndex, 1);
+                    currentIdOrder.splice(evt.newIndex, 0, movedItemId);
+
+                    // 根据新的ID顺序来重排 allBookmarks 数组
+                    // 这是一个稳定的排序，可以处理任何视图（全部或分类）
+                    allBookmarks.sort((a, b) => {
+                        let indexA = currentIdOrder.indexOf(a.id);
+                        let indexB = currentIdOrder.indexOf(b.id);
+                        // 如果某项不在当前视图中，则保持其相对顺序
+                        if (indexA === -1) indexA = Infinity;
+                        if (indexB === -1) indexB = Infinity;
+                        return indexA - indexB;
+                    });
+                    
+                    persistOrder();
+                },
+            });
         }
     };
-    
-    const getDragAfterElement = (container, y) => {
-        const draggableElements = [...container.querySelectorAll(`${itemSelectorFromContainer(container)}:not(.dragging)`)];
-        return draggableElements.reduce((closest, child) => {
-            const box = child.getBoundingClientRect();
-            const offset = y - box.top - box.height / 2;
-            if (offset < 0 && offset > closest.offset) {
-                return { offset: offset, element: child };
-            } else {
-                return closest;
-            }
-        }, { offset: Number.NEGATIVE_INFINITY }).element;
-    };
-    
-    const itemSelectorFromContainer = (container) => {
-        return container === bookmarksGrid ? 'a.bookmark-card[draggable="true"]' : 'li[draggable="true"]';
-    };
-    
-    const setupDragDrop = (container, getItemsArray) => {
-        const itemSelector = itemSelectorFromContainer(container);
-        
-        container.addEventListener('dragstart', e => {
-            if (e.target.matches(itemSelector)) {
-                draggedItem = e.target;
-                setTimeout(() => e.target.classList.add('dragging'), 0);
-            }
-        });
-
-        container.addEventListener('dragend', () => {
-            if (draggedItem) {
-                draggedItem.classList.remove('dragging');
-            }
-            draggedItem = null;
-        });
-        
-        container.addEventListener('dragover', e => {
-            e.preventDefault();
-            const afterElement = getDragAfterElement(container, e.clientY);
-            const draggable = document.querySelector('.dragging');
-            if (draggable) {
-                if (afterElement == null) {
-                    container.appendChild(draggable);
-                } else {
-                    container.insertBefore(draggable, afterElement);
-                }
-            }
-        });
-        
-        container.addEventListener('drop', async e => {
-            e.preventDefault();
-            if (!draggedItem) return;
-
-            const itemsArray = getItemsArray();
-            const fromId = draggedItem.dataset.id;
-
-            // 获取所有可见元素的当前 DOM 顺序
-            const currentOrderIds = [...container.querySelectorAll(itemSelector)].map(el => el.dataset.id);
-            const fromIndex = itemsArray.findIndex(item => item.id === fromId);
-            
-            // 在新顺序中找到拖拽项应该在的位置
-            const toIndexDOM = currentOrderIds.indexOf(fromId);
-            if (fromIndex === -1 || toIndexDOM === -1) return;
-
-            const itemToMove = itemsArray[fromIndex];
-            
-            // 从原数组中移除
-            itemsArray.splice(fromIndex, 1);
-            
-            // 找到它在整个数据数组中的新目标位置
-            // 这是一个简化逻辑：我们假设拖拽只在当前可见的分类内改变顺序
-            // 一个更完整的实现需要处理跨分类拖拽
-            const activeCategoryId = categoryNav.querySelector('.active')?.dataset.id || 'all';
-            if (activeCategoryId !== 'all') {
-                const categoryBookmarks = itemsArray.filter(bm => bm.categoryId === activeCategoryId);
-                const firstIndexOfCategory = itemsArray.indexOf(categoryBookmarks[0]);
-                itemsArray.splice(firstIndexOfCategory + toIndexDOM, 0, itemToMove);
-            } else { // 在"全部书签"视图下拖拽
-                 itemsArray.splice(toIndexDOM, 0, itemToMove);
-            }
-
-            // 更新UI并保存
-            renderUI();
-            await persistOrder();
-        });
-    };
-    
-    setupDragDrop(categoryNav, () => allCategories);
-    setupDragDrop(bookmarksGrid, () => allBookmarks);
 
     // --- Initial Load ---
     applyTheme(localStorage.getItem('theme') || 'light-theme');
     checkLoginStatus();
 });
+
