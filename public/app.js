@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     // --- Element Selectors ---
+    const staticNav = document.getElementById('static-nav');
     const loginContainer = document.getElementById('login-container');
     const appLayout = document.getElementById('app-layout');
     const loginForm = document.getElementById('login-form');
@@ -203,14 +204,18 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
 
- const renderCategories = () => {
-        const activeId = categoryNav.querySelector('.active')?.dataset.id || 'all';
-        categoryNav.innerHTML = '';
+const renderCategories = () => {
+    const activeId = categoryNav.querySelector('.active')?.dataset.id || staticNav.querySelector('.active')?.dataset.id || 'all';
+
+    // 分别清空两个列表
+    categoryNav.innerHTML = '';
+    staticNav.innerHTML = '';
         
         const allLi = document.createElement('li');
-        allLi.dataset.id = 'all';
-        allLi.innerHTML = `<i class="fas fa-inbox"></i><span>全部书签</span>`;
-        categoryNav.appendChild(allLi);
+    allLi.dataset.id = 'all';
+    allLi.innerHTML = `<i class="fas fa-inbox"></i><span>全部书签</span>`;
+    // 【重要】将“全部书签”添加到新的 staticNav 容器中
+    staticNav.appendChild(allLi);
 
         const buildTree = (parentId, level) => {
             allCategories
@@ -229,9 +234,9 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         buildTree(null, 1);
 
-        const newActiveLi = categoryNav.querySelector(`li[data-id="${activeId}"]`) || categoryNav.querySelector(`li[data-id="all"]`);
-        if(newActiveLi) newActiveLi.classList.add('active');
-    };
+          const newActiveLi = document.querySelector(`.sidebar li[data-id="${activeId}"]`) || staticNav.querySelector(`li[data-id="all"]`);
+    if(newActiveLi) newActiveLi.classList.add('active');
+};
     
     categoryNav.addEventListener('click', (e) => {
         const clickedLi = e.target.closest('li');
