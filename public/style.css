@@ -421,3 +421,24 @@ button[type="submit"]:hover, .confirm-buttons button:hover {
 ::-webkit-scrollbar-thumb:hover { background: #aaa; }
 .dark-theme ::-webkit-scrollbar-thumb { background: #444; }
 .dark-theme ::-webkit-scrollbar-thumb:hover { background: #666; }
+
+
+/* --- Fix for Login Checkbox Alignment --- */
+.no-expiry-option {
+    display: flex;
+    align-items: center; /* 关键：垂直居中对齐 */
+    gap: 0.5rem;         /* 在复选框和文字之间添加一些间距 */
+    margin: 0.5rem 0 1rem 0; /* 调整垂直边距，使其看起来更舒适 */
+    font-size: 0.9em;
+    font-weight: 500;
+    color: var(--text-secondary-light);
+}
+
+.dark-theme .no-expiry-option {
+    color: var(--text-secondary-dark);
+}
+
+.no-expiry-option input {
+    /* 确保复选框不会占满整行 */
+    width: auto; 
+}
