@@ -169,7 +169,6 @@ export async function onRequest(context) {
 
         const data = await getSiteData(env);
         if (currentUser.roles.includes('admin')) {
-             // 修正点：不再过滤 public 用户，让管理员可以看到并编辑它
              const usersForAdmin = Object.values(data.users).map(({ passwordHash, salt, ...u }) => u);
              return jsonResponse({...data, users: usersForAdmin});
         }
@@ -180,11 +179,12 @@ export async function onRequest(context) {
         return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks, users: [safeUser] });
     }
     
-    if (apiPath === 'data' && request.method === 'PUT') {
-        const authResult = await authenticateRequest(request, env);
-        if (authResult.error) return jsonResponse(authResult, authResult.status);
-        const currentUser = authResult.user;
+    // Auth Wall for all write operations
+    const authResult = await authenticateRequest(request, env);
+    if (authResult.error) return jsonResponse(authResult, authResult.status);
+    const currentUser = authResult.user;
 
+    if (apiPath === 'data' && request.method === 'PUT') {
         if (!currentUser.permissions.canEditBookmarks && !currentUser.permissions.canEditCategories) {
             return jsonResponse({ error: '权限不足' }, 403);
         }
@@ -195,10 +195,6 @@ export async function onRequest(context) {
         await saveSiteData(env, data);
         return jsonResponse({ success: true });
     }
-
-    const authResult = await authenticateRequest(request, env);
-    if (authResult.error) return jsonResponse(authResult, authResult.status);
-    const currentUser = authResult.user;
     
     if (apiPath.startsWith('bookmarks')) {
         const data = await getSiteData(env);
