@@ -3,7 +3,7 @@
 import { Hono } from 'hono';
 import { sign, verify } from 'hono/jwt';
 
-// 初始化 Hono 应用 (无 basepath)
+// 初始化 Hono 应用
 const app = new Hono();
 
 // --- 认证中间件 ---
@@ -16,7 +16,9 @@ const authMiddleware = (role) => {
     const token = authHeader.substring(7);
     try {
       const decodedPayload = await verify(token, c.env.JWT_SECRET);
-      if (!decodedPayload) { throw new Error("无效的 payload"); }
+      if (!decodedPayload) {
+        throw new Error("无效的 payload");
+      }
       if (role && !decodedPayload.roles?.includes(role)) {
         return c.json({ error: '权限不足' }, 403);
       }
@@ -27,10 +29,6 @@ const authMiddleware = (role) => {
     }
   };
 };
-
-// =======================================================
-// ↓↓↓ 这是上次被我误删的函数体，现已恢复 ↓↓↓
-// =======================================================
 
 // --- 辅助函数 ---
 const hashPassword = async (password) => {
@@ -76,11 +74,6 @@ const saveSiteData = async (c, data) => {
     await c.env.NAVI_DATA.put('data', JSON.stringify(data));
 };
 
-// =======================================================
-// ↑↑↑ 函数体恢复结束 ↑↑↑
-// =======================================================
-
-
 // --- API 路由 ---
 app.post('/login', async (c) => {
     const { username, password, noExpiry } = await c.req.json();
@@ -99,7 +92,9 @@ app.post('/login', async (c) => {
 app.get('/data', authMiddleware(), async (c) => {
     const payload = c.get('jwtPayload');
     const data = await getSiteData(c);
-    if (payload.roles.includes('admin')) return c.json(data);
+    if (payload.roles.includes('admin')) {
+        return c.json(data);
+    }
     const user = data.users[payload.sub];
     const visibleCategories = data.categories.filter(cat => user.permissions.visibleCategories.includes(cat.id));
     const visibleCategoryIds = visibleCategories.map(cat => cat.id);
