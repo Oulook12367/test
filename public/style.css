@@ -511,7 +511,7 @@ button.danger:hover {
 .bookmark-card.dragging,
 .category-nav li.dragging {
     opacity: 0.5;
-    border: 2px dashed var(--accent-light);
+    border: 1px dashed var(--accent-light);
 }
 
 .dark-theme .bookmark-card.dragging,
@@ -519,26 +519,10 @@ button.danger:hover {
     border-color: var(--accent-dark);
 }
 
-/* 拖拽悬停时，列表项之间的占位符间隙 */
-.drag-over-gap {
-    transition: height 0.1s ease-in-out;
-}
-#bookmarks-grid > .drag-over-gap {
-    height: 1.5rem;
-    grid-column: 1 / -1; /* 让占位符撑满一行 */
-}
-.sidebar .drag-over-gap {
-    height: 2.5rem;
-    background-color: var(--accent-light);
-    opacity: 0.2;
-    border-radius: 8px;
-    margin-bottom: 0.5rem;
-}
-
-.inline-edit-input {
-    flex-grow: 1;
-    font-size: 1em;
-    padding: 2px 5px;
-    border: 1px solid var(--accent-light);
-    border-radius: 4px;
+/* “幽灵”占位符的样式 */
+.drag-placeholder {
+    background: var(--accent-light);
+    opacity: 0.15;
+    border: 2px dashed var(--accent-dark);
+    /* 移除固定高度，让它自适应内容大小 */
 }
