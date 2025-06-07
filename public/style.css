@@ -1,6 +1,15 @@
 /* --- Global Reset & Font --- */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
+/* 在 style.css 顶部或一个合适的位置添加 */
+
+/* 初始加载状态控制 */
+body.is-loading #login-container,
+body.is-loading #app-layout {
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+}
 :root {
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     /* Light Theme */
