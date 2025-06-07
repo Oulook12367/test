@@ -770,28 +770,51 @@ addCategoryForm.addEventListener('submit', async (e) => {
         renderUserFormCategories();
     };
 
-    const populateUserForm = (user) => {
-        userList.querySelectorAll('li').forEach(li => li.classList.remove('selected'));
-        userList.querySelector(`li[data-username="${user.username}"]`).classList.add('selected');
-        userForm.reset();
-        userFormTitle.textContent = `编辑用户: ${user.username}`;
-        userForm.querySelector('.modal-error-message').textContent = '';
-        const usernameInput = userForm.querySelector('#user-form-username');
-        const passwordInput = userForm.querySelector('#user-form-password');
-        usernameInput.value = user.username;
-        usernameInput.readOnly = true;
-        userForm.querySelector('#user-form-username-hidden').value = user.username;
-        if (user.username === 'public') {
-            passwordInput.disabled = true;
-            passwordInput.placeholder = '虚拟账户，无法设置密码';
-            renderUserFormRoles(user.roles, true);
-        } else {
-            passwordInput.disabled = false;
-            passwordInput.placeholder = "留空则不修改";
-            renderUserFormRoles(user.roles, false);
-        }
-        renderUserFormCategories(user.permissions.visibleCategories);
-    };
+/**
+ * @description 使用指定用户的数据填充用户编辑表单
+ * @param {object} user - 要编辑的用户对象
+ */
+const populateUserForm = (user) => {
+    // --- 表单和列表UI状态重置 ---
+    userList.querySelectorAll('li').forEach(li => li.classList.remove('selected'));
+    userList.querySelector(`li[data-username="${user.username}"]`).classList.add('selected');
+    userForm.reset();
+    userFormTitle.textContent = `编辑用户: ${user.username}`;
+    userForm.querySelector('.modal-error-message').textContent = '';
+    
+    // --- 填充基础信息（用户名、密码） ---
+    const usernameInput = userForm.querySelector('#user-form-username');
+    const passwordInput = userForm.querySelector('#user-form-password');
+    usernameInput.value = user.username;
+    usernameInput.readOnly = true;
+    userForm.querySelector('#user-form-username-hidden').value = user.username;
+
+    // --- 【核心修改】判断用户角色并设置UI状态 ---
+    const isPublicUser = user.username === 'public';
+    const isAdmin = user.roles.includes('admin');
+
+    const adminMessageEl = document.getElementById('admin-override-message');
+    const categoriesContainerEl = document.getElementById('user-form-categories');
+
+    // 1. 根据是否为管理员，决定是否显示“管理员权限覆盖”提示，并调整分类区域样式
+    adminMessageEl.style.display = isAdmin ? 'block' : 'none';
+    categoriesContainerEl.style.opacity = isAdmin ? 0.6 : 1;
+
+    // 2. 处理密码框状态
+    if (isPublicUser) {
+        passwordInput.disabled = true;
+        passwordInput.placeholder = '虚拟账户，无法设置密码';
+    } else {
+        passwordInput.disabled = false;
+        passwordInput.placeholder = "留空则不修改";
+    }
+    
+    // 3. 渲染角色勾选框（仅对 'public' 用户禁用）
+    renderUserFormRoles(user.roles, isPublicUser);
+
+    // 4. 渲染可见分类勾选框（对 'admin' 用户禁用）
+    renderUserFormCategories(user.permissions.visibleCategories, isAdmin);
+};
 
     const renderUserFormRoles = (activeRoles = [], isDisabled = false) => {
         userFormRoles.innerHTML = '';
@@ -812,23 +835,38 @@ addCategoryForm.addEventListener('submit', async (e) => {
         });
     };
 
-    const renderUserFormCategories = (visibleIds = []) => {
-        userFormCategories.innerHTML = '';
-        allCategories.forEach(cat => {
-            const id = `cat-perm-${cat.id}`;
-            const div = document.createElement('div');
-            const input = document.createElement('input');
-            input.type = 'checkbox';
-            input.id = id;
-            input.value = cat.id;
-            if (visibleIds.includes(cat.id)) input.checked = true;
-            const label = document.createElement('label');
-            label.htmlFor = id;
-            label.textContent = cat.name;
-            div.append(input, label);
-            userFormCategories.appendChild(div);
-        });
-    };
+    /**
+ * @description 渲染用户表单中的“可见分类”勾选列表
+ * @param {string[]} [visibleIds=[]] - 该用户可见的分类ID数组
+ * @param {boolean} [isDisabled=false] - 是否禁用所有勾选框（用于管理员账户）
+ */
+const renderUserFormCategories = (visibleIds = [], isDisabled = false) => {
+    userFormCategories.innerHTML = '';
+    allCategories.forEach(cat => {
+        const id = `cat-perm-${cat.id}`;
+        const div = document.createElement('div');
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.id = id;
+        input.value = cat.id;
+        if (visibleIds.includes(cat.id)) input.checked = true;
+        
+        // 【核心修改】根据传入的参数禁用勾选框
+        input.disabled = isDisabled; 
+        
+        const label = document.createElement('label');
+        label.htmlFor = id;
+        label.textContent = cat.name;
+
+        // 如果禁用，同时改变标签的鼠标样式，提升用户体验
+        if (isDisabled) {
+            label.style.cursor = 'not-allowed';
+        }
+
+        div.append(input, label);
+        userFormCategories.appendChild(div);
+    });
+};
     
     userFormClearBtn.addEventListener('click', clearUserForm);
 
