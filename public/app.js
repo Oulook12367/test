@@ -490,30 +490,48 @@ document.addEventListener('DOMContentLoaded', () => {
         userFormTitle.textContent = '添加新用户';
         userForm.querySelector('.modal-error-message').textContent = '';
         const usernameInput = userForm.querySelector('#user-form-username');
+        const passwordInput = userForm.querySelector('#user-form-password');
+        
         usernameInput.value = '';
         usernameInput.readOnly = false;
+        passwordInput.disabled = false; // 确保为新用户启用密码框
+        passwordInput.placeholder = "必填";
+
         userForm.querySelector('#user-form-username-hidden').value = '';
-        userForm.querySelector('#user-form-password').placeholder = "必填";
         renderUserFormRoles();
         renderUserFormCategories();
     };
 
-    const populateUserForm = (user) => {
+ const populateUserForm = (user) => {
         userList.querySelectorAll('li').forEach(li => li.classList.remove('selected'));
         userList.querySelector(`li[data-username="${user.username}"]`).classList.add('selected');
         userForm.reset();
         userFormTitle.textContent = `编辑用户: ${user.username}`;
         userForm.querySelector('.modal-error-message').textContent = '';
+        
         const usernameInput = userForm.querySelector('#user-form-username');
+        const passwordInput = userForm.querySelector('#user-form-password');
+
         usernameInput.value = user.username;
         usernameInput.readOnly = true;
         userForm.querySelector('#user-form-username-hidden').value = user.username;
-        userForm.querySelector('#user-form-password').placeholder = "留空则不修改";
-        renderUserFormRoles(user.roles);
+
+        // 核心优化点：如果是 public 用户，则禁用密码和角色编辑
+        if (user.username === 'public') {
+            passwordInput.disabled = true;
+            passwordInput.placeholder = '虚拟账户，无法设置密码';
+            renderUserFormRoles(user.roles, true); // 传入 true 来禁用
+        } else {
+            passwordInput.disabled = false;
+            passwordInput.placeholder = "留空则不修改";
+            renderUserFormRoles(user.roles, false); // 正常启用
+        }
+
         renderUserFormCategories(user.permissions.visibleCategories);
     };
+    
 
-    const renderUserFormRoles = (activeRoles = []) => {
+     const renderUserFormRoles = (activeRoles = [], isDisabled = false) => {
         userFormRoles.innerHTML = '';
         ['admin', 'editor', 'viewer'].forEach(role => {
             const id = `role-${role}`;
@@ -523,6 +541,8 @@ document.addEventListener('DOMContentLoaded', () => {
             input.id = id;
             input.value = role;
             if (activeRoles.includes(role)) input.checked = true;
+            input.disabled = isDisabled; // 根据参数设置禁用状态
+
             const label = document.createElement('label');
             label.htmlFor = id;
             label.textContent = role.charAt(0).toUpperCase() + role.slice(1);
