@@ -1,76 +1,285 @@
-/* General Header buttons styling */
-.header-buttons {
-    margin-left: auto;
+/* --- Global Reset & Font --- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+    /* Light Theme Colors */
+    --bg-light: #f8f9fa;
+    --card-bg-light: #ffffff;
+    --text-primary-light: #212529;
+    --text-secondary-light: #6c757d;
+    --border-light: #dee2e6;
+    --accent-light: #007bff;
+    --accent-hover-light: #0056b3;
+
+    /* Dark Theme Colors */
+    --bg-dark: #121212;
+    --card-bg-dark: #1e1e1e;
+    --text-primary-dark: #e9ecef;
+    --text-secondary-dark: #adb5bd;
+    --border-dark: #343a40;
+    --accent-dark: #3b82f6;
+    --accent-hover-dark: #1d4ed8;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-sans);
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* --- Theme Styles --- */
+body.light-theme {
+    background-color: var(--bg-light);
+    color: var(--text-primary-light);
+}
+
+body.dark-theme {
+    background-color: var(--bg-dark);
+    color: var(--text-primary-dark);
+}
+
+/* --- Layout --- */
+.container {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: auto;
+}
+#login-container {
+    max-width: 400px;
+    margin-top: 15vh;
+    background-color: var(--card-bg-light);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.05);
+}
+.dark-theme #login-container {
+    background-color: var(--card-bg-dark);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+}
+
+/* --- Header & Search --- */
+header {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+.search-bar {
+    display: flex;
+    flex-grow: 1;
+    background-color: var(--card-bg-light);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+}
+.dark-theme .search-bar {
+    background-color: var(--card-bg-dark);
+    border-color: var(--border-dark);
+}
+.search-bar select, .search-bar input {
+    border: none;
+    background: transparent;
+    padding: 12px 15px;
+    font-size: 1rem;
+    color: inherit;
+}
+.search-bar select {
+    border-right: 1px solid var(--border-light);
+}
+.dark-theme .search-bar select {
+    border-right-color: var(--border-dark);
+}
+.search-bar input {
+    width: 100%;
+}
+input:focus, select:focus {
+    outline: none;
+}
+
+/* Header Buttons */
+.header-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 .header-buttons button {
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
-    color: var(--text-color-light);
-    width: 40px;
-    height: 40px;
+    background: var(--card-bg-light);
+    border: 1px solid var(--border-light);
+    color: var(--text-secondary-light);
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
-    font-size: 16px;
+    font-size: 1rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
+    cursor: pointer;
+    transition: all 0.2s ease;
 }
 .dark-theme .header-buttons button {
-    color: var(--text-color-dark);
+    background: var(--card-bg-dark);
+    border-color: var(--border-dark);
+    color: var(--text-secondary-dark);
 }
 .header-buttons button:hover {
-    background: var(--border-color-light);
+    background-color: var(--bg-light);
+    border-color: var(--accent-light);
+    color: var(--accent-light);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.1);
 }
 .dark-theme .header-buttons button:hover {
-    background: var(--border-color-dark);
+    border-color: var(--accent-dark);
+    color: var(--accent-dark);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
 }
 
-/* Bookmark card actions */
+/* --- Category Navigation --- */
+#category-nav {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+}
+.category-btn {
+    padding: 8px 20px;
+    border-radius: 20px;
+    background-color: var(--card-bg-light);
+    border: 1px solid var(--border-light);
+    color: var(--text-secondary-light);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.dark-theme .category-btn {
+    background-color: var(--card-bg-dark);
+    border-color: var(--border-dark);
+    color: var(--text-secondary-dark);
+}
+.category-btn.active, .category-btn:hover {
+    background-color: var(--accent-light);
+    color: white;
+    border-color: var(--accent-light);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.2);
+}
+.dark-theme .category-btn.active, .dark-theme .category-btn:hover {
+    background-color: var(--accent-dark);
+    border-color: var(--accent-dark);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+/* --- Bookmark Grid --- */
+#bookmarks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+.bookmark-card {
+    background-color: var(--card-bg-light);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    padding: 1.25rem;
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.2s ease;
+    position: relative;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+.dark-theme .bookmark-card {
+    background-color: var(--card-bg-dark);
+    border-color: var(--border-dark);
+}
+.bookmark-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.07);
+    border-color: var(--accent-light);
+}
+.dark-theme .bookmark-card:hover {
+    box-shadow: 0 8px 25px rgba(0,0,0,0.25);
+    border-color: var(--accent-dark);
+}
+.bookmark-card h3 {
+    margin: 0 0 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+.bookmark-card img {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+}
+.bookmark-card p {
+    font-size: 0.9em;
+    color: var(--text-secondary-light);
+    flex-grow: 1;
+    margin: 0;
+    line-height: 1.5;
+}
+.dark-theme .bookmark-card p {
+    color: var(--text-secondary-dark);
+}
+
+/* Card Actions (Edit/Delete) */
 .bookmark-card-actions {
     position: absolute;
     top: 10px;
     right: 10px;
     display: flex;
-    gap: 5px;
+    gap: 8px;
     opacity: 0;
-    transition: opacity 0.2s ease-in-out;
+    transform: translateY(5px);
+    transition: all 0.2s ease-in-out;
 }
 .bookmark-card:hover .bookmark-card-actions {
     opacity: 1;
+    transform: translateY(0);
 }
 .bookmark-card-actions button {
-    background-color: rgba(255, 255, 255, 0.7);
-    border: 1px solid #ccc;
+    background-color: var(--bg-light);
+    border: 1px solid var(--border-light);
     border-radius: 50%;
-    width: 28px;
-    height: 28px;
-    font-size: 12px;
-    color: #333;
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+    color: var(--text-secondary-light);
     cursor: pointer;
-    padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: all 0.2s ease;
 }
 .dark-theme .bookmark-card-actions button {
-    background-color: rgba(0, 0, 0, 0.5);
-    border-color: #555;
-    color: #eee;
+    background-color: #2a2a2a;
+    border-color: var(--border-dark);
+    color: var(--text-secondary-dark);
 }
 .bookmark-card-actions button:hover {
-    background-color: #fff;
+    color: var(--accent-light);
+    background-color: #e9ecef;
 }
 .dark-theme .bookmark-card-actions button:hover {
-    background-color: #000;
+    color: var(--accent-dark);
+    background-color: #343a40;
 }
 .bookmark-card-actions .delete-btn:hover {
-    color: #e74c3c;
+    color: #dc3545;
 }
 
-/* Modal backdrop */
+/* --- Modals --- */
 .modal-backdrop {
     position: fixed;
     z-index: 1000;
@@ -78,152 +287,137 @@
     top: 0;
     width: 100%;
     height: 100%;
-    overflow: auto;
     background-color: rgba(0,0,0,0.5);
+    backdrop-filter: blur(5px);
 }
-
 .modal {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 100%;
+    height: 100%;
 }
-
 .modal-content {
-    background-color: var(--card-bg);
-    padding: 20px 30px;
-    border: 1px solid var(--border-color);
+    background-color: var(--card-bg-light);
+    padding: 2rem;
+    border: 1px solid var(--border-light);
     width: 90%;
     max-width: 500px;
-    border-radius: 8px;
+    border-radius: 12px;
     position: relative;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-    animation: fadeIn 0.3s;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    animation: slideInUp 0.3s ease-out;
+}
+.dark-theme .modal-content {
+    background-color: var(--card-bg-dark);
+    border-color: var(--border-dark);
 }
 .modal-content.large { max-width: 800px; }
-.modal-content.small { max-width: 400px; text-align: center;}
+.modal-content.small { max-width: 400px; text-align: center; }
 
-@keyframes fadeIn {
-    from {transform: translateY(-20px); opacity: 0;}
-    to {transform: translateY(0); opacity: 1;}
+@keyframes slideInUp {
+    from { transform: translateY(30px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
 }
 
 .close-btn {
-    color: #aaa;
+    color: #adb5bd;
     position: absolute;
-    top: 10px;
+    top: 15px;
     right: 20px;
     font-size: 28px;
     font-weight: bold;
     cursor: pointer;
+    transition: transform 0.2s ease;
 }
-.close-btn:hover { color: var(--text-color-light); }
-.dark-theme .close-btn:hover { color: var(--text-color-dark); }
+.close-btn:hover { transform: rotate(90deg); }
 
-/* Form styles inside Modal */
-.modal-content form {
+/* --- Forms --- */
+form {
     display: flex;
     flex-direction: column;
-    gap: 15px;
-    margin-top: 1rem;
+    gap: 1rem;
 }
-.modal-content form label {
-    font-weight: bold;
+form label {
+    font-weight: 600;
     font-size: 0.9em;
 }
-.modal-content form input,
-.modal-content form textarea,
-.modal-content form select {
+form input, form textarea, form select {
     width: 100%;
-    padding: 10px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    background-color: var(--bg-color-light);
-    color: var(--text-color-light);
-    box-sizing: border-box;
+    padding: 12px 15px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background-color: var(--bg-light);
+    color: inherit;
+    font-size: 1rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-.dark-theme .modal-content form input,
-.dark-theme .modal-content form textarea,
-.dark-theme .modal-content form select {
-    background-color: var(--bg-color-dark);
-    color: var(--text-color-dark);
+.dark-theme form input, .dark-theme form textarea, .dark-theme form select {
+    background-color: var(--bg-dark);
+    border-color: var(--border-dark);
 }
-.modal-content form button {
+form input:focus, form textarea:focus, form select:focus {
+    border-color: var(--accent-light);
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+}
+.dark-theme form input:focus, .dark-theme form textarea:focus, .dark-theme form select:focus {
+    border-color: var(--accent-dark);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+button[type="submit"], .confirm-buttons button {
     padding: 12px;
     margin-top: 10px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
+    background-color: var(--accent-light);
+    cursor: pointer;
+    transition: all 0.2s ease;
 }
-.modal-error-message { color: #e74c3c; font-size: 0.9em; height: 1em; }
+.dark-theme button[type="submit"], .dark-theme .confirm-buttons button {
+    background-color: var(--accent-dark);
+}
+button[type="submit"]:hover, .confirm-buttons button:hover {
+    background-color: var(--accent-hover-light);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 123, 255, 0.2);
+}
+.dark-theme button[type="submit"]:hover, .dark-theme .confirm-buttons button:hover {
+    background-color: var(--accent-hover-dark);
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+}
 
-/* Confirm Dialog */
-.confirm-buttons {
-    display: flex;
-    justify-content: center;
-    gap: 1rem;
-    margin-top: 1.5rem;
-}
-.confirm-buttons button.secondary {
-    background-color: var(--card-bg);
-    color: var(--text-color-light);
-    border: 1px solid var(--border-color);
-}
-.dark-theme .confirm-buttons button.secondary {
-    color: var(--text-color-dark);
-}
+.modal-error-message { color: #dc3545; font-size: 0.9em; height: 1.2em; text-align: center;}
 
-/* User Management Panel */
+/* --- User Management Specifics --- */
 .user-management-panel {
     display: flex;
     gap: 2rem;
     min-height: 400px;
 }
-.user-list-container {
-    flex: 1;
-    border-right: 1px solid var(--border-color);
-    padding-right: 2rem;
-    overflow-y: auto;
-}
-.user-form-container {
-    flex: 2;
-}
-#user-list {
-    list-style-type: none;
-    padding: 0;
-    margin: 0;
-}
-#user-list li {
-    padding: 10px;
-    border-radius: 5px;
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-#user-list li:hover, #user-list li.selected {
-    background-color: var(--border-color-light);
-}
-.dark-theme #user-list li:hover, .dark-theme #user-list li.selected {
-    background-color: var(--border-color-dark);
-}
-.user-list-actions button {
-    background: none;
-    border: none;
-    color: #999;
-    cursor: pointer;
-}
-.user-list-actions button:hover { color: #e74c3c; }
+.user-list-container { flex: 1; border-right: 1px solid var(--border-light); padding-right: 2rem; }
+.dark-theme .user-list-container { border-right-color: var(--border-dark); }
+.user-form-container { flex: 2; }
+
+#user-list { list-style-type: none; padding: 0; margin: 0; max-height: 350px; overflow-y: auto;}
+#user-list li { padding: 12px; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background-color 0.2s; }
+#user-list li:hover { background-color: var(--bg-light); }
+#user-list li.selected { background-color: var(--accent-light); color: white; }
+.dark-theme #user-list li:hover { background-color: #2a2a2a; }
+.dark-theme #user-list li.selected { background-color: var(--accent-dark); }
+
 .checkbox-group {
-    max-height: 150px;
-    overflow-y: auto;
-    border: 1px solid var(--border-color);
-    padding: 10px;
-    border-radius: 4px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
+    max-height: 150px; overflow-y: auto; border: 1px solid var(--border-light);
+    padding: 10px; border-radius: 8px; display: flex; flex-direction: column; gap: 8px;
 }
-.user-form-buttons {
-    display: flex;
-    gap: 1rem;
-}
-.user-form-buttons button {
-    flex: 1;
-}
+.dark-theme .checkbox-group { border-color: var(--border-dark); }
+
+/* --- Custom Scrollbar --- */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #aaa; }
+.dark-theme ::-webkit-scrollbar-thumb { background: #444; }
+.dark-theme ::-webkit-scrollbar-thumb:hover { background: #666; }
