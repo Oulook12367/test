@@ -4,7 +4,7 @@
 
 import { Hono } from 'hono';
 import { bearerAuth } from 'hono/bearer-auth';
-import { sign, verify } from '@hono/jwt'; // <== 确保这里和 package.json 里的名字一致
+import { sign, verify } from 'hono/jwt'; // <== 确保这里和 package.json 里的名字一致
 
 
 const app = new Hono();
