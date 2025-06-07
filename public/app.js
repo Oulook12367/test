@@ -42,11 +42,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const bulkDeleteCatBtn = document.getElementById('bulk-delete-cat-btn');
 
     // --- State ---
-    let allBookmarks = [], allCategories = [], allUsers = [], currentUser = null;
+    let allBookmarks = [], allCategories = [], allUsers = [], currentUser = null, isGuestView = false;
 
     // --- API Helper ---
     const apiRequest = async (endpoint, method = 'GET', body = null) => {
-        const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('jwt_token')}` };
+        const headers = { 'Content-Type': 'application/json' };
+        const token = localStorage.getItem('jwt_token');
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
         const options = { method, headers };
         if (body) options.body = JSON.stringify(body);
         const response = await fetch(`/api/${endpoint}`, options);
@@ -81,22 +85,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Authentication ---
     const checkLoginStatus = async () => {
         try {
-            const token = localStorage.getItem('jwt_token');
-            if (token) {
-                await loadData();
-                loginContainer.style.display = 'none';
-                appLayout.style.display = 'flex';
-            } else {
-                loginContainer.style.display = 'block';
-                appLayout.style.display = 'none';
-                currentUser = null;
-            }
+            await loadData();
+            loginContainer.style.display = 'none';
+            appLayout.style.display = 'flex';
         } catch (error) {
-            console.error("Authentication check failed:", error);
-            localStorage.removeItem('jwt_token');
+            console.error("Data loading failed (might be expected for guests):", error.message);
             loginContainer.style.display = 'block';
             appLayout.style.display = 'none';
             currentUser = null;
+            isGuestView = false;
         } finally {
             document.body.classList.remove('is-loading');
         }
@@ -118,22 +115,35 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     logoutButton.addEventListener('click', () => {
-        localStorage.removeItem('jwt_token');
-        checkLoginStatus();
+        if (isGuestView) {
+            window.location.reload();
+        } else {
+            localStorage.removeItem('jwt_token');
+            checkLoginStatus();
+        }
     });
 
     // --- Data Loading & UI Rendering ---
     const loadData = async () => {
         const data = await apiRequest('data');
-        const tokenPayload = JSON.parse(atob(localStorage.getItem('jwt_token').split('.')[1]));
-        
+        const token = localStorage.getItem('jwt_token');
+
+        if (data.isPublic) {
+            isGuestView = true;
+            currentUser = null;
+        } else if (token) {
+            isGuestView = false;
+            const tokenPayload = JSON.parse(atob(token.split('.')[1]));
+            currentUser = data.users.find(u => u.username === tokenPayload.sub);
+            if (!currentUser) throw new Error("无法验证当前用户身份，请重新登录。");
+        } else {
+            throw new Error("需要认证。");
+        }
+
         allCategories = data.categories || [];
         allBookmarks = data.bookmarks || [];
         allUsers = data.users || [];
-        currentUser = allUsers.find(u => u.username === tokenPayload.sub);
         
-        if (!currentUser) throw new Error("无法验证当前用户身份，请重新登录。");
-
         renderUI();
     };
     
@@ -146,12 +156,20 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const updateButtonVisibility = () => {
-        addBookmarkBtn.style.display = currentUser?.permissions?.canEditBookmarks ? 'flex' : 'none';
-        manageCategoriesBtn.style.display = currentUser?.permissions?.canEditCategories ? 'block' : 'none';
-        userManagementBtn.style.display = currentUser?.permissions?.canEditUsers ? 'flex' : 'none';
+        addBookmarkBtn.style.display = !isGuestView && currentUser?.permissions?.canEditBookmarks ? 'flex' : 'none';
+        manageCategoriesBtn.style.display = !isGuestView && currentUser?.permissions?.canEditCategories ? 'block' : 'none';
+        userManagementBtn.style.display = !isGuestView && currentUser?.permissions?.canEditUsers ? 'flex' : 'none';
+
+        if (isGuestView) {
+            logoutButton.innerHTML = '<i class="fas fa-sign-in-alt"></i>';
+            logoutButton.title = '登录';
+        } else {
+            logoutButton.innerHTML = '<i class="fas fa-sign-out-alt"></i>';
+            logoutButton.title = '退出登录';
+        }
     };
 
-   const renderCategories = () => {
+    const renderCategories = () => {
         const activeId = categoryNav.querySelector('.active')?.dataset.id || 'all';
         categoryNav.innerHTML = '';
         const allLi = document.createElement('li');
@@ -173,21 +191,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const newActiveLi = categoryNav.querySelector(`li[data-id="${activeId}"]`) || categoryNav.querySelector(`li[data-id="all"]`);
         newActiveLi.classList.add('active');
     };
-        
-        
-// (新增) 使用事件委托处理分类点击，更高效稳定
+    
     categoryNav.addEventListener('click', (e) => {
         const clickedLi = e.target.closest('li');
-        if (!clickedLi || !categoryNav.contains(clickedLi)) {
-            return; // 没有点击到 li 元素，直接返回
-        }
+        if (!clickedLi || !categoryNav.contains(clickedLi)) return;
         
         categoryNav.querySelector('.active')?.classList.remove('active');
         clickedLi.classList.add('active');
         renderBookmarks(clickedLi.dataset.id, localSearchInput.value);
     });
-    
-  const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
+
+    const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
         bookmarksGrid.innerHTML = '';
         let filteredBookmarks = categoryId === 'all' 
             ? allBookmarks 
@@ -220,18 +234,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const p = document.createElement('p');
             p.textContent = bm.description || '';
             card.append(h3, p);
-
-            if (currentUser?.permissions?.canEditBookmarks) {
+            
+            if (!isGuestView && currentUser?.permissions?.canEditBookmarks) {
                 const actions = document.createElement('div');
                 actions.className = 'bookmark-card-actions';
                 
-                // (修复) 编辑按钮
                 const editBtn = document.createElement('button');
                 editBtn.title = '编辑';
                 editBtn.innerHTML = '<i class="fas fa-pencil-alt"></i>';
                 editBtn.addEventListener('click', (e) => {
-                    e.preventDefault(); // 阻止链接跳转
-                    e.stopPropagation(); // 阻止事件冒泡
+                    e.preventDefault();
+                    e.stopPropagation();
                     handleEditBookmark(bm);
                 });
                 
@@ -243,7 +256,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     e.stopPropagation();
                     handleDeleteBookmark(bm);
                 });
-
                 actions.append(editBtn, deleteBtn);
                 card.appendChild(actions);
             }
@@ -251,7 +263,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
     
-    // --- Search Logic ---
     localSearchInput.addEventListener('keyup', (e) => {
         const term = e.target.value;
         const activeCatId = categoryNav.querySelector('.active')?.dataset.id || 'all';
@@ -261,7 +272,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- Modal Handling ---
     const showModal = (modal) => { modalBackdrop.style.display = 'flex'; modal.style.display = 'flex'; };
     const hideAllModals = () => { modalBackdrop.style.display = 'none'; document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); };
     modalBackdrop.addEventListener('click', (e) => { if (e.target === modalBackdrop) hideAllModals(); });
@@ -275,7 +285,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     document.getElementById('confirm-btn-no').onclick = hideAllModals;
 
-    // --- Bookmark Logic ---
     addBookmarkBtn.addEventListener('click', () => {
         bookmarkModalTitle.textContent = '添加新书签';
         bookmarkForm.reset();
@@ -298,21 +307,16 @@ document.addEventListener('DOMContentLoaded', () => {
         showModal(bookmarkModal);
     });
 
-
-// (新增) 编辑书签功能实现
     const handleEditBookmark = (bookmark) => {
         bookmarkModalTitle.textContent = '编辑书签';
         bookmarkForm.reset();
         bookmarkForm.querySelector('.modal-error-message').textContent = '';
-
-        // 填充表单
         bookmarkForm.querySelector('#bm-id').value = bookmark.id;
         bookmarkForm.querySelector('#bm-name').value = bookmark.name;
         bookmarkForm.querySelector('#bm-url').value = bookmark.url;
         bookmarkForm.querySelector('#bm-desc').value = bookmark.description || '';
         bookmarkForm.querySelector('#bm-icon').value = bookmark.icon || '';
         
-        // 填充并选中分类
         const categorySelect = bookmarkForm.querySelector('#bm-category');
         categorySelect.innerHTML = '';
         const creatableCategories = allCategories.filter(cat => currentUser.permissions.visibleCategories.includes(cat.id));
@@ -325,11 +329,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             categorySelect.appendChild(option);
         });
-        
         showModal(bookmarkModal);
     };
-
-    
 
     const handleDeleteBookmark = (bookmark) => {
         showConfirm('确认删除', `您确定要删除书签 "${escapeHTML(bookmark.name)}" 吗？`, async () => {
@@ -361,7 +362,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- Category Management ---
     manageCategoriesBtn.addEventListener('click', () => {
         document.getElementById('category-error-message').textContent = '';
         renderCategoryManagerList();
@@ -372,6 +372,7 @@ document.addEventListener('DOMContentLoaded', () => {
         categoryManagerList.innerHTML = '';
         allCategories.forEach(cat => {
             const li = document.createElement('li');
+            li.dataset.id = cat.id;
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.id = `del-cat-${cat.id}`;
@@ -379,7 +380,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const span = document.createElement('span');
             span.className = 'category-name';
             span.textContent = cat.name;
-            // (新增) 编辑按钮
             const editBtn = document.createElement('button');
             editBtn.className = 'edit-cat-btn';
             editBtn.title = '编辑名称';
@@ -389,66 +389,50 @@ document.addEventListener('DOMContentLoaded', () => {
             categoryManagerList.appendChild(li);
         });
     };
- // (新增) 处理分类编辑的函数
+
     const handleEditCategory = (liElement, category) => {
         const nameSpan = liElement.querySelector('.category-name');
         const editBtn = liElement.querySelector('.edit-cat-btn');
+        if(!nameSpan || !editBtn) return;
         const originalName = category.name;
-
         const input = document.createElement('input');
         input.type = 'text';
         input.value = originalName;
-        input.className = 'inline-edit-input'; // 可选，用于特定样式
-
         nameSpan.style.display = 'none';
         editBtn.style.display = 'none';
         liElement.insertBefore(input, editBtn);
         input.focus();
         input.select();
-
         const finishEditing = async () => {
             const newName = input.value.trim();
-            // 恢复原始视图
             nameSpan.style.display = '';
             editBtn.style.display = '';
             input.remove();
-
             if (newName && newName !== originalName) {
                 const errorEl = document.getElementById('category-error-message');
                 errorEl.textContent = '';
                 try {
                     await apiRequest(`categories/${category.id}`, 'PUT', { name: newName });
-                    await loadData(); // 成功后刷新所有数据
+                    await loadData();
                 } catch (error) {
                     errorEl.textContent = error.message;
                 }
             }
         };
-
         input.addEventListener('blur', finishEditing);
         input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                finishEditing();
-            } else if (e.key === 'Escape') {
-                // 取消编辑，恢复原始视图
-                nameSpan.style.display = '';
-                editBtn.style.display = '';
-                input.remove();
-            }
+            if (e.key === 'Enter') { e.preventDefault(); finishEditing(); }
+            else if (e.key === 'Escape') { nameSpan.style.display = ''; editBtn.style.display = ''; input.remove(); }
         });
     };
-    
-  bulkDeleteCatBtn.addEventListener('click', () => {
+
+    bulkDeleteCatBtn.addEventListener('click', () => {
         const checkedBoxes = categoryManagerList.querySelectorAll('input[type="checkbox"]:checked');
         const idsToDelete = Array.from(checkedBoxes).map(cb => cb.dataset.id);
-
         if (idsToDelete.length === 0) {
             alert('请先选择要删除的分类。');
             return;
         }
-
-        // 修改确认信息以反映强制删除
         showConfirm('确认强制删除', `确定要删除选中的 ${idsToDelete.length} 个分类吗？分类下的所有书签也将被一并删除！`, async () => {
             const errorEl = document.getElementById('category-error-message');
             errorEl.textContent = '';
@@ -473,7 +457,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { errorEl.textContent = error.message; }
     });
 
-    // --- User Management ---
     userManagementBtn.addEventListener('click', () => {
         renderUserManagementPanel();
         showModal(userManagementModal);
@@ -609,7 +592,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const updatedUser = await apiRequest(endpoint, method, userData);
             await loadData();
             if (isEditing) {
-                populateUserForm(updatedUser);
+                const userToPopulate = allUsers.find(u => u.username === updatedUser.username);
+                if (userToPopulate) populateUserForm(userToPopulate);
             } else {
                 clearUserForm();
             }
