@@ -75,7 +75,8 @@ document.addEventListener('DOMContentLoaded', () => {
     themeToggleButton.addEventListener('click', () => applyTheme(document.body.classList.contains('light-theme') ? 'dark-theme' : 'light-theme'));
 
     // --- Authentication ---
-    const checkLoginStatus = async () => {
+const checkLoginStatus = async () => {
+    try { // 增加 try...finally 来确保 class 总能被移除
         const token = localStorage.getItem('jwt_token');
         if (token) {
             loginContainer.style.display = 'none';
@@ -86,7 +87,18 @@ document.addEventListener('DOMContentLoaded', () => {
             appLayout.style.display = 'none';
             currentUser = null;
         }
-    };
+    } catch (error) {
+        console.error("Authentication check failed:", error);
+        // 如果加载出错，也应该显示登录页
+        loginContainer.style.display = 'block';
+        appLayout.style.display = 'none';
+        currentUser = null;
+    } finally {
+        // ↓↓↓ 在函数末尾添加这一行 ↓↓↓
+        // 无论成功与否，在所有显示逻辑完成后，移除加载状态，让内容可见
+        document.body.classList.remove('is-loading');
+    }
+};
 
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
