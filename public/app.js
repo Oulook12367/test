@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- State ---
     let allBookmarks = [], allCategories = [], allUsers = [], currentUser = null, isGuestView = false;
+    let draggedItem = null; // For drag-and-drop
 
     // --- API Helper ---
     const apiRequest = async (endpoint, method = 'GET', body = null) => {
@@ -82,7 +83,12 @@ document.addEventListener('DOMContentLoaded', () => {
         applyTheme(newTheme);
     });
 
-    // --- Authentication ---
+    // --- Authentication & UI Flow ---
+    const showLoginPage = () => {
+        appLayout.style.display = 'none';
+        loginContainer.style.display = 'block';
+    };
+
     const checkLoginStatus = async () => {
         try {
             await loadData();
@@ -90,10 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
             appLayout.style.display = 'flex';
         } catch (error) {
             console.error("Data loading failed (might be expected for guests):", error.message);
-            loginContainer.style.display = 'block';
-            appLayout.style.display = 'none';
-            currentUser = null;
-            isGuestView = false;
+            showLoginPage();
         } finally {
             document.body.classList.remove('is-loading');
         }
@@ -116,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     logoutButton.addEventListener('click', () => {
         if (isGuestView) {
-            window.location.reload();
+            showLoginPage();
         } else {
             localStorage.removeItem('jwt_token');
             checkLoginStatus();
@@ -172,19 +175,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderCategories = () => {
         const activeId = categoryNav.querySelector('.active')?.dataset.id || 'all';
         categoryNav.innerHTML = '';
+        
         const allLi = document.createElement('li');
-        allLi.innerHTML = `<i class="fas fa-inbox"></i><span>全部书签</span>`;
         allLi.dataset.id = 'all';
+        allLi.innerHTML = `<i class="fas fa-inbox"></i><span>全部书签</span>`;
         categoryNav.appendChild(allLi);
 
         allCategories.forEach(cat => {
             const li = document.createElement('li');
             li.dataset.id = cat.id;
-            const icon = document.createElement('i');
-            icon.className = 'fas fa-folder';
-            const span = document.createElement('span');
-            span.textContent = cat.name;
-            li.append(icon, span);
+            li.innerHTML = `<i class="fas fa-folder"></i><span>${escapeHTML(cat.name)}</span>`;
+            if (!isGuestView && currentUser?.permissions?.canEditCategories) {
+                li.draggable = true;
+            }
             categoryNav.appendChild(li);
         });
         
@@ -223,6 +226,12 @@ document.addEventListener('DOMContentLoaded', () => {
             card.className = 'bookmark-card';
             card.target = '_blank';
             card.rel = 'noopener noreferrer';
+            
+            if (!isGuestView && currentUser?.permissions?.canEditBookmarks) {
+                card.draggable = true;
+                card.dataset.id = bm.id;
+            }
+
             const defaultIcon = `https://www.google.com/s2/favicons?domain=${new URL(bm.url).hostname}`;
             
             const img = document.createElement('img');
@@ -393,7 +402,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const handleEditCategory = (liElement, category) => {
         const nameSpan = liElement.querySelector('.category-name');
         const editBtn = liElement.querySelector('.edit-cat-btn');
-        if(!nameSpan || !editBtn) return;
+        if(!nameSpan || !editBtn || liElement.querySelector('.inline-edit-input')) return;
         const originalName = category.name;
         const input = document.createElement('input');
         input.type = 'text';
@@ -601,6 +610,101 @@ document.addEventListener('DOMContentLoaded', () => {
             errorEl.textContent = error.message;
         }
     });
+
+    // --- Drag and Drop Logic ---
+    const persistOrder = async () => {
+        try {
+            await apiRequest('data', 'PUT', {
+                categories: allCategories,
+                bookmarks: allBookmarks
+            });
+        } catch (error) {
+            alert('顺序保存失败: ' + error.message);
+            await loadData();
+        }
+    };
+
+    const setupDragDrop = (container, itemSelector, itemsArray) => {
+        container.addEventListener('dragstart', e => {
+            if (e.target.matches(itemSelector)) {
+                draggedItem = e.target;
+                setTimeout(() => e.target.classList.add('dragging'), 0);
+            }
+        });
+
+        container.addEventListener('dragend', e => {
+            if (e.target.matches(itemSelector) && e.target.classList.contains('dragging')) {
+                e.target.classList.remove('dragging');
+                draggedItem = null;
+            }
+        });
+        
+        container.addEventListener('dragover', e => {
+            e.preventDefault();
+            const afterElement = getDragAfterElement(container, e.clientY);
+            const currentGap = container.querySelector('.drag-over-gap');
+            if (currentGap) currentGap.remove();
+
+            const gap = document.createElement('div');
+            gap.className = 'drag-over-gap';
+            if (afterElement == null) {
+                container.appendChild(gap);
+            } else {
+                container.insertBefore(gap, afterElement);
+            }
+        });
+        
+        container.addEventListener('dragleave', e => {
+             // Clean up gap when mouse leaves the container
+            if (e.relatedTarget && !container.contains(e.relatedTarget)) {
+                const currentGap = container.querySelector('.drag-over-gap');
+                if (currentGap) currentGap.remove();
+            }
+        });
+
+        container.addEventListener('drop', async e => {
+            e.preventDefault();
+            const currentGap = container.querySelector('.drag-over-gap');
+            if (currentGap) currentGap.remove();
+            
+            if (!draggedItem) return;
+
+            const fromId = draggedItem.dataset.id;
+            const fromIndex = itemsArray.findIndex(item => item.id === fromId);
+            
+            const afterElement = getDragAfterElement(container, e.clientY);
+            const toId = afterElement ? afterElement.dataset.id : null;
+            
+            if(fromId === toId) return; // Dropped on itself
+
+            const toIndex = toId ? itemsArray.findIndex(item => item.id === toId) : itemsArray.length;
+
+            if (fromIndex > -1) {
+                const [itemToMove] = itemsArray.splice(fromIndex, 1);
+                const adjustedToIndex = (fromIndex < toIndex) ? toIndex - 1 : toIndex;
+                itemsArray.splice(adjustedToIndex, 0, itemToMove);
+                
+                renderUI();
+                await persistOrder();
+            }
+        });
+    };
+    
+    const getDragAfterElement = (container, y) => {
+        const draggableElements = [...container.querySelectorAll(`${container === bookmarksGrid ? 'a' : 'li'}[draggable="true"]`)];
+        return draggableElements.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+            if (offset < 0 && offset > closest.offset) {
+                return { offset: offset, element: child };
+            } else {
+                return closest;
+            }
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
+    };
+    
+    setupDragDrop(categoryNav, 'li[draggable="true"]', allCategories);
+    setupDragDrop(bookmarksGrid, 'a[draggable="true"]', allBookmarks);
 
     // --- Initial Load ---
     applyTheme(localStorage.getItem('theme') || 'light-theme');
