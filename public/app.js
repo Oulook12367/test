@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const noExpiry = document.getElementById('no-expiry').checked;
 
         try {
-            const response = await fetch('/api/login', {
+            const response = await fetch('/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password, noExpiry })
@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 数据加载和渲染 ---
     const loadData = async () => {
         try {
-            const response = await fetch('/api/data', {
+            const response = await fetch('/data', {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
             if (response.status === 401) { // Token 过期或无效
