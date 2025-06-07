@@ -77,17 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return result;
     };
 
-     const persistData = async () => {
-        try {
-            await apiRequest('data', 'PUT', {
-                categories: allCategories,
-                bookmarks: allBookmarks
-            });
-        } catch (error) {
-            alert('数据保存失败: ' + error.message);
-            await loadData();
-        }
-    };
+  
 const persistOrder = async () => {
     try {
         await apiRequest('data', 'PUT', {
@@ -412,35 +402,92 @@ const renderCategories = () => {
         showModal(bookmarkModal);
     };
 
-    const handleDeleteBookmark = (bookmark) => {
-        showConfirm('确认删除', `您确定要删除书签 "${escapeHTML(bookmark.name)}" 吗？`, async () => {
-            try {
-                await apiRequest(`bookmarks/${bookmark.id}`, 'DELETE');
-                await loadData();
-            } catch (error) { alert(`删除失败: ${error.message}`); }
-        });
-    };
+ // 代码二 (app.js) 的修改
+// 代码二 (app.js) 的修改
+const handleDeleteBookmark = (bookmark) => {
+    showConfirm('确认删除', `您确定要删除书签 "${escapeHTML(bookmark.name)}" 吗？`, async () => {
+        const bookmarkIdToDelete = bookmark.id;
+        
+        // 【乐观更新 - 步骤1】备份当前状态，以备回滚
+        const originalBookmarks = [...allBookmarks];
 
-    bookmarkForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const id = bookmarkForm.querySelector('#bm-id').value;
-        const method = id ? 'PUT' : 'POST';
-        const endpoint = id ? `bookmarks/${id}` : 'bookmarks';
-        const data = {
-            name: bookmarkForm.querySelector('#bm-name').value,
-            url: bookmarkForm.querySelector('#bm-url').value,
-            description: bookmarkForm.querySelector('#bm-desc').value,
-            icon: bookmarkForm.querySelector('#bm-icon').value,
-            categoryId: bookmarkForm.querySelector('#bm-category').value,
-        };
+        // 【乐观更新 - 步骤2】立即从内存中移除书签，并刷新UI，界面瞬间变化
+        allBookmarks = allBookmarks.filter(bm => bm.id !== bookmarkIdToDelete);
+        renderUI();
+
         try {
-            await apiRequest(endpoint, method, data);
-            hideAllModals();
-            await loadData();
+            // 【乐观更新 - 步骤3】在后台发送API请求
+            await apiRequest(`bookmarks/${bookmarkIdToDelete}`, 'DELETE');
+            // 成功则万事大吉
         } catch (error) {
-            bookmarkForm.querySelector('.modal-error-message').textContent = error.message;
+            // 【乐观更新 - 步骤4】如果API请求失败，回滚UI
+            alert(`删除失败: ${error.message}`);
+            allBookmarks = originalBookmarks; // 恢复备份
+            renderUI(); // 再次刷新UI，让书签“回来”
         }
     });
+};
+
+   // 代码二 (app.js) 的修改
+bookmarkForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = bookmarkForm.querySelector('#bm-id').value;
+    const errorEl = bookmarkForm.querySelector('.modal-error-message');
+    errorEl.textContent = '';
+
+    const data = {
+        name: bookmarkForm.querySelector('#bm-name').value,
+        url: bookmarkForm.querySelector('#bm-url').value,
+        description: bookmarkForm.querySelector('#bm-desc').value,
+        icon: bookmarkForm.querySelector('#bm-icon').value,
+        categoryId: bookmarkForm.querySelector('#bm-category').value,
+    };
+
+    hideAllModals();
+
+    if (id) {
+        // --- 编辑书签的乐观更新 ---
+        const originalBookmarks = JSON.parse(JSON.stringify(allBookmarks)); // 深拷贝备份
+        const bookmarkIndex = allBookmarks.findIndex(bm => bm.id === id);
+        
+        if (bookmarkIndex > -1) {
+            allBookmarks[bookmarkIndex] = { ...allBookmarks[bookmarkIndex], ...data };
+            renderUI(); // 立即应用编辑
+        }
+
+        try {
+            await apiRequest(`bookmarks/${id}`, 'PUT', data);
+        } catch (error) {
+            errorEl.textContent = error.message;
+            allBookmarks = originalBookmarks; // 编辑失败，回滚
+            renderUI();
+            showModal(bookmarkModal); // 重新打开模态框让用户看到错误
+        }
+
+    } else {
+        // --- 添加新书签的乐观更新 ---
+        const tempId = `temp-${Date.now()}`; // 创建一个临时ID
+        const newBookmark = { ...data, id: tempId };
+        allBookmarks.push(newBookmark);
+        renderUI(); // 立即显示新书签
+
+        try {
+            const savedBookmark = await apiRequest('bookmarks', 'POST', data);
+            // 成功后，用服务器返回的真实数据（包含真实ID）替换掉临时书签
+            const tempIndex = allBookmarks.findIndex(bm => bm.id === tempId);
+            if (tempIndex > -1) {
+                allBookmarks[tempIndex] = savedBookmark;
+                // 可以在这里再次调用 renderUI() 来更新ID，但通常不影响显示，所以可选
+            }
+        } catch (error) {
+            errorEl.textContent = error.message;
+            // 添加失败，从UI中移除这个临时书签
+            allBookmarks = allBookmarks.filter(bm => bm.id !== tempId);
+            renderUI();
+            showModal(bookmarkModal); // 重新打开模态框
+        }
+    }
+});
 
     manageCategoriesBtn.addEventListener('click', () => {
         document.getElementById('category-error-message').textContent = '';
@@ -484,22 +531,39 @@ const renderCategories = () => {
         liElement.insertBefore(input, editBtn);
         input.focus();
         input.select();
+        
+        
         const finishEditing = async () => {
-            const newName = input.value.trim();
-            nameSpan.style.display = '';
-            editBtn.style.display = '';
-            input.remove();
-            if (newName && newName !== originalName) {
-                const errorEl = document.getElementById('category-error-message');
-                errorEl.textContent = '';
-                try {
-                    await apiRequest(`categories/${category.id}`, 'PUT', { name: newName });
-                    await loadData();
-                } catch (error) {
-                    errorEl.textContent = error.message;
-                }
+        const newName = input.value.trim();
+        
+        // 先移除输入框，恢复显示
+        nameSpan.style.display = '';
+        editBtn.style.display = '';
+        input.remove();
+
+        if (newName && newName !== originalName) {
+            const errorEl = document.getElementById('category-error-message');
+            errorEl.textContent = '';
+            
+            // --- 编辑分类的乐观更新 ---
+            const originalCategories = JSON.parse(JSON.stringify(allCategories)); // 备份
+            const categoryToUpdate = allCategories.find(c => c.id === category.id);
+            if(categoryToUpdate) {
+                categoryToUpdate.name = newName; // 立即更新内存数据
+                renderUI(); // 立即刷新UI
             }
-        };
+
+            try {
+                await apiRequest(`categories/${category.id}`, 'PUT', { name: newName });
+            } catch (error) {
+                errorEl.textContent = error.message;
+                allCategories = originalCategories; // 失败，回滚
+                renderUI();
+            }
+        }
+    };
+
+        
         input.addEventListener('blur', finishEditing);
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') { e.preventDefault(); finishEditing(); }
@@ -507,36 +571,71 @@ const renderCategories = () => {
         });
     };
 
-    bulkDeleteCatBtn.addEventListener('click', () => {
-        const checkedBoxes = categoryManagerList.querySelectorAll('input[type="checkbox"]:checked');
-        const idsToDelete = Array.from(checkedBoxes).map(cb => cb.dataset.id);
-        if (idsToDelete.length === 0) {
-            alert('请先选择要删除的分类。');
-            return;
-        }
-        showConfirm('确认强制删除', `确定要删除选中的 ${idsToDelete.length} 个分类吗？分类下的所有书签也将被一并删除！`, async () => {
-            const errorEl = document.getElementById('category-error-message');
-            errorEl.textContent = '';
-            try {
-                await apiRequest('categories', 'DELETE', { ids: idsToDelete });
-                await loadData();
-            } catch (error) {
-                errorEl.textContent = error.message;
-            }
-        });
-    });
-
-    addCategoryForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const input = document.getElementById('new-category-name');
+// 代码二 (app.js) 的修改
+bulkDeleteCatBtn.addEventListener('click', () => {
+    const checkedBoxes = categoryManagerList.querySelectorAll('input[type="checkbox"]:checked');
+    const idsToDelete = Array.from(checkedBoxes).map(cb => cb.dataset.id);
+    if (idsToDelete.length === 0) {
+        return alert('请先选择要删除的分类。');
+    }
+    showConfirm('确认强制删除', `确定要删除选中的 ${idsToDelete.length} 个分类吗？分类下的所有书签也将被一并删除！`, async () => {
         const errorEl = document.getElementById('category-error-message');
         errorEl.textContent = '';
+
+        // --- 批量删除的乐观更新 ---
+        const originalCategories = [...allCategories];
+        const originalBookmarks = [...allBookmarks];
+
+        // 立即从内存中删除
+        allCategories = allCategories.filter(c => !idsToDelete.includes(c.id));
+        allBookmarks = allBookmarks.filter(bm => !idsToDelete.includes(bm.categoryId));
+        renderUI(); // 立即刷新UI
+        hideAllModals();
+
         try {
-            await apiRequest('categories', 'POST', { name: input.value.trim() });
-            input.value = '';
-            await loadData();
-        } catch (error) { errorEl.textContent = error.message; }
+            await apiRequest('categories', 'DELETE', { ids: idsToDelete });
+        } catch (error) {
+            alert(`删除失败: ${error.message}`);
+            allCategories = originalCategories; // 失败，回滚
+            allBookmarks = originalBookmarks;
+            renderUI();
+        }
     });
+});
+
+   // 代码二 (app.js) 的修改
+addCategoryForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('new-category-name');
+    const name = input.value.trim();
+    const errorEl = document.getElementById('category-error-message');
+    errorEl.textContent = '';
+    
+    if(!name) {
+        errorEl.textContent = '分类名称不能为空';
+        return;
+    }
+    
+    input.value = ''; // 立即清空输入框
+
+    // --- 添加分类的乐观更新 ---
+    const tempId = `temp-cat-${Date.now()}`;
+    const newCategory = { id: tempId, name, parentId: null };
+    allCategories.push(newCategory);
+    renderUI(); // 立即刷新UI显示新分类
+
+    try {
+        const savedCategory = await apiRequest('categories', 'POST', { name });
+        // 成功后，用服务器返回的真实ID替换临时ID
+        const tempCat = allCategories.find(c => c.id === tempId);
+        if(tempCat) tempCat.id = savedCategory.id;
+    } catch (error) {
+        errorEl.textContent = error.message;
+        // 失败，从内存中移除临时分类
+        allCategories = allCategories.filter(c => c.id !== tempId);
+        renderUI();
+    }
+});
 
     userManagementBtn.addEventListener('click', () => {
         renderUserManagementPanel();
@@ -724,36 +823,52 @@ const renderCategories = () => {
     let uncategorizedBookmarks = [];
     const generateId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    const parseNode = (node, parentId) => {
-        if (!node || !node.children) return;
-        const children = Array.from(node.children).filter(c => c.tagName === 'DT');
-        for (const child of children) {
-            const folderHeader = child.querySelector('h3');
-            const link = child.querySelector('a');
-            if (folderHeader) {
-                const newCategoryId = generateId('cat');
-                newCategories.push({ id: newCategoryId, name: folderHeader.textContent.trim(), parentId: parentId });
-                const subList = child.nextElementSibling;
-                if (subList && subList.tagName === 'DL') {
-                    parseNode(subList, newCategoryId);
-                }
-            } else if (link) {
-                const bookmark = { 
-                    id: generateId('bm'), 
-                    name: link.textContent.trim(), 
-                    url: link.href, 
-                    categoryId: parentId, 
-                    description: '', 
-                    icon: link.getAttribute('icon') || '' 
-                };
-                if (parentId) {
-                    newBookmarks.push(bookmark);
-                } else {
-                    uncategorizedBookmarks.push(bookmark);
-                }
+    // 代码二 (app.js) 的修改
+const parseNode = (node, parentId) => {
+    // 直接在当前<DL>下查找<DT>子元素
+    const children = Array.from(node.children).filter(child => child.tagName === 'DT');
+    
+    for (const child of children) {
+        const folderHeader = child.querySelector('h3');
+        const link = child.querySelector('a');
+
+        if (folderHeader) { // 这是一个文件夹
+            const newCategoryId = generateId('cat');
+            newCategories.push({
+                id: newCategoryId,
+                name: folderHeader.textContent.trim(),
+                parentId: parentId
+            });
+
+            // 【BUG修复】健壮地查找子文件夹列表<DL>
+            // 它可能是<DT>的下一个兄弟元素，也可能是<DT>的直接子元素（不规范但常见）
+            let subList = child.nextElementSibling;
+            if (!subList || subList.tagName !== 'DL') {
+                subList = child.querySelector('dl');
+            }
+            
+            if (subList) {
+                parseNode(subList, newCategoryId);
+            }
+
+        } else if (link) { // 这是一个书签链接
+            const bookmark = {
+                id: generateId('bm'),
+                name: link.textContent.trim(),
+                url: link.href,
+                categoryId: parentId,
+                description: '',
+                icon: link.getAttribute('icon') || ''
+            };
+
+            if (parentId) {
+                newBookmarks.push(bookmark);
+            } else {
+                uncategorizedBookmarks.push(bookmark);
             }
         }
-    };
+    }
+};
 
     const root = doc.querySelector('dl');
     if (!root) throw new Error('无效的书签文件格式。');
