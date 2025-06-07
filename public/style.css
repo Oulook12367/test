@@ -507,35 +507,12 @@ button.danger:hover {
 
 /* ... 在文件末尾添加以下新样式 ... */
 
-/* Drag-and-Drop 样式 */
-.bookmark-card.dragging,
-.category-nav li.dragging {
+/* Drag-and-Drop 样式 (由 SortableJS 驱动) */
+.sortable-ghost {
     opacity: 0.4;
-    border: 1px solid var(--accent-light);
-}
-
-.dark-theme .bookmark-card.dragging,
-.dark-theme .category-nav li.dragging {
-    border-color: var(--accent-dark);
-}
-
-/* “幽灵”占位符的样式 */
-.drag-placeholder {
-    display: block;
     background: var(--accent-light);
-    opacity: 0.2;
-    border: 1px dashed var(--accent-dark);
-    margin: 0;
-    padding: 0;
 }
-/* 确保占位符和原项目大小一致 */
-#bookmarks-grid > .drag-placeholder {
-    /* 继承书签卡片的内外边距和高度等 */
-    border-radius: 12px;
-    height: 95px; /* 根据你的书签卡片大致高度设定 */
-}
-#category-nav > .drag-placeholder {
-    border-radius: 8px;
-    height: 46px; /* 根据你的分类行大致高度设定 */
-    margin-bottom: 0.5rem;
+
+.sortable-drag {
+    opacity: 1 !important; /* 确保被拖拽的元素本身不透明 */
 }
