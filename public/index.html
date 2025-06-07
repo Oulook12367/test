@@ -118,11 +118,19 @@
                             <input type="text" id="user-form-username" required>
                             <label for="user-form-password">密码 (留空则不修改):</label>
                             <input type="password" id="user-form-password">
+                            <div class="permissions-group">
+                                <label>编辑权限:</label>
+                                <div id="user-form-permissions" class="checkbox-group horizontal">
+                                    <!-- Permissions checkboxes will be rendered here -->
+                                </div>
+                            </div>
                             <label>可见分类:</label>
-                            <div id="user-form-categories" class="checkbox-group"></div>
+                            <div id="user-form-categories" class="checkbox-group">
+                                <!-- Category checkboxes will be rendered here -->
+                            </div>
                             <div class="user-form-buttons">
                                 <button type="submit">保存用户</button>
-                                <button type="button" id="user-form-clear-btn">清空表单</button>
+                                <button type="button" id="user-form-clear-btn" class="secondary">清空表单</button>
                             </div>
                             <p class="modal-error-message"></p>
                         </form>
