@@ -187,6 +187,28 @@ export async function onRequest(context) {
     const authResult = await authenticateRequest(request, env);
     if (authResult.error) return jsonResponse(authResult, authResult.status);
     const currentUser = authResult.user;
+
+// (新增) PUT /api/data - 用于保存排序等批量更新
+    if (apiPath === 'data' && request.method === 'PUT') {
+        if (!currentUser.permissions.canEditBookmarks && !currentUser.permissions.canEditCategories) {
+            return jsonResponse({ error: '权限不足' }, 403);
+        }
+        
+        const dataToUpdate = await request.json();
+        const data = await getSiteData(env);
+
+        // Only update arrays that were sent
+        if (dataToUpdate.categories) {
+            data.categories = dataToUpdate.categories;
+        }
+        if (dataToUpdate.bookmarks) {
+            data.bookmarks = dataToUpdate.bookmarks;
+        }
+
+        await saveSiteData(env, data);
+        return jsonResponse({ success: true });
+    }
+
     
     // 书签 CRUD
     if (apiPath.startsWith('bookmarks')) {
