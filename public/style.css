@@ -584,3 +584,45 @@ button.danger:hover {
 .sortable-drag {
     opacity: 1 !important; /* 确保被拖拽的元素本身不透明 */
 }
+
+
+/* 代码四 (style.css) 的新增样式 */
+
+/* --- 分类折叠功能样式 --- */
+
+/* 使分类项内的元素垂直居中 */
+.category-nav li {
+    display: flex;
+    align-items: center;
+    gap: 8px; /* 调整图标和文字的间距 */
+}
+
+/* 折叠/展开箭头样式 */
+.category-toggle {
+    width: 16px; /* 固定宽度以便对齐 */
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-secondary-light);
+    transition: transform 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+.dark-theme .category-toggle {
+    color: var(--text-secondary-dark);
+}
+
+/* 鼠标悬停在箭头上时变色 */
+.category-toggle:hover {
+    color: var(--accent-light);
+}
+.dark-theme .category-toggle:hover {
+    color: var(--accent-dark);
+}
+
+/* 非父分类的占位符，用于对齐 */
+.category-toggle-placeholder {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+}
