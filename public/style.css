@@ -503,3 +503,29 @@ button.danger:hover {
 ::-webkit-scrollbar-thumb:hover { background: #aaa; }
 .dark-theme ::-webkit-scrollbar-thumb { background: #444; }
 .dark-theme ::-webkit-scrollbar-thumb:hover { background: #666; }
+
+
+
+/* (新增) Drag-and-Drop 样式 */
+.bookmark-card.dragging,
+.category-nav li.dragging {
+    opacity: 0.5;
+    border: 2px dashed var(--accent-light);
+}
+
+.dark-theme .bookmark-card.dragging,
+.dark-theme .category-nav li.dragging {
+    border-color: var(--accent-dark);
+}
+
+/* 当拖拽悬停时，列表项之间的间隙 */
+.drag-over-gap {
+    height: 1.5rem; /* for bookmarks grid */
+}
+.sidebar .drag-over-gap {
+    height: 2.5rem; /* for categories list */
+    background-color: var(--accent-light);
+    opacity: 0.2;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+}
