@@ -88,7 +88,18 @@ document.addEventListener('DOMContentLoaded', () => {
             await loadData();
         }
     };
-
+const persistOrder = async () => {
+    try {
+        await apiRequest('data', 'PUT', {
+            categories: allCategories,
+            bookmarks: allBookmarks
+        });
+    } catch (error) {
+        alert('顺序保存失败: ' + error.message);
+        // 如果保存失败，重新加载服务器数据以恢复同步
+        await loadData();
+    }
+};
     
   // --- Theme Logic ---
   const applyTheme = (theme) => {
@@ -705,60 +716,73 @@ const renderCategories = () => {
         e.target.value = '';
     });
 
-    const parseAndImport = async (htmlContent) => {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(htmlContent, 'text/html');
-        let newCategories = [];
-        let newBookmarks = [];
-        let uncategorizedBookmarks = [];
-        const generateId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+   const parseAndImport = async (htmlContent) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlContent, 'text/html');
+    let newCategories = [];
+    let newBookmarks = [];
+    let uncategorizedBookmarks = [];
+    const generateId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-        const parseNode = (node, parentId) => {
-            const children = Array.from(node.children).filter(c => c.tagName === 'DT');
-            for (const child of children) {
-                const folderHeader = child.querySelector('h3');
-                const link = child.querySelector('a');
-                if (folderHeader) {
-                    const newCategoryId = generateId('cat');
-                    newCategories.push({ id: newCategoryId, name: folderHeader.textContent.trim(), parentId: parentId });
-                    const subList = child.nextElementSibling;
-                    if (subList && subList.tagName === 'DL') {
-                        parseNode(subList, newCategoryId);
-                    }
-                } else if (link) {
-                    const bookmark = { id: generateId('bm'), name: link.textContent.trim(), url: link.href, categoryId: parentId, description: '', icon: link.getAttribute('icon') || '' };
-                    if (parentId) {
-                        newBookmarks.push(bookmark);
-                    } else {
-                        uncategorizedBookmarks.push(bookmark);
-                    }
+    const parseNode = (node, parentId) => {
+        if (!node || !node.children) return;
+        const children = Array.from(node.children).filter(c => c.tagName === 'DT');
+        for (const child of children) {
+            const folderHeader = child.querySelector('h3');
+            const link = child.querySelector('a');
+            if (folderHeader) {
+                const newCategoryId = generateId('cat');
+                newCategories.push({ id: newCategoryId, name: folderHeader.textContent.trim(), parentId: parentId });
+                const subList = child.nextElementSibling;
+                if (subList && subList.tagName === 'DL') {
+                    parseNode(subList, newCategoryId);
+                }
+            } else if (link) {
+                const bookmark = { 
+                    id: generateId('bm'), 
+                    name: link.textContent.trim(), 
+                    url: link.href, 
+                    categoryId: parentId, 
+                    description: '', 
+                    icon: link.getAttribute('icon') || '' 
+                };
+                if (parentId) {
+                    newBookmarks.push(bookmark);
+                } else {
+                    uncategorizedBookmarks.push(bookmark);
                 }
             }
-        };
-
-        const root = doc.querySelector('dl');
-        if (!root) throw new Error('无效的书签文件格式。');
-        parseNode(root, null);
-
-        if (uncategorizedBookmarks.length > 0) {
-            let uncategorizedCat = allCategories.find(c => c.name === '未分类书签' && c.parentId === null);
-            if (!uncategorizedCat) {
-                uncategorizedCat = { id: generateId('cat'), name: '未分类书签', parentId: null };
-                newCategories.push(uncategorizedCat);
-            }
-            uncategorizedBookmarks.forEach(bm => bm.categoryId = uncategorizedCat.id);
-            newBookmarks.push(...uncategorizedBookmarks);
         }
-
-        if (newCategories.length === 0 && newBookmarks.length === 0) {
-            throw new Error('未在文件中找到可导入的书签或文件夹。');
-        }
-
-        allCategories.push(...newCategories);
-        allBookmarks.push(...newBookmarks);
-        await persistOrder();
-        await loadData();
     };
+
+    const root = doc.querySelector('dl');
+    if (!root) throw new Error('无效的书签文件格式。');
+    parseNode(root, null);
+
+    if (uncategorizedBookmarks.length > 0) {
+        let uncategorizedCat = allCategories.find(c => c.name === '未分类书签' && c.parentId === null);
+        if (!uncategorizedCat) {
+            uncategorizedCat = { id: generateId('cat'), name: '未分类书签', parentId: null };
+            newCategories.push(uncategorizedCat);
+        }
+        uncategorizedBookmarks.forEach(bm => bm.categoryId = uncategorizedCat.id);
+        newBookmarks.push(...uncategorizedBookmarks);
+    }
+
+    if (newCategories.length === 0 && newBookmarks.length === 0) {
+        throw new Error('未在文件中找到可导入的书签或文件夹。');
+    }
+
+    // 将解析出的新分类和新书签添加到内存中
+    allCategories.push(...newCategories);
+    allBookmarks.push(...newBookmarks);
+    
+    // 【关键修复】调用 persistOrder 将合并后的完整数据保存到后端
+    await persistOrder();
+    
+    // 保存成功后，重新加载一次数据以确保完全同步（可选，但推荐）
+    await loadData();
+};
 
     
     // --- Drag and Drop Logic ---
