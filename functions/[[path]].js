@@ -22,12 +22,18 @@ const getSiteData = async (env) => {
                     username: 'admin',
                     passwordHash: adminPasswordHash,
                     roles: ['admin'],
-                    permissions: { canSetNoExpiry: true }
+                    permissions: { canSetNoExpiry: true, visibleCategories: [] }
                 }
             },
-            categories: [],
+            categories: [{id: 'cat-1', name: '默认分类'}],
             bookmarks: []
         };
+    }
+    // Ensure all users have a permissions object
+    for (const user in data.users) {
+        if (!data.users[user].permissions) {
+            data.users[user].permissions = { visibleCategories: [] };
+        }
     }
     return data;
 };
@@ -74,26 +80,25 @@ const jsonResponse = (data, status = 200) => {
 };
 
 
-// --- 主入口函数：最终路由逻辑 ---
+// --- 主入口函数 ---
 export async function onRequest(context) {
-    const { request, env, next } = context; // 从 context 中解构出 next
+    const { request, env, next } = context;
     const url = new URL(request.url);
+    const path = url.pathname;
 
-    // =======================================================
-    // ↓↓↓ 这是本次最关键的修正 ↓↓↓
-    // =======================================================
-    const apiPaths = ['/login', '/data', '/bookmarks']; // 定义所有API路径
-    // 如果请求的路径不是API路径，则调用 next() 将请求传递给静态资源处理器
-    if (!apiPaths.includes(url.pathname) && !url.pathname.startsWith('/bookmarks/')) {
-        return next();
+    const apiRoutePatterns = ['/login', '/data', '/bookmarks', '/change-password', '/users'];
+    const isApiRequest = apiRoutePatterns.some(p => path.startsWith(p));
+    
+    if (!isApiRequest) {
+        return next(); // 交给静态资源处理器
     }
-    // =======================================================
     
     globalThis.JWT_SECRET_STRING = env.JWT_SECRET;
 
-    // --- API 路由匹配 ---
+    // --- API 路由 ---
 
-    if (url.pathname === '/login' && request.method === 'POST') {
+    // Login
+    if (path === '/login' && request.method === 'POST') {
         const { username, password, noExpiry } = await request.json();
         const data = await getSiteData(env);
         const user = data.users[username];
@@ -116,39 +121,137 @@ export async function onRequest(context) {
         return jsonResponse({ token, user: { username: user.username, roles: user.roles, permissions: user.permissions } });
     }
 
-    if (url.pathname === '/data' && request.method === 'GET') {
+    // Get site data
+    if (path === '/data' && request.method === 'GET') {
         const authResult = await authenticateRequest(request, env);
         if (authResult.error) return jsonResponse({ error: authResult.error }, authResult.status);
         
         const { payload } = authResult;
         const data = await getSiteData(env);
+        const currentUser = data.users[payload.sub];
 
         if (payload.roles.includes('admin')) {
             return jsonResponse(data);
         }
         
-        const user = data.users[payload.sub];
-         if (!user.permissions?.visibleCategories) {
-             return jsonResponse({ categories: [], bookmarks: [] });
-        }
-        const visibleCategories = data.categories.filter(cat => user.permissions.visibleCategories.includes(cat.id));
+        const visibleCategories = data.categories.filter(cat => currentUser.permissions.visibleCategories.includes(cat.id));
         const visibleCategoryIds = visibleCategories.map(cat => cat.id);
         const visibleBookmarks = data.bookmarks.filter(bm => visibleCategoryIds.includes(bm.categoryId));
-        return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks });
-    }
-
-    if (url.pathname === '/bookmarks' && request.method === 'POST') {
-        const authResult = await authenticateRequest(request, env, 'admin');
-        if (authResult.error) return jsonResponse({ error: authResult.error }, authResult.status);
-
-        const bookmark = await request.json();
-        const data = await getSiteData(env);
-        bookmark.id = `bm-${Date.now()}`;
-        data.bookmarks.push(bookmark);
-        await saveSiteData(env, data);
-        return jsonResponse(bookmark, 201);
+        return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks, users: {} });
     }
     
-    // API 路径未找到
+    // Bookmarks CRUD
+    if (path.startsWith('/bookmarks')) {
+        const authResult = await authenticateRequest(request, env, 'admin');
+        if (authResult.error) return jsonResponse({ error: authResult.error }, authResult.status);
+        const data = await getSiteData(env);
+        
+        // POST /bookmarks
+        if (request.method === 'POST' && path === '/bookmarks') {
+            const bookmark = await request.json();
+            bookmark.id = `bm-${Date.now()}`;
+            data.bookmarks.push(bookmark);
+            await saveSiteData(env, data);
+            return jsonResponse(bookmark, 201);
+        }
+        
+        const id = path.split('/').pop();
+        const bookmarkIndex = data.bookmarks.findIndex(bm => bm.id === id);
+
+        if (bookmarkIndex === -1 && path !== '/bookmarks') return jsonResponse({ error: '书签未找到' }, 404);
+
+        // PUT /bookmarks/:id
+        if (request.method === 'PUT') {
+            const updatedBookmark = await request.json();
+            data.bookmarks[bookmarkIndex] = { ...data.bookmarks[bookmarkIndex], ...updatedBookmark };
+            await saveSiteData(env, data);
+            return jsonResponse(data.bookmarks[bookmarkIndex]);
+        }
+        // DELETE /bookmarks/:id
+        if (request.method === 'DELETE') {
+            data.bookmarks.splice(bookmarkIndex, 1);
+            await saveSiteData(env, data);
+            return jsonResponse({ success: true });
+        }
+    }
+
+    // Change own password
+    if (path === '/change-password' && request.method === 'POST') {
+        const authResult = await authenticateRequest(request, env);
+        if (authResult.error) return jsonResponse(authResult, authResult.status);
+
+        const { oldPassword, newPassword } = await request.json();
+        if (!oldPassword || !newPassword || newPassword.length < 6) {
+            return jsonResponse({ error: '新密码无效或长度不足6位' }, 400);
+        }
+
+        const data = await getSiteData(env);
+        const username = authResult.payload.sub;
+        const user = data.users[username];
+
+        const oldPasswordHash = await hashPassword(oldPassword);
+        if (user.passwordHash !== oldPasswordHash) {
+            return jsonResponse({ error: '旧密码不正确' }, 403);
+        }
+
+        user.passwordHash = await hashPassword(newPassword);
+        await saveSiteData(env, data);
+        return jsonResponse({ success: true, message: '密码已成功更改' });
+    }
+
+    // User Management (Admin only)
+    if (path.startsWith('/users')) {
+        const authResult = await authenticateRequest(request, env, 'admin');
+        if (authResult.error) return jsonResponse(authResult, authResult.status);
+        
+        const data = await getSiteData(env);
+        
+        // GET /users
+        if (request.method === 'GET' && path === '/users') {
+            // Return users without password hashes
+            const safeUsers = Object.values(data.users).map(({ passwordHash, ...user }) => user);
+            return jsonResponse(safeUsers);
+        }
+
+        // POST /users
+        if (request.method === 'POST' && path === '/users') {
+            const { username, password } = await request.json();
+            if (!username || !password || data.users[username]) {
+                return jsonResponse({ error: '用户名无效或已存在' }, 400);
+            }
+            data.users[username] = {
+                username,
+                passwordHash: await hashPassword(password),
+                roles: ['user'], // Default role
+                permissions: { visibleCategories: [] }
+            };
+            await saveSiteData(env, data);
+            const { passwordHash, ...newUser } = data.users[username];
+            return jsonResponse(newUser, 201);
+        }
+
+        const username = path.split('/').pop();
+        const userToManage = data.users[username];
+        if (!userToManage) return jsonResponse({ error: '用户未找到' }, 404);
+
+        // PUT /users/:username
+        if (request.method === 'PUT') {
+            const { roles, permissions } = await request.json();
+            if (roles) userToManage.roles = roles;
+            if (permissions) userToManage.permissions = permissions;
+            await saveSiteData(env, data);
+            const { passwordHash, ...updatedUser } = userToManage;
+            return jsonResponse(updatedUser);
+        }
+        
+        // DELETE /users/:username
+        if (request.method === 'DELETE') {
+            if (username === 'admin') return jsonResponse({ error: '无法删除管理员账户' }, 403);
+            delete data.users[username];
+            await saveSiteData(env, data);
+            return jsonResponse({ success: true });
+        }
+    }
+
     return jsonResponse({ error: 'API endpoint not found' }, 404);
 }
