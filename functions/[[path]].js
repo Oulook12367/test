@@ -25,6 +25,7 @@ const getSiteData = async (env) => {
         const adminSalt = generateSalt();
         const adminPasswordHash = await hashPassword('admin123', adminSalt);
         const defaultCatId = `cat-${Date.now()}`;
+        const publicCatId = `cat-${Date.now() + 1}`;
         
         data = {
             users: {
@@ -33,11 +34,28 @@ const getSiteData = async (env) => {
                     passwordHash: adminPasswordHash,
                     salt: adminSalt,
                     roles: ['admin'],
-                    permissions: { visibleCategories: [defaultCatId] }
+                    permissions: { visibleCategories: [defaultCatId, publicCatId] }
+                },
+                'public': {
+                    username: 'public',
+                    roles: ['viewer'],
+                    permissions: { visibleCategories: [publicCatId] }
                 }
             },
-            categories: [{ id: defaultCatId, name: '默认分类' }],
+            categories: [
+                { id: defaultCatId, name: '默认分类' },
+                { id: publicCatId, name: '公共分类' }
+            ],
             bookmarks: []
+        };
+    }
+
+    if (!data.users.public) {
+        const publicCatId = data.categories[0]?.id || `cat-${Date.now()}`;
+        data.users.public = {
+            username: 'public',
+            roles: ['viewer'],
+            permissions: { visibleCategories: [publicCatId] }
         };
     }
 
@@ -81,7 +99,7 @@ const authenticateRequest = async (request, env) => {
     if (!authHeader || !authHeader.startsWith('Bearer ')) return { error: '认证失败：缺少 Token', status: 401 };
     const token = authHeader.substring(7);
     try {
-        const { payload } = await jwtVerify(token, await JWT_SECRET());
+        const { payload } = await jwtVerify(token, JWT_SECRET());
         if (!payload || !payload.sub) throw new Error("无效的 payload");
         const data = await getSiteData(env);
         const user = data.users[payload.sub];
@@ -111,6 +129,9 @@ export async function onRequest(context) {
     globalThis.JWT_SECRET_STRING = env.JWT_SECRET;
     const apiPath = path.substring(5);
 
+    // --- 路由逻辑 ---
+
+    // 登录 (无需认证)
     if (apiPath === 'login' && request.method === 'POST') {
         const { username, password } = await request.json();
         const data = await getSiteData(env);
@@ -128,14 +149,31 @@ export async function onRequest(context) {
         return jsonResponse({ token, user: safeUser });
     }
 
-    const authResult = await authenticateRequest(request, env);
-    if (authResult.error) return jsonResponse({ error: authResult.error }, authResult.status);
-    const currentUser = authResult.user;
-
+    // 获取数据 - 可能是公共的或需认证的
     if (apiPath === 'data' && request.method === 'GET') {
+        const authHeader = request.headers.get('Authorization');
+        
+        if (env.PUBLIC_MODE_ENABLED === 'true' && !authHeader) {
+            const data = await getSiteData(env);
+            const publicUser = data.users.public;
+            const publicCategories = data.categories.filter(cat => publicUser.permissions.visibleCategories.includes(cat.id));
+            const publicCategoryIds = publicCategories.map(cat => cat.id);
+            const publicBookmarks = data.bookmarks.filter(bm => publicCategoryIds.includes(bm.categoryId));
+            return jsonResponse({
+                isPublic: true,
+                categories: publicCategories,
+                bookmarks: publicBookmarks,
+                users: []
+            });
+        }
+        
+        const authResult = await authenticateRequest(request, env);
+        if (authResult.error) return jsonResponse(authResult, authResult.status);
+        const currentUser = authResult.user;
+
         const data = await getSiteData(env);
         if (currentUser.roles.includes('admin')) {
-             const usersForAdmin = Object.values(data.users).map(({ passwordHash, salt, ...u }) => u);
+             const usersForAdmin = Object.values(data.users).filter(u => u.username !== 'public').map(({ passwordHash, salt, ...u }) => u);
              return jsonResponse({...data, users: usersForAdmin});
         }
         const visibleCategories = data.categories.filter(cat => currentUser.permissions.visibleCategories.includes(cat.id));
@@ -145,6 +183,12 @@ export async function onRequest(context) {
         return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks, users: [safeUser] });
     }
 
+    // --- 所有其他写操作API都需要认证 ---
+    const authResult = await authenticateRequest(request, env);
+    if (authResult.error) return jsonResponse(authResult, authResult.status);
+    const currentUser = authResult.user;
+    
+    // 书签 CRUD
     if (apiPath.startsWith('bookmarks')) {
         const data = await getSiteData(env);
         const id = apiPath.split('/').pop();
@@ -181,23 +225,18 @@ export async function onRequest(context) {
         }
     }
     
-if (apiPath.startsWith('categories')) {
+    // 分类 CRUD
+    if (apiPath.startsWith('categories')) {
         if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
         const data = await getSiteData(env);
         const id = apiPath.split('/').pop();
 
-        // (Updated) DELETE logic for bulk/single with cascading delete
         if (request.method === 'DELETE' && apiPath === 'categories') {
             const { ids } = await request.json();
             if (!ids || !Array.isArray(ids)) return jsonResponse({ error: '无效的请求' }, 400);
 
-            // Force delete: First, delete all bookmarks within these categories
             data.bookmarks = data.bookmarks.filter(bm => !ids.includes(bm.categoryId));
-            
-            // Then, delete the categories themselves
             data.categories = data.categories.filter(c => !ids.includes(c.id));
-            
-            // Finally, remove the deleted categories from all users' permissions
             Object.values(data.users).forEach(user => {
                 user.permissions.visibleCategories = user.permissions.visibleCategories.filter(catId => !ids.includes(catId));
             });
@@ -206,24 +245,16 @@ if (apiPath.startsWith('categories')) {
             return jsonResponse(null);
         }
 
-        // (New) PUT logic for updating a category name
         if (request.method === 'PUT' && id) {
             const { name } = await request.json();
-            if (!name || name.trim() === '') {
-                return jsonResponse({ error: '分类名称不能为空' }, 400);
-            }
-            if (data.categories.some(c => c.name === name && c.id !== id)) {
-                return jsonResponse({ error: '该分类名称已存在' }, 400);
-            }
-
+            if (!name || name.trim() === '') return jsonResponse({ error: '分类名称不能为空' }, 400);
+            if (data.categories.some(c => c.name === name && c.id !== id)) return jsonResponse({ error: '该分类名称已存在' }, 400);
             const categoryToUpdate = data.categories.find(c => c.id === id);
             if (!categoryToUpdate) return jsonResponse({ error: '分类未找到' }, 404);
-            
             categoryToUpdate.name = name.trim();
             await saveSiteData(env, data);
             return jsonResponse(categoryToUpdate);
         }
-    
 
         if (request.method === 'POST') {
             const { name } = await request.json();
@@ -242,6 +273,7 @@ if (apiPath.startsWith('categories')) {
         }
     }
 
+    // 用户管理
     if (apiPath.startsWith('users')) {
         if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
         const data = await getSiteData(env);
@@ -267,7 +299,7 @@ if (apiPath.startsWith('categories')) {
             if (permissions) userToManage.permissions.visibleCategories = permissions.visibleCategories;
             if (password) {
                 userToManage.salt = generateSalt();
-                userToManaged.passwordHash = await hashPassword(password, userToManage.salt);
+                userToManage.passwordHash = await hashPassword(password, userToManage.salt);
             }
             await saveSiteData(env, data);
             const { passwordHash, salt, ...updatedUser } = userToManage;
