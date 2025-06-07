@@ -606,33 +606,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } catch (error) {
             alert('顺序保存失败: ' + error.message);
-            await loadData(); // 保存失败时，从服务器重新加载以恢复顺序
+            await loadData();
         }
     };
 
-    const getDragAfterElement = (container, x, y) => {
-        const draggableElements = [...container.querySelectorAll(`${itemSelectorFromContainer(container)}:not(.dragging)`)];
-        
-        let closest = { offset: Number.POSITIVE_INFINITY, element: null };
-
-        for (const child of draggableElements) {
-            const box = child.getBoundingClientRect();
-            // 计算鼠标到元素中心的距离
-            const offsetX = x - (box.left + box.width / 2);
-            const offsetY = y - (box.top + box.height / 2);
-            const distance = Math.sqrt(offsetX * offsetX + offsetY * offsetY);
-
-            if (distance < closest.offset) {
-                closest = { offset: distance, element: child };
-            }
-        }
-        return closest.element;
-    };
-    
-    const itemSelectorFromContainer = (container) => {
-        return container === bookmarksGrid ? 'a.bookmark-card[draggable="true"]' : 'li[draggable="true"]';
-    };
-    
     const setupDragDrop = (container, getItemsArray) => {
         const itemSelector = itemSelectorFromContainer(container);
         
@@ -656,47 +633,29 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             if (!draggedItem) return;
 
-            // 创建或获取占位符
             let placeholder = container.querySelector('.drag-placeholder');
             if (!placeholder) {
                 placeholder = draggedItem.cloneNode(true);
                 placeholder.classList.add('drag-placeholder');
                 placeholder.classList.remove('dragging');
-                container.appendChild(placeholder);
             }
 
-            // 找到最近的元素
-            const closestEl = getDragAfterElement(container, e.clientX, e.clientY);
+            const afterElement = getDragAfterElement(container, e.clientX, e.clientY);
             
-            if (closestEl) {
-                const box = closestEl.getBoundingClientRect();
-                // 根据鼠标在最近元素上的位置，判断是在其前还是后插入占位符
-                const threshold = (container === categoryNav) ? box.top + box.height / 2 : box.left + box.width / 2;
-                const cursorPosition = (container === categoryNav) ? e.clientY : e.clientX;
-
-                if (cursorPosition < threshold) {
-                    container.insertBefore(placeholder, closestEl);
-                } else {
-                    container.insertBefore(placeholder, closestEl.nextSibling);
-                }
-            } else {
-                 // 如果没有最近的元素（例如列表为空），则添加到末尾
+            if (afterElement == null) {
                 container.appendChild(placeholder);
+            } else {
+                container.insertBefore(placeholder, afterElement);
             }
         });
         
-        container.addEventListener('dragleave', e => {
-            if (e.relatedTarget && !container.contains(e.relatedTarget)) {
-                const placeholder = container.querySelector('.drag-placeholder');
-                if (placeholder) placeholder.remove();
-            }
-        });
-
         container.addEventListener('drop', async e => {
             e.preventDefault();
             const placeholder = container.querySelector('.drag-placeholder');
             if (!placeholder || !draggedItem) {
                 if(placeholder) placeholder.remove();
+                if(draggedItem) draggedItem.classList.remove('dragging');
+                draggedItem = null;
                 return;
             }
 
@@ -704,43 +663,56 @@ document.addEventListener('DOMContentLoaded', () => {
             const fromId = draggedItem.dataset.id;
             const fromIndex = itemsArray.findIndex(item => item.id === fromId);
 
-            // 使用占位符的位置来确定目标索引
-            const children = Array.from(container.children);
-            const placeholderIndex = children.indexOf(placeholder);
+            const elementAfter = placeholder.nextElementSibling;
+            const toId = elementAfter ? elementAfter.dataset.id : null;
+
+            placeholder.remove();
             
-            // 将 DOM 索引映射回数据数组索引
-            let toDataIndex = 0;
-            let visibleItemCount = 0;
-            for(let i=0; i < itemsArray.length; i++){
-                // 检查这个数据项是否在当前视图中可见
-                if (container.querySelector(`[data-id="${itemsArray[i].id}"]`)) {
-                    if (visibleItemCount === placeholderIndex) {
-                        break;
-                    }
-                    visibleItemCount++;
-                }
-                toDataIndex++;
-            }
-            // 如果占位符在最后，toDataIndex会是数组长度
-            if (placeholderIndex === visibleItemCount) {
-                toDataIndex = itemsArray.length;
+            if (fromIndex === -1) {
+                draggedItem.classList.remove('dragging');
+                draggedItem = null;
+                return;
             }
 
-            // 清理
-            placeholder.remove();
-            draggedItem.classList.remove('dragging');
-            
-            if (fromIndex > -1 && fromIndex !== toDataIndex) {
-                const [itemToMove] = itemsArray.splice(fromIndex, 1);
-                const adjustedToIndex = (fromIndex < toDataIndex) ? toDataIndex - 1 : toDataIndex;
-                itemsArray.splice(adjustedToIndex, 0, itemToMove);
-                
-                renderUI();
-                await persistOrder();
+            let toIndex = toId ? itemsArray.findIndex(item => item.id === toId) : itemsArray.length;
+
+            if (fromId === toId) {
+                 draggedItem.classList.remove('dragging');
+                 draggedItem = null;
+                 return;
             }
+
+            const [itemToMove] = itemsArray.splice(fromIndex, 1);
+            const adjustedToIndex = (fromIndex < toIndex) ? toIndex - 1 : toIndex;
+            itemsArray.splice(adjustedToIndex, 0, itemToMove);
+            
+            draggedItem.classList.remove('dragging');
             draggedItem = null;
+
+            renderUI();
+            await persistOrder();
         });
     };
+    
+    const getDragAfterElement = (container, x, y) => {
+        const draggableElements = [...container.querySelectorAll(`${itemSelectorFromContainer(container)}:not(.dragging)`)];
+        return draggableElements.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offsetX = x - (box.left + box.width / 2);
+            const offsetY = y - (box.top + box.height / 2);
+            const distance = Math.sqrt(offsetX * offsetX + offsetY * offsetY);
+
+            if (distance < closest.distance) {
+                return { distance: distance, element: child };
+            } else {
+                return closest;
+            }
+        }, { distance: Number.POSITIVE_INFINITY }).element;
+    };
+    
+    const itemSelectorFromContainer = (container) => {
+        return container === bookmarksGrid ? 'a.bookmark-card[draggable="true"]' : 'li[draggable="true"]';
+    }
     
     setupDragDrop(categoryNav, () => allCategories);
     setupDragDrop(bookmarksGrid, () => allBookmarks);
