@@ -1,0 +1,53 @@
+:root {
+    --bg-color-light: #FDFBF5; /* 米白色 */
+    --text-color-light: #333;
+    --card-bg-light: #FFFFFF;
+    --accent-color-light: #4A90E2;
+    --border-color-light: #EAEAEA;
+
+    --bg-color-dark: #1A1A1A; /* 深色 */
+    --text-color-dark: #E0E0E0;
+    --card-bg-dark: #2C2C2C;
+    --accent-color-dark: #58A6FF;
+    --border-color-dark: #444444;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    margin: 0;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+/* Light Theme */
+body.light-theme {
+    background-color: var(--bg-color-light);
+    color: var(--text-color-light);
+}
+.light-theme .container { --card-bg: var(--card-bg-light); --border-color: var(--border-color-light); --accent-color: var(--accent-color-light); }
+
+/* Dark Theme */
+body.dark-theme {
+    background-color: var(--bg-color-dark);
+    color: var(--text-color-dark);
+}
+.dark-theme .container { --card-bg: var(--card-bg-dark); --border-color: var(--border-color-dark); --accent-color: var(--accent-color-dark); }
+
+.container { padding: 2rem; max-width: 1200px; margin: auto; }
+#login-container { max-width: 400px; margin-top: 10vh; background-color: var(--card-bg); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+
+/* 其他通用样式 */
+input, select, button { padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background-color: var(--card-bg); color: inherit; }
+button { cursor: pointer; background-color: var(--accent-color); color: white; border: none; }
+.search-bar { display: flex; margin-bottom: 2rem; }
+.search-bar input { flex-grow: 1; }
+#category-nav { display: flex; gap: 10px; margin-bottom: 1rem; flex-wrap: wrap; }
+.category-btn { padding: 8px 16px; border-radius: 20px; background-color: var(--card-bg); border: 1px solid var(--border-color); cursor: pointer; }
+.category-btn.active { background-color: var(--accent-color); color: white; border-color: var(--accent-color); }
+#bookmarks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; }
+.bookmark-card { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; text-decoration: none; color: inherit; display: flex; flex-direction: column; }
+.bookmark-card:hover { transform: translateY(-5px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: all 0.2s ease; }
+.bookmark-card h3 { margin: 0 0 0.5rem; display: flex; align-items: center; gap: 8px; }
+.bookmark-card img { width: 16px; height: 16px; }
+.bookmark-card p { font-size: 0.9em; opacity: 0.8; flex-grow: 1; margin: 0; }
+.error-message { color: #e74c3c; font-size: 0.9em; }
+.no-expiry-option { display: flex; align-items: center; gap: 5px; margin: 10px 0; font-size: 0.9em; }
