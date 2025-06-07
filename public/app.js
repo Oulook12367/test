@@ -238,13 +238,19 @@ const renderCategories = () => {
     if(newActiveLi) newActiveLi.classList.add('active');
 };
     
-    categoryNav.addEventListener('click', (e) => {
-        const clickedLi = e.target.closest('li');
-        if (!clickedLi || !categoryNav.contains(clickedLi) || clickedLi.classList.contains('sortable-ghost')) return;
-        categoryNav.querySelector('.active')?.classList.remove('active');
-        clickedLi.classList.add('active');
-        renderBookmarks(clickedLi.dataset.id, localSearchInput.value);
-    });
+  document.querySelector('.sidebar').addEventListener('click', (e) => {
+    const clickedLi = e.target.closest('li');
+    // 确保点击的是 sidebar 内的 li，且不是拖拽产生的影子元素
+    if (!clickedLi || !clickedLi.closest('.category-nav') || clickedLi.classList.contains('sortable-ghost')) return;
+
+    // 移除所有 li 的 active 状态
+    document.querySelectorAll('.sidebar .category-nav li').forEach(li => li.classList.remove('active'));
+
+    // 给被点击的 li 添加 active 状态
+    clickedLi.classList.add('active');
+
+    renderBookmarks(clickedLi.dataset.id, localSearchInput.value);
+});
 
 
     const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
