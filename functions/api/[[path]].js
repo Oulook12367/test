@@ -1,55 +1,36 @@
 // functions/api/[[path]].js
 
 import { Hono } from 'hono';
-import { sign, verify } from 'hono/jwt'; //
-// 注意：这里不再需要 'hono/bearer-auth'
+import { sign, verify } from 'hono/jwt';
 
-const app = new Hono();
-
-// ====================================================================
-//                 ↓↓↓ 这是本次最关键的修正部分 ↓↓↓
-// ====================================================================
+// 关键改动 1: 添加 .basePath('/api')
+const app = new Hono().basePath('/api');
 
 // --- 新的、已修正的认证中间件 ---
-// 我们不再使用有问题的 bearerAuth，而是编写自己的验证逻辑
 const authMiddleware = (role) => {
   return async (c, next) => {
-    // 1. 从请求头获取 token
     const authHeader = c.req.header('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return c.json({ error: '认证失败：缺少 Token' }, 401);
     }
-    const token = authHeader.substring(7); // 移除 "Bearer " 前缀
-
-    // 2. 验证 token
+    const token = authHeader.substring(7);
     try {
       const decodedPayload = await verify(token, c.env.JWT_SECRET);
       if (!decodedPayload) {
         throw new Error("无效的 payload");
       }
-      
-      // 3. 如果需要特定角色，则检查角色权限
       if (role && !decodedPayload.roles?.includes(role)) {
-        return c.json({ error: '权限不足' }, 403); // 403 Forbidden
+        return c.json({ error: '权限不足' }, 403);
       }
-
-      // 4. 将用户信息存入上下文，供后续路由使用
       c.set('jwtPayload', decodedPayload);
-      await next(); // 一切正常，继续处理请求
+      await next();
     } catch (e) {
-      // 捕获 verify 函数抛出的错误 (例如 token 过期或签名无效)
       return c.json({ error: '认证失败：无效或已过期的 Token' }, 401);
     }
   };
 };
 
-// ====================================================================
-//                 ↑↑↑ 修正部分结束 ↑↑↑
-// ====================================================================
-
-
 // --- 辅助函数 ---
-
 const hashPassword = async (password) => {
     const encoder = new TextEncoder();
     const data = encoder.encode(password);
@@ -93,14 +74,17 @@ const saveSiteData = async (c, data) => {
     await c.env.NAVI_DATA.put('data', JSON.stringify(data));
 };
 
-// --- API 路由 (这部分无需改动) ---
 
-app.post('/api/login', async (c) => {
+// --- API 路由 ---
+// 关键改动 2: 所有路由路径都移除了 /api 前缀
+
+app.post('/login', async (c) => {
     const { username, password, noExpiry } = await c.req.json();
     const data = await getSiteData(c);
     const user = data.users[username];
+    if (!user) return c.json({ error: '用户名或密码错误' }, 401);
     const passwordHash = await hashPassword(password);
-    if (!user || user.passwordHash !== passwordHash) {
+    if (user.passwordHash !== passwordHash) {
         return c.json({ error: '用户名或密码错误' }, 401);
     }
     const payload = {
@@ -112,7 +96,7 @@ app.post('/api/login', async (c) => {
     return c.json({ token, user: { username: user.username, roles: user.roles, permissions: user.permissions } });
 });
 
-app.get('/api/data', authMiddleware(), async (c) => {
+app.get('/data', authMiddleware(), async (c) => {
     const payload = c.get('jwtPayload');
     const data = await getSiteData(c);
     if (payload.roles.includes('admin')) {
@@ -125,7 +109,7 @@ app.get('/api/data', authMiddleware(), async (c) => {
     return c.json({ categories: visibleCategories, bookmarks: visibleBookmarks });
 });
 
-app.post('/api/bookmarks', authMiddleware('admin'), async (c) => {
+app.post('/bookmarks', authMiddleware('admin'), async (c) => {
     const bookmark = await c.req.json();
     const data = await getSiteData(c);
     bookmark.id = `bm-${Date.now()}`;
@@ -134,7 +118,7 @@ app.post('/api/bookmarks', authMiddleware('admin'), async (c) => {
     return c.json(bookmark, 201);
 });
 
-app.put('/api/bookmarks/:id', authMiddleware('admin'), async (c) => {
+app.put('/bookmarks/:id', authMiddleware('admin'), async (c) => {
     const { id } = c.req.param();
     const updatedBookmark = await c.req.json();
     const data = await getSiteData(c);
