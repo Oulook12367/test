@@ -117,27 +117,44 @@ export async function onRequest(context) {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    const apiRoutePatterns = ['/login', '/data', '/bookmarks', '/change-password', '/users', '/categories'];
-    const isApiRequest = apiRoutePatterns.some(p => path.startsWith(p));
-    
-    if (!isApiRequest) {
-        return next();
-    }
-    
-    globalThis.JWT_SECRET_STRING = env.JWT_SECRET;
-    
-    // Login
+    // ... 省略了其他路由判断逻辑 ...
+
+    // Login (登录处理逻辑)
     if (path === '/login' && request.method === 'POST') {
         const { username, password, noExpiry } = await request.json();
         const data = await getSiteData(env);
         const user = data.users[username];
-        if (!user) return jsonResponse({ error: '用户名或密码错误' }, 401);
+
+        // 检查用户是否存在
+        if (!user) {
+            return jsonResponse({ error: '用户名或密码错误' }, 401);
+        }
+
+        // 验证密码哈希
         const passwordHash = await hashPassword(password);
-        if (user.passwordHash !== passwordHash) return jsonResponse({ error: '用户名或密码错误' }, 401);
-        const payload = { sub: user.username, roles: user.roles };
-        const expirationTime = noExpiry && user.permissions?.canSetNoExpiry ? '365d' : '15m';
-        const token = await new SignJWT(payload).setProtectedHeader({ alg: 'HS256' }).setExpirationTime(expirationTime).sign(await JWT_SECRET());
-        return jsonResponse({ token, user });
+        if (user.passwordHash !== passwordHash) {
+            return jsonResponse({ error: '用户名或密码错误' }, 401);
+        }
+
+        // --- 推荐的安全实践修改 ---
+
+        // 1. 创建一个“安全”的用户对象，使用对象解构和剩余属性语法
+        //    来排除 passwordHash 这个敏感字段。
+        const { passwordHash: removed, ...safeUser } = user;
+
+        // 2. 使用安全的用户信息创建 JWT 的载荷(payload)
+        const payload = { sub: safeUser.username, roles: safeUser.roles };
+        const expirationTime = noExpiry && safeUser.permissions?.canSetNoExpiry ? '365d' : '15m';
+
+        // 3. 签名并生成 token
+        const token = await new SignJWT(payload)
+            .setProtectedHeader({ alg: 'HS256' })
+            .setExpirationTime(expirationTime)
+            .sign(await JWT_SECRET());
+
+        // 4. 在最终的响应中，返回 token 和被清理过的 safeUser 对象
+        //    这样可以确保密码哈希永远不会发送到客户端。
+        return jsonResponse({ token, user: safeUser });
     }
     
     // Get Data
