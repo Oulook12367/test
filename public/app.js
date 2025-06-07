@@ -48,7 +48,9 @@ document.addEventListener('DOMContentLoaded', () => {
    // --- State ---
     let allBookmarks = [], allCategories = [], allUsers = [], currentUser = null, isGuestView = false;
     let categorySortable, bookmarkSortable;
-
+// 【新增】用于存储折叠状态的 Set，并从 localStorage 初始化
+const savedCollapsedState = localStorage.getItem('collapsedCategories');
+let collapsedCategories = savedCollapsedState ? new Set(JSON.parse(savedCollapsedState)) : new Set();
 
 // --- API Helper ---
     const apiRequest = async (endpoint, method = 'GET', body = null) => {
@@ -230,52 +232,97 @@ logoutButton.addEventListener('click', () => {
     };
 
 
-const renderCategories = () => {
-    const activeId = categoryNav.querySelector('.active')?.dataset.id || staticNav.querySelector('.active')?.dataset.id || 'all';
+// 代码二 (app.js) 的修改
 
-    // 分别清空两个列表
+const renderCategories = () => {
+    const activeId = document.querySelector('.sidebar .active')?.dataset.id || 'all';
+    
     categoryNav.innerHTML = '';
-    staticNav.innerHTML = '';
-        
-        const allLi = document.createElement('li');
+    staticNav.innerHTML = ''; // 假设您已采纳了上一轮“按钮置底”的修改
+
+    // --- “全部书签”按钮的逻辑 ---
+    const allLi = document.createElement('li');
     allLi.dataset.id = 'all';
     allLi.innerHTML = `<i class="fas fa-inbox"></i><span>全部书签</span>`;
-    // 【重要】将“全部书签”添加到新的 staticNav 容器中
     staticNav.appendChild(allLi);
 
-        const buildTree = (parentId, level) => {
-            allCategories
-                .filter(cat => cat.parentId === parentId)
-                .forEach(cat => {
-                    const li = document.createElement('li');
-                    li.dataset.id = cat.id;
-                    li.style.paddingLeft = `${level * 20}px`;
-                    li.innerHTML = `<i class="fas fa-folder"></i><span>${escapeHTML(cat.name)}</span>`;
-                    if (!isGuestView && currentUser?.permissions?.canEditCategories) {
-                        li.draggable = true;
-                    }
-                    categoryNav.appendChild(li);
-                    buildTree(cat.id, level + 1);
-                });
-        };
-        buildTree(null, 1);
+    // --- 渲染可折叠的分类树 ---
+    // 1. 预先计算出哪些分类拥有子分类
+    const categoriesWithChildren = new Set(allCategories.map(cat => cat.parentId).filter(id => id !== null));
 
-          const newActiveLi = document.querySelector(`.sidebar li[data-id="${activeId}"]`) || staticNav.querySelector(`li[data-id="all"]`);
+    const buildTree = (parentId, level) => {
+        allCategories
+            .filter(cat => cat.parentId === parentId)
+            .forEach(cat => {
+                const li = document.createElement('li');
+                li.dataset.id = cat.id;
+                li.style.paddingLeft = `${level * 20}px`;
+
+                let iconHtml = '';
+                const isParent = categoriesWithChildren.has(cat.id);
+                const isCollapsed = collapsedCategories.has(cat.id);
+
+                // 2. 如果是父分类，则添加可点击的折叠/展开箭头
+                if (isParent) {
+                    const iconClass = isCollapsed ? 'fa-caret-right' : 'fa-caret-down';
+                    iconHtml = `<i class="fas ${iconClass} category-toggle"></i>`;
+                } else {
+                    // 为非父分类添加一个占位符，以保持对齐
+                    iconHtml = `<span class="category-toggle-placeholder"></span>`;
+                }
+
+                li.innerHTML = `
+                    ${iconHtml}
+                    <i class="fas fa-folder"></i>
+                    <span>${escapeHTML(cat.name)}</span>
+                `;
+                
+                categoryNav.appendChild(li);
+
+                // 3. 如果当前分类是展开状态，则递归渲染其子分类
+                if (isParent && !isCollapsed) {
+                    buildTree(cat.id, level + 1);
+                }
+            });
+    };
+    buildTree(null, 1); // 从根节点开始构建
+
+    // --- 恢复激活状态 ---
+    const newActiveLi = document.querySelector(`.sidebar li[data-id="${activeId}"]`) || staticNav.querySelector(`li[data-id="all"]`);
     if(newActiveLi) newActiveLi.classList.add('active');
 };
     
-  document.querySelector('.sidebar').addEventListener('click', (e) => {
+
+
+// 找到旧的 document.querySelector('.sidebar').addEventListener... 并完整替换
+document.querySelector('.sidebar').addEventListener('click', (e) => {
     const clickedLi = e.target.closest('li');
-    // 确保点击的是 sidebar 内的 li，且不是拖拽产生的影子元素
     if (!clickedLi || !clickedLi.closest('.category-nav') || clickedLi.classList.contains('sortable-ghost')) return;
 
-    // 移除所有 li 的 active 状态
-    document.querySelectorAll('.sidebar .category-nav li').forEach(li => li.classList.remove('active'));
+    // 判断点击的是否是折叠/展开箭头
+    if (e.target.classList.contains('category-toggle')) {
+        e.stopPropagation(); // 阻止事件冒泡，避免触发分类选择
+        const catId = clickedLi.dataset.id;
+        
+        // 更新折叠状态
+        if (collapsedCategories.has(catId)) {
+            collapsedCategories.delete(catId);
+        } else {
+            collapsedCategories.add(catId);
+        }
 
-    // 给被点击的 li 添加 active 状态
-    clickedLi.classList.add('active');
+        // 将新状态保存到 localStorage
+        localStorage.setItem('collapsedCategories', JSON.stringify(Array.from(collapsedCategories)));
+        
+        // 重新渲染分类列表以应用折叠/展开效果
+        renderCategories();
 
-    renderBookmarks(clickedLi.dataset.id, localSearchInput.value);
+    } else {
+        // 如果点击的不是箭头，则执行原有的“选择分类”逻辑
+        document.querySelectorAll('.sidebar .category-nav li').forEach(li => li.classList.remove('active'));
+        clickedLi.classList.add('active');
+        renderBookmarks(clickedLi.dataset.id, localSearchInput.value);
+    }
 });
 
 
