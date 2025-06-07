@@ -16,7 +16,7 @@
 2.  在左侧菜单中，转到 **Workers & Pages** > **Pages**。
 3.  点击 **Create a project** 并选择 **Connect to Git**。
 4.  选择你刚才上传代码的 GitHub 仓库。
-5.  在 **Build settings** 中，框架预设选择 `None`。构建命令和构建输出目录留空即可。
+5.  在 **Build settings** 中，框架预设选择 `None`。构建命令:npm install。构建输出:public。
 6.  点击 **Save and Deploy**。
 
 ### 3. 配置 KV 数据库
