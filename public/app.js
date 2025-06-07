@@ -379,19 +379,77 @@ document.addEventListener('DOMContentLoaded', () => {
             const span = document.createElement('span');
             span.className = 'category-name';
             span.textContent = cat.name;
-            li.append(checkbox, span);
+            // (新增) 编辑按钮
+            const editBtn = document.createElement('button');
+            editBtn.className = 'edit-cat-btn';
+            editBtn.title = '编辑名称';
+            editBtn.innerHTML = '<i class="fas fa-pencil-alt"></i>';
+            editBtn.onclick = () => handleEditCategory(li, cat);
+            li.append(checkbox, span, editBtn);
             categoryManagerList.appendChild(li);
         });
     };
+ // (新增) 处理分类编辑的函数
+    const handleEditCategory = (liElement, category) => {
+        const nameSpan = liElement.querySelector('.category-name');
+        const editBtn = liElement.querySelector('.edit-cat-btn');
+        const originalName = category.name;
 
-    bulkDeleteCatBtn.addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = originalName;
+        input.className = 'inline-edit-input'; // 可选，用于特定样式
+
+        nameSpan.style.display = 'none';
+        editBtn.style.display = 'none';
+        liElement.insertBefore(input, editBtn);
+        input.focus();
+        input.select();
+
+        const finishEditing = async () => {
+            const newName = input.value.trim();
+            // 恢复原始视图
+            nameSpan.style.display = '';
+            editBtn.style.display = '';
+            input.remove();
+
+            if (newName && newName !== originalName) {
+                const errorEl = document.getElementById('category-error-message');
+                errorEl.textContent = '';
+                try {
+                    await apiRequest(`categories/${category.id}`, 'PUT', { name: newName });
+                    await loadData(); // 成功后刷新所有数据
+                } catch (error) {
+                    errorEl.textContent = error.message;
+                }
+            }
+        };
+
+        input.addEventListener('blur', finishEditing);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                finishEditing();
+            } else if (e.key === 'Escape') {
+                // 取消编辑，恢复原始视图
+                nameSpan.style.display = '';
+                editBtn.style.display = '';
+                input.remove();
+            }
+        });
+    };
+    
+  bulkDeleteCatBtn.addEventListener('click', () => {
         const checkedBoxes = categoryManagerList.querySelectorAll('input[type="checkbox"]:checked');
         const idsToDelete = Array.from(checkedBoxes).map(cb => cb.dataset.id);
+
         if (idsToDelete.length === 0) {
             alert('请先选择要删除的分类。');
             return;
         }
-        showConfirm('确认批量删除', `确定要删除选中的 ${idsToDelete.length} 个分类吗？`, async () => {
+
+        // 修改确认信息以反映强制删除
+        showConfirm('确认强制删除', `确定要删除选中的 ${idsToDelete.length} 个分类吗？分类下的所有书签也将被一并删除！`, async () => {
             const errorEl = document.getElementById('category-error-message');
             errorEl.textContent = '';
             try {
