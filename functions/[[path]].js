@@ -92,9 +92,9 @@ const saveSiteData = async (env, data) => {
         const timestamp = new Date().toISOString();
         await env.NAVI_BACKUPS.put(`backup-${timestamp}`, currentData);
         const backups = await env.NAVI_BACKUPS.list({ prefix: "backup-" });
-        if (backups.keys.length > 100) {
+        if (backups.keys.length > 30) {
             const sortedKeys = backups.keys.sort((a, b) => a.name.localeCompare(b.name));
-            for (let i = 0; i < sortedKeys.length - 100; i++) {
+            for (let i = 0; i < sortedKeys.length - 30; i++) {
                 await env.NAVI_BACKUPS.delete(sortedKeys[i].name);
             }
         }
