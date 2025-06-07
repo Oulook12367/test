@@ -510,8 +510,8 @@ button.danger:hover {
 /* Drag-and-Drop 样式 */
 .bookmark-card.dragging,
 .category-nav li.dragging {
-    opacity: 0.5;
-    border: 1px dashed var(--accent-light);
+    opacity: 0.4;
+    border: 1px solid var(--accent-light);
 }
 
 .dark-theme .bookmark-card.dragging,
@@ -521,8 +521,21 @@ button.danger:hover {
 
 /* “幽灵”占位符的样式 */
 .drag-placeholder {
+    display: block;
     background: var(--accent-light);
-    opacity: 0.15;
-    border: 2px dashed var(--accent-dark);
-    /* 移除固定高度，让它自适应内容大小 */
+    opacity: 0.2;
+    border: 1px dashed var(--accent-dark);
+    margin: 0;
+    padding: 0;
+}
+/* 确保占位符和原项目大小一致 */
+#bookmarks-grid > .drag-placeholder {
+    /* 继承书签卡片的内外边距和高度等 */
+    border-radius: 12px;
+    height: 95px; /* 根据你的书签卡片大致高度设定 */
+}
+#category-nav > .drag-placeholder {
+    border-radius: 8px;
+    height: 46px; /* 根据你的分类行大致高度设定 */
+    margin-bottom: 0.5rem;
 }
