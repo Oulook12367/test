@@ -626,3 +626,24 @@ button.danger:hover {
     width: 16px;
     height: 16px;
 }
+
+
+
+/* 代码四 (style.css) 的新增样式 */
+.admin-info {
+    font-size: 0.85em;
+    padding: 8px 12px;
+    background-color: var(--accent-light);
+    color: white;
+    border-radius: 6px;
+    margin: -5px 0 10px 0;
+    opacity: 0.8;
+}
+
+.dark-theme .admin-info {
+    background-color: var(--accent-dark);
+}
+
+.admin-info i {
+    margin-right: 8px;
+}
