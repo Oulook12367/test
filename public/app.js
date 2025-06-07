@@ -190,8 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     categoryNav.addEventListener('click', (e) => {
         const clickedLi = e.target.closest('li');
-        if (!clickedLi || !categoryNav.contains(clickedLi)) return;
-        if (clickedLi.classList.contains('dragging')) return;
+        if (!clickedLi || !categoryNav.contains(clickedLi) || clickedLi.classList.contains('dragging')) return;
         categoryNav.querySelector('.active')?.classList.remove('active');
         clickedLi.classList.add('active');
         renderBookmarks(clickedLi.dataset.id, localSearchInput.value);
@@ -491,47 +490,39 @@ document.addEventListener('DOMContentLoaded', () => {
         userForm.querySelector('.modal-error-message').textContent = '';
         const usernameInput = userForm.querySelector('#user-form-username');
         const passwordInput = userForm.querySelector('#user-form-password');
-        
         usernameInput.value = '';
         usernameInput.readOnly = false;
-        passwordInput.disabled = false; // 确保为新用户启用密码框
+        passwordInput.disabled = false;
         passwordInput.placeholder = "必填";
-
         userForm.querySelector('#user-form-username-hidden').value = '';
         renderUserFormRoles();
         renderUserFormCategories();
     };
 
- const populateUserForm = (user) => {
+    const populateUserForm = (user) => {
         userList.querySelectorAll('li').forEach(li => li.classList.remove('selected'));
         userList.querySelector(`li[data-username="${user.username}"]`).classList.add('selected');
         userForm.reset();
         userFormTitle.textContent = `编辑用户: ${user.username}`;
         userForm.querySelector('.modal-error-message').textContent = '';
-        
         const usernameInput = userForm.querySelector('#user-form-username');
         const passwordInput = userForm.querySelector('#user-form-password');
-
         usernameInput.value = user.username;
         usernameInput.readOnly = true;
         userForm.querySelector('#user-form-username-hidden').value = user.username;
-
-        // 核心优化点：如果是 public 用户，则禁用密码和角色编辑
         if (user.username === 'public') {
             passwordInput.disabled = true;
             passwordInput.placeholder = '虚拟账户，无法设置密码';
-            renderUserFormRoles(user.roles, true); // 传入 true 来禁用
+            renderUserFormRoles(user.roles, true);
         } else {
             passwordInput.disabled = false;
             passwordInput.placeholder = "留空则不修改";
-            renderUserFormRoles(user.roles, false); // 正常启用
+            renderUserFormRoles(user.roles, false);
         }
-
         renderUserFormCategories(user.permissions.visibleCategories);
     };
-    
 
-     const renderUserFormRoles = (activeRoles = [], isDisabled = false) => {
+    const renderUserFormRoles = (activeRoles = [], isDisabled = false) => {
         userFormRoles.innerHTML = '';
         ['admin', 'editor', 'viewer'].forEach(role => {
             const id = `role-${role}`;
@@ -541,8 +532,7 @@ document.addEventListener('DOMContentLoaded', () => {
             input.id = id;
             input.value = role;
             if (activeRoles.includes(role)) input.checked = true;
-            input.disabled = isDisabled; // 根据参数设置禁用状态
-
+            input.disabled = isDisabled;
             const label = document.createElement('label');
             label.htmlFor = id;
             label.textContent = role.charAt(0).toUpperCase() + role.slice(1);
@@ -579,25 +569,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const password = userForm.querySelector('#user-form-password').value;
         const errorEl = userForm.querySelector('.modal-error-message');
         errorEl.textContent = '';
-        
         if (!isEditing && !password) {
             errorEl.textContent = '新用户必须设置密码';
             return;
         }
-
         const selectedRoles = Array.from(userFormRoles.querySelectorAll('input:checked')).map(cb => cb.value);
         const visibleCategories = Array.from(userFormCategories.querySelectorAll('input:checked')).map(cb => cb.value);
-        
         const userData = {
             roles: selectedRoles,
             permissions: { visibleCategories }
         };
         if (password) userData.password = password;
-
         const endpoint = isEditing ? `users/${hiddenUsername}` : 'users';
         const method = isEditing ? 'PUT' : 'POST';
         if (!isEditing) userData.username = username;
-
         try {
             const updatedUser = await apiRequest(endpoint, method, userData);
             await loadData();
@@ -612,6 +597,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Drag and Drop Logic ---
     const persistOrder = async () => {
         try {
             await apiRequest('data', 'PUT', {
@@ -624,27 +610,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const setupDragDrop = (container, itemSelector, itemsArray) => {
+    const setupDragDrop = (container, itemSelector, getItemsArray) => {
         container.addEventListener('dragstart', e => {
             if (e.target.matches(itemSelector)) {
                 draggedItem = e.target;
                 setTimeout(() => e.target.classList.add('dragging'), 0);
             }
         });
-
         container.addEventListener('dragend', e => {
-            if (e.target.matches(itemSelector) && e.target.classList.contains('dragging')) {
-                e.target.classList.remove('dragging');
+            if (draggedItem) {
+                draggedItem.classList.remove('dragging');
                 draggedItem = null;
             }
         });
-        
         container.addEventListener('dragover', e => {
             e.preventDefault();
             const afterElement = getDragAfterElement(container, e.clientY);
             const currentGap = container.querySelector('.drag-over-gap');
             if (currentGap) currentGap.remove();
-
             const gap = document.createElement('div');
             gap.className = 'drag-over-gap';
             if (afterElement == null) {
@@ -653,36 +636,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 container.insertBefore(gap, afterElement);
             }
         });
-        
         container.addEventListener('dragleave', e => {
             if (e.relatedTarget && !container.contains(e.relatedTarget)) {
                 const currentGap = container.querySelector('.drag-over-gap');
                 if (currentGap) currentGap.remove();
             }
         });
-
         container.addEventListener('drop', async e => {
             e.preventDefault();
             const currentGap = container.querySelector('.drag-over-gap');
             if (currentGap) currentGap.remove();
-            
             if (!draggedItem) return;
 
+            const itemsArray = getItemsArray(); // Get the current array reference
             const fromId = draggedItem.dataset.id;
             const fromIndex = itemsArray.findIndex(item => item.id === fromId);
-            
             const afterElement = getDragAfterElement(container, e.clientY);
             const toId = afterElement ? afterElement.dataset.id : null;
-            
             if(fromId === toId) return;
 
             const toIndex = toId ? itemsArray.findIndex(item => item.id === toId) : itemsArray.length;
-
             if (fromIndex > -1) {
                 const [itemToMove] = itemsArray.splice(fromIndex, 1);
                 const adjustedToIndex = (fromIndex < toIndex) ? toIndex - 1 : toIndex;
                 itemsArray.splice(adjustedToIndex, 0, itemToMove);
-                
                 renderUI();
                 await persistOrder();
             }
@@ -702,8 +679,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }, { offset: Number.NEGATIVE_INFINITY }).element;
     };
     
-    setupDragDrop(categoryNav, 'li[draggable="true"]', allCategories);
-    setupDragDrop(bookmarksGrid, 'a[draggable="true"]', allBookmarks);
+    setupDragDrop(categoryNav, 'li[draggable="true"]', () => allCategories);
+    setupDragDrop(bookmarksGrid, 'a[draggable="true"]', () => allBookmarks);
 
     // --- Initial Load ---
     applyTheme(localStorage.getItem('theme') || 'light-theme');
