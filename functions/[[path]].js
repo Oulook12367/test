@@ -181,36 +181,49 @@ export async function onRequest(context) {
         }
     }
     
-    if (apiPath.startsWith('categories')) {
+if (apiPath.startsWith('categories')) {
         if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
         const data = await getSiteData(env);
+        const id = apiPath.split('/').pop();
 
+        // (Updated) DELETE logic for bulk/single with cascading delete
         if (request.method === 'DELETE' && apiPath === 'categories') {
             const { ids } = await request.json();
             if (!ids || !Array.isArray(ids)) return jsonResponse({ error: '无效的请求' }, 400);
 
-            const errors = [];
-            const deletableIds = [];
+            // Force delete: First, delete all bookmarks within these categories
+            data.bookmarks = data.bookmarks.filter(bm => !ids.includes(bm.categoryId));
             
-            ids.forEach(id => {
-                if (data.bookmarks.some(bm => bm.categoryId === id)) {
-                    const cat = data.categories.find(c => c.id === id);
-                    errors.push(`分类 "${cat ? cat.name : id}" 下仍有书签，无法删除。`);
-                } else {
-                    deletableIds.push(id);
-                }
-            });
-
-            if (errors.length > 0) return jsonResponse({ error: errors.join(' ') }, 400);
-
-            data.categories = data.categories.filter(c => !deletableIds.includes(c.id));
+            // Then, delete the categories themselves
+            data.categories = data.categories.filter(c => !ids.includes(c.id));
+            
+            // Finally, remove the deleted categories from all users' permissions
             Object.values(data.users).forEach(user => {
-                user.permissions.visibleCategories = user.permissions.visibleCategories.filter(catId => !deletableIds.includes(catId));
+                user.permissions.visibleCategories = user.permissions.visibleCategories.filter(catId => !ids.includes(catId));
             });
 
             await saveSiteData(env, data);
             return jsonResponse(null);
         }
+
+        // (New) PUT logic for updating a category name
+        if (request.method === 'PUT' && id) {
+            const { name } = await request.json();
+            if (!name || name.trim() === '') {
+                return jsonResponse({ error: '分类名称不能为空' }, 400);
+            }
+            if (data.categories.some(c => c.name === name && c.id !== id)) {
+                return jsonResponse({ error: '该分类名称已存在' }, 400);
+            }
+
+            const categoryToUpdate = data.categories.find(c => c.id === id);
+            if (!categoryToUpdate) return jsonResponse({ error: '分类未找到' }, 404);
+            
+            categoryToUpdate.name = name.trim();
+            await saveSiteData(env, data);
+            return jsonResponse(categoryToUpdate);
+        }
+    
 
         if (request.method === 'POST') {
             const { name } = await request.json();
