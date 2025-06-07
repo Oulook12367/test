@@ -1,9 +1,8 @@
-// functions/[[path]].js
-import { Hono } from 'hono';
-const app = new Hono();
-
-app.get('/test', (c) => {
-  return c.json({ ok: true, message: 'Hono is working!' });
-});
-
-export const onRequest = app.fetch;
+{
+  "name": "your-navi-project",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "hono": "^4.4.6"
+  }
+}
