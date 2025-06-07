@@ -12,43 +12,50 @@ const hashPassword = async (password) => {
     return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 };
 
-// --- 1. 替换 getSiteData 函数 ---
 const getSiteData = async (env) => {
-    console.log('[Checkpoint A] Entering getSiteData function.');
-    let data = null;
-    try {
-        console.log('[Checkpoint B] Attempting to read "data" key from NAVI_DATA namespace...');
-        data = await env.NAVI_DATA.get('data', { type: 'json' });
-        console.log('[Checkpoint C] Successfully read from KV. Value is:', JSON.stringify(data));
-    } catch (e) {
-        console.error('[FATAL ERROR!] Failed to get or parse data from KV!', e);
-        // 如果KV中的数据不是有效JSON，{type: 'json'} 会在此处抛出异常
-        throw e; // 抛出异常让上层捕获
+    let data = await env.NAVI_DATA.get('data', { type: 'json' });
+    if (!data || !data.categories || data.categories.length === 0) {
+        const adminPasswordHash = await hashPassword('admin123');
+        const defaultCatId = `cat-${Date.now()}`;
+        return {
+            users: {
+                'admin': {
+                    username: 'admin',
+                    passwordHash: adminPasswordHash,
+                    roles: ['admin'],
+                    permissions: { 
+                        canSetNoExpiry: true, 
+                        visibleCategories: [defaultCatId],
+                        canEditBookmarks: true,
+                        canEditCategories: true,
+                        canEditUsers: true
+                    }
+                }
+            },
+            categories: [{id: defaultCatId, name: '默认分类'}],
+            bookmarks: []
+        };
     }
-
-    if (!data || !data.categories || data.categories.length === 0) {
-        console.log('[Checkpoint D] Data is empty or invalid. Creating default admin user in memory...');
-        const adminPasswordHash = await hashPassword('admin123');
-        const defaultCatId = `cat-${Date.now()}`;
-        const defaultData = {
-            users: {
-                'admin': {
-                    username: 'admin',
-                    passwordHash: adminPasswordHash,
-                    roles: ['admin'],
-                    permissions: { canSetNoExpiry: true, visibleCategories: [defaultCatId], canEditBookmarks: true, canEditCategories: true, canEditUsers: true }
-                }
-            },
-            categories: [{id: defaultCatId, name: '默认分类'}],
-            bookmarks: []
-        };
-        console.log('[Checkpoint E] Default data created. Returning it.');
-        return defaultData;
-    }
-
-    console.log('[Checkpoint F] Returning existing data from KV.');
-    // (省略了原有的 for 循环，因为那部分逻辑较为安全，暂不引入干扰)
-    return data;
+    // Ensure all users have a complete permissions object
+    for (const username in data.users) {
+        const user = data.users[username];
+        if (!user.permissions) {
+            user.permissions = {};
+        }
+        user.permissions = {
+            canSetNoExpiry: user.permissions.canSetNoExpiry || false,
+            visibleCategories: user.permissions.visibleCategories || [],
+            canEditBookmarks: user.permissions.canEditBookmarks || false,
+            canEditCategories: user.permissions.canEditCategories || false,
+            canEditUsers: user.permissions.canEditUsers || false,
+        };
+        if(user.roles && user.roles.includes('admin')){
+            user.permissions.canEditBookmarks = true;
+            user.permissions.canEditCategories = true;
+            user.permissions.canEditUsers = true;
+        }
+    }
+    return data;
 };
 
 const saveSiteData = async (env, data) => {
@@ -106,49 +113,56 @@ const jsonResponse = (data, status = 200) => {
 
 // --- Main Entry Point ---
 export async function onRequest(context) {
-    const { request, env, next } = context;
-    const url = new URL(request.url);
-    const path = url.pathname;
+    const { request, env, next } = context;
+    const url = new URL(request.url);
+    const path = url.pathname;
 
-    const apiRoutePatterns = ['/login', '/data', '/bookmarks', '/change-password', '/users', '/categories'];
-    const isApiRequest = apiRoutePatterns.some(p => path.startsWith(p));
-    
-    if (!isApiRequest) {
-        return next();
-    }
-    
-    globalThis.JWT_SECRET_STRING = env.JWT_SECRET;
-    
-    // Login
-    if (path === '/login' && request.method === 'POST') {
-        try {
-            console.log('[Checkpoint 1] Matched /login POST route.');
-            const { username, password, noExpiry } = await request.json();
-            console.log(`[Checkpoint 2] Request body parsed. Username: ${username}`);
-            const data = await getSiteData(env);
-            console.log('[Checkpoint 3] getSiteData returned successfully.');
-            const user = data.users[username];
-            console.log('[Checkpoint 4] Searched for user. Found:', !!user);
-            if (!user) return jsonResponse({ error: '用户名或密码错误' }, 401);
+    const apiRoutePatterns = ['/login', '/data', '/bookmarks', '/change-password', '/users', '/categories'];
+    const isApiRequest = apiRoutePatterns.some(p => path.startsWith(p));
+    
+    if (!isApiRequest) {
+        return next();
+    }
+    
+    globalThis.JWT_SECRET_STRING = env.JWT_SECRET;
+    
+    // Login (登录处理逻辑)
+    if (path === '/login' && request.method === 'POST') {
+        const { username, password, noExpiry } = await request.json();
+        const data = await getSiteData(env);
+        const user = data.users[username];
 
-            const passwordHash = await hashPassword(password);
-            console.log('[Checkpoint 5] Password from user hashed.');
-            if (user.passwordHash !== passwordHash) return jsonResponse({ error: '用户名或密码错误' }, 401);
-            console.log('[Checkpoint 6] Password comparison successful.');
-
-            const { passwordHash: removed, ...safeUser } = user;
-            const payload = { sub: safeUser.username, roles: safeUser.roles };
-            const expirationTime = noExpiry && safeUser.permissions?.canSetNoExpiry ? '365d' : '15m';
-            console.log('[Checkpoint 7] Attempting to sign JWT...');
-            const token = await new SignJWT(payload).setProtectedHeader({ alg: 'HS256' }).setExpirationTime(expirationTime).sign(await JWT_SECRET());
-            console.log('[Checkpoint 8] JWT signed successfully.');
-            return jsonResponse({ token, user: safeUser });
-        } catch (error) {
-            console.error('[FATAL ERROR in /login block!]', error);
-            // 返回一个标准的错误，而不是让它崩溃
-            return jsonResponse({ error: 'An unexpected server error occurred.', details: error.message }, 500);
+        // 检查用户是否存在
+        if (!user) {
+            return jsonResponse({ error: '用户名或密码错误' }, 401);
         }
-    }
+
+        // 验证密码哈希
+        const passwordHash = await hashPassword(password);
+        if (user.passwordHash !== passwordHash) {
+            return jsonResponse({ error: '用户名或密码错误' }, 401);
+        }
+
+        // --- 推荐的安全实践修改 ---
+
+        // 1. 创建一个“安全”的用户对象，使用对象解构和剩余属性语法
+        //    来排除 passwordHash 这个敏感字段。
+        const { passwordHash: removed, ...safeUser } = user;
+
+        // 2. 使用安全的用户信息创建 JWT 的载荷(payload)
+        const payload = { sub: safeUser.username, roles: safeUser.roles };
+        const expirationTime = noExpiry && safeUser.permissions?.canSetNoExpiry ? '365d' : '15m';
+
+        // 3. 签名并生成 token
+        const token = await new SignJWT(payload)
+            .setProtectedHeader({ alg: 'HS256' })
+            .setExpirationTime(expirationTime)
+            .sign(await JWT_SECRET());
+
+        // 4. 在最终的响应中，返回 token 和被清理过的 safeUser 对象
+        //    这样可以确保密码哈希永远不会发送到客户端。
+        return jsonResponse({ token, user: safeUser });
+    }
     
     // Get Data
     if (path === '/data' && request.method === 'GET') {
