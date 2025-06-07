@@ -151,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
         userManagementBtn.style.display = currentUser?.permissions?.canEditUsers ? 'flex' : 'none';
     };
 
-    const renderCategories = () => {
+   const renderCategories = () => {
         const activeId = categoryNav.querySelector('.active')?.dataset.id || 'all';
         categoryNav.innerHTML = '';
         const allLi = document.createElement('li');
@@ -172,17 +172,27 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const newActiveLi = categoryNav.querySelector(`li[data-id="${activeId}"]`) || categoryNav.querySelector(`li[data-id="all"]`);
         newActiveLi.classList.add('active');
-
-        categoryNav.querySelectorAll('li').forEach(li => li.addEventListener('click', (e) => {
-            categoryNav.querySelector('.active')?.classList.remove('active');
-            e.currentTarget.classList.add('active');
-            renderBookmarks(e.currentTarget.dataset.id, localSearchInput.value);
-        }));
     };
+        
+        
+// (新增) 使用事件委托处理分类点击，更高效稳定
+    categoryNav.addEventListener('click', (e) => {
+        const clickedLi = e.target.closest('li');
+        if (!clickedLi || !categoryNav.contains(clickedLi)) {
+            return; // 没有点击到 li 元素，直接返回
+        }
+        
+        categoryNav.querySelector('.active')?.classList.remove('active');
+        clickedLi.classList.add('active');
+        renderBookmarks(clickedLi.dataset.id, localSearchInput.value);
+    });
     
-    const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
+  const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
         bookmarksGrid.innerHTML = '';
-        let filteredBookmarks = categoryId === 'all' ? allBookmarks : allBookmarks.filter(bm => bm.categoryId === categoryId);
+        let filteredBookmarks = categoryId === 'all' 
+            ? allBookmarks 
+            : allBookmarks.filter(bm => bm.categoryId === categoryId);
+
         if (searchTerm) {
             const lower = searchTerm.toLowerCase();
             filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lower) || bm.url.toLowerCase().includes(lower));
@@ -208,19 +218,32 @@ document.addEventListener('DOMContentLoaded', () => {
             const h3 = document.createElement('h3');
             h3.append(img, document.createTextNode(' ' + bm.name));
             const p = document.createElement('p');
-p.textContent = bm.description || '';
+            p.textContent = bm.description || '';
             card.append(h3, p);
+
             if (currentUser?.permissions?.canEditBookmarks) {
                 const actions = document.createElement('div');
                 actions.className = 'bookmark-card-actions';
+                
+                // (修复) 编辑按钮
                 const editBtn = document.createElement('button');
                 editBtn.title = '编辑';
                 editBtn.innerHTML = '<i class="fas fa-pencil-alt"></i>';
-                // editBtn.addEventListener('click', (e) => { e.preventDefault(); handleEditBookmark(bm); });
+                editBtn.addEventListener('click', (e) => {
+                    e.preventDefault(); // 阻止链接跳转
+                    e.stopPropagation(); // 阻止事件冒泡
+                    handleEditBookmark(bm);
+                });
+                
                 const deleteBtn = document.createElement('button');
                 deleteBtn.title = '删除';
                 deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
-                deleteBtn.addEventListener('click', (e) => { e.preventDefault(); handleDeleteBookmark(bm); });
+                deleteBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleDeleteBookmark(bm);
+                });
+
                 actions.append(editBtn, deleteBtn);
                 card.appendChild(actions);
             }
@@ -274,6 +297,39 @@ p.textContent = bm.description || '';
         });
         showModal(bookmarkModal);
     });
+
+
+// (新增) 编辑书签功能实现
+    const handleEditBookmark = (bookmark) => {
+        bookmarkModalTitle.textContent = '编辑书签';
+        bookmarkForm.reset();
+        bookmarkForm.querySelector('.modal-error-message').textContent = '';
+
+        // 填充表单
+        bookmarkForm.querySelector('#bm-id').value = bookmark.id;
+        bookmarkForm.querySelector('#bm-name').value = bookmark.name;
+        bookmarkForm.querySelector('#bm-url').value = bookmark.url;
+        bookmarkForm.querySelector('#bm-desc').value = bookmark.description || '';
+        bookmarkForm.querySelector('#bm-icon').value = bookmark.icon || '';
+        
+        // 填充并选中分类
+        const categorySelect = bookmarkForm.querySelector('#bm-category');
+        categorySelect.innerHTML = '';
+        const creatableCategories = allCategories.filter(cat => currentUser.permissions.visibleCategories.includes(cat.id));
+        creatableCategories.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat.id;
+            option.textContent = cat.name;
+            if (cat.id === bookmark.categoryId) {
+                option.selected = true;
+            }
+            categorySelect.appendChild(option);
+        });
+        
+        showModal(bookmarkModal);
+    };
+
+    
 
     const handleDeleteBookmark = (bookmark) => {
         showConfirm('确认删除', `您确定要删除书签 "${escapeHTML(bookmark.name)}" 吗？`, async () => {
