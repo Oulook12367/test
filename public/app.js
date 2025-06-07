@@ -598,7 +598,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Drag and Drop Logic ---
-     const persistOrder = async () => {
+    // --- (核心修复) Drag and Drop Logic ---
+    const persistOrder = async () => {
         try {
             await apiRequest('data', 'PUT', {
                 categories: allCategories,
@@ -609,7 +610,24 @@ document.addEventListener('DOMContentLoaded', () => {
             await loadData();
         }
     };
-
+    
+    const getDragAfterElement = (container, y) => {
+        const draggableElements = [...container.querySelectorAll(`${itemSelectorFromContainer(container)}:not(.dragging)`)];
+        return draggableElements.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+            if (offset < 0 && offset > closest.offset) {
+                return { offset: offset, element: child };
+            } else {
+                return closest;
+            }
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
+    };
+    
+    const itemSelectorFromContainer = (container) => {
+        return container === bookmarksGrid ? 'a.bookmark-card[draggable="true"]' : 'li[draggable="true"]';
+    };
+    
     const setupDragDrop = (container, getItemsArray) => {
         const itemSelector = itemSelectorFromContainer(container);
         
@@ -624,95 +642,59 @@ document.addEventListener('DOMContentLoaded', () => {
             if (draggedItem) {
                 draggedItem.classList.remove('dragging');
             }
-            const placeholder = container.querySelector('.drag-placeholder');
-            if(placeholder) placeholder.remove();
             draggedItem = null;
         });
         
         container.addEventListener('dragover', e => {
             e.preventDefault();
-            if (!draggedItem) return;
-
-            let placeholder = container.querySelector('.drag-placeholder');
-            if (!placeholder) {
-                placeholder = draggedItem.cloneNode(true);
-                placeholder.classList.add('drag-placeholder');
-                placeholder.classList.remove('dragging');
-            }
-
-            const afterElement = getDragAfterElement(container, e.clientX, e.clientY);
-            
-            if (afterElement == null) {
-                container.appendChild(placeholder);
-            } else {
-                container.insertBefore(placeholder, afterElement);
+            const afterElement = getDragAfterElement(container, e.clientY);
+            const draggable = document.querySelector('.dragging');
+            if (draggable) {
+                if (afterElement == null) {
+                    container.appendChild(draggable);
+                } else {
+                    container.insertBefore(draggable, afterElement);
+                }
             }
         });
         
         container.addEventListener('drop', async e => {
             e.preventDefault();
-            const placeholder = container.querySelector('.drag-placeholder');
-            if (!placeholder || !draggedItem) {
-                if(placeholder) placeholder.remove();
-                if(draggedItem) draggedItem.classList.remove('dragging');
-                draggedItem = null;
-                return;
-            }
+            if (!draggedItem) return;
 
             const itemsArray = getItemsArray();
             const fromId = draggedItem.dataset.id;
+
+            // 获取所有可见元素的当前 DOM 顺序
+            const currentOrderIds = [...container.querySelectorAll(itemSelector)].map(el => el.dataset.id);
             const fromIndex = itemsArray.findIndex(item => item.id === fromId);
-
-            const elementAfter = placeholder.nextElementSibling;
-            const toId = elementAfter ? elementAfter.dataset.id : null;
-
-            placeholder.remove();
             
-            if (fromIndex === -1) {
-                draggedItem.classList.remove('dragging');
-                draggedItem = null;
-                return;
+            // 在新顺序中找到拖拽项应该在的位置
+            const toIndexDOM = currentOrderIds.indexOf(fromId);
+            if (fromIndex === -1 || toIndexDOM === -1) return;
+
+            const itemToMove = itemsArray[fromIndex];
+            
+            // 从原数组中移除
+            itemsArray.splice(fromIndex, 1);
+            
+            // 找到它在整个数据数组中的新目标位置
+            // 这是一个简化逻辑：我们假设拖拽只在当前可见的分类内改变顺序
+            // 一个更完整的实现需要处理跨分类拖拽
+            const activeCategoryId = categoryNav.querySelector('.active')?.dataset.id || 'all';
+            if (activeCategoryId !== 'all') {
+                const categoryBookmarks = itemsArray.filter(bm => bm.categoryId === activeCategoryId);
+                const firstIndexOfCategory = itemsArray.indexOf(categoryBookmarks[0]);
+                itemsArray.splice(firstIndexOfCategory + toIndexDOM, 0, itemToMove);
+            } else { // 在"全部书签"视图下拖拽
+                 itemsArray.splice(toIndexDOM, 0, itemToMove);
             }
 
-            let toIndex = toId ? itemsArray.findIndex(item => item.id === toId) : itemsArray.length;
-
-            if (fromId === toId) {
-                 draggedItem.classList.remove('dragging');
-                 draggedItem = null;
-                 return;
-            }
-
-            const [itemToMove] = itemsArray.splice(fromIndex, 1);
-            const adjustedToIndex = (fromIndex < toIndex) ? toIndex - 1 : toIndex;
-            itemsArray.splice(adjustedToIndex, 0, itemToMove);
-            
-            draggedItem.classList.remove('dragging');
-            draggedItem = null;
-
+            // 更新UI并保存
             renderUI();
             await persistOrder();
         });
     };
-    
-    const getDragAfterElement = (container, x, y) => {
-        const draggableElements = [...container.querySelectorAll(`${itemSelectorFromContainer(container)}:not(.dragging)`)];
-        return draggableElements.reduce((closest, child) => {
-            const box = child.getBoundingClientRect();
-            const offsetX = x - (box.left + box.width / 2);
-            const offsetY = y - (box.top + box.height / 2);
-            const distance = Math.sqrt(offsetX * offsetX + offsetY * offsetY);
-
-            if (distance < closest.distance) {
-                return { distance: distance, element: child };
-            } else {
-                return closest;
-            }
-        }, { distance: Number.POSITIVE_INFINITY }).element;
-    };
-    
-    const itemSelectorFromContainer = (container) => {
-        return container === bookmarksGrid ? 'a.bookmark-card[draggable="true"]' : 'li[draggable="true"]';
-    }
     
     setupDragDrop(categoryNav, () => allCategories);
     setupDragDrop(bookmarksGrid, () => allBookmarks);
