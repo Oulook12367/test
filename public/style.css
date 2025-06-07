@@ -37,6 +37,7 @@ body.dark-theme {
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+
 /* 初始加载状态控制 */
 body.is-loading {
     transition: none !important;
@@ -80,7 +81,6 @@ body.is-loading #app-layout {
     padding: 0 0.5rem;
 }
 .sidebar-header h2 { margin: 0; font-size: 1.5rem; }
-
 .category-nav { list-style-type: none; padding: 0; margin: 0; overflow-y: auto; }
 .category-nav li {
     display: flex;
@@ -105,6 +105,8 @@ body.is-loading #app-layout {
 }
 .dark-theme .category-nav li.active { background-color: var(--accent-dark); }
 .category-nav li i { width: 20px; text-align: center; }
+
+
 
 /* Main Content Area */
 .main-content {
@@ -217,6 +219,7 @@ input:focus, select:focus { outline: none; }
 }
 .dark-theme .dropdown-divider { background-color: var(--border-dark); }
 
+
 /* Bookmarks Grid & Cards */
 #bookmarks-grid {
     display: grid;
@@ -242,16 +245,315 @@ input:focus, select:focus { outline: none; }
     background-color: var(--card-bg-dark);
     border-color: var(--border-dark);
 }
-/* ... all other .bookmark-card styles are unchanged ... */
 
-/* Modals & Forms */
-/* ... all modal and form styles are unchanged ... */
 
-/* Drag-and-Drop Styles */
+.bookmark-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.07);
+    border-color: var(--accent-light);
+}
+.dark-theme .bookmark-card:hover {
+    box-shadow: 0 8px 25px rgba(0,0,0,0.25);
+    border-color: var(--accent-dark);
+}
+.bookmark-card h3 {
+    margin: 0 0 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 1.1rem;
+    word-break: break-all;
+}
+.bookmark-card img { width: 20px; height: 20px; border-radius: 4px; flex-shrink: 0; }
+.bookmark-card p {
+    font-size: 0.9em;
+    color: var(--text-secondary-light);
+    flex-grow: 1;
+    margin: 0;
+    line-height: 1.5;
+    word-break: break-word;
+}
+.dark-theme .bookmark-card p { color: var(--text-secondary-dark); }
+
+/* Card Actions */
+.bookmark-card-actions {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: none;
+    gap: 8px;
+    opacity: 0;
+    transform: translateY(5px);
+    transition: all 0.2s ease-in-out;
+}
+.bookmark-card:hover .bookmark-card-actions { opacity: 1; transform: translateY(0); display: flex; }
+.bookmark-card-actions button {
+    background-color: var(--bg-light);
+    border: 1px solid var(--border-light);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+    color: var(--text-secondary-light);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+.dark-theme .bookmark-card-actions button {
+    background-color: #2a2a2a;
+    border-color: var(--border-dark);
+    color: var(--text-secondary-dark);
+}
+.bookmark-card-actions button:hover { color: var(--accent-light); background-color: #e9ecef; }
+.dark-theme .bookmark-card-actions button:hover { color: var(--accent-dark); background-color: #343a40; }
+.bookmark-card-actions .delete-btn:hover { color: #dc3545; }
+
+/* Modals */
+.modal-backdrop {
+    position: fixed; z-index: 1000; left: 0; top: 0;
+    width: 100%; height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    backdrop-filter: blur(5px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+.modal {
+    display: none; 
+}
+.modal-content {
+    background-color: var(--card-bg-light);
+    padding: 2rem;
+    border: 1px solid var(--border-light);
+    width: 90%;
+    max-width: 500px;
+    border-radius: 12px;
+    position: relative;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    animation: slideInUp 0.3s ease-out;
+}
+.modal.no-animation .modal-content {
+    animation: none;
+}
+.dark-theme .modal-content { background-color: var(--card-bg-dark); border-color: var(--border-dark); }
+.modal-content.large { max-width: 800px; }
+.modal-content.small { max-width: 400px; text-align: center; }
+
+@keyframes slideInUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+.close-btn {
+    color: #adb5bd; position: absolute; top: 15px; right: 20px;
+    font-size: 28px; font-weight: bold; cursor: pointer; transition: transform 0.2s ease;
+}
+.close-btn:hover { transform: rotate(90deg); }
+
+/* Forms */
+form { display: flex; flex-direction: column; gap: 1rem; }
+form label { font-weight: 600; font-size: 0.9em; }
+form input, form textarea, form select {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background-color: var(--bg-light);
+    color: inherit;
+    font-size: 1rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.dark-theme form input, .dark-theme form textarea, .dark-theme form select {
+    background-color: var(--bg-dark);
+    border-color: var(--border-dark);
+}
+form input:focus, form textarea:focus, form select:focus {
+    border-color: var(--accent-light);
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+}
+.dark-theme form input:focus, .dark-theme form textarea:focus, .dark-theme form select:focus {
+    border-color: var(--accent-dark);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+button, .button {
+    padding: 12px; margin-top: 10px; border: none; border-radius: 8px;
+    font-size: 1rem; font-weight: 600; color: #fff;
+    background-color: var(--accent-light);
+    cursor: pointer; transition: all 0.2s ease;
+}
+.dark-theme button, .dark-theme .button { background-color: var(--accent-dark); }
+button:hover, .button:hover {
+    background-color: var(--accent-hover-light);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 123, 255, 0.2);
+}
+.dark-theme button:hover, .dark-theme .button:hover {
+    background-color: var(--accent-hover-dark);
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+}
+.modal-error-message { color: #dc3545; font-size: 0.9em; text-align: center; min-height: 1.2em;}
+
+/* Confirm Dialog & Secondary/Danger Buttons */
+.confirm-buttons { display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem; }
+button.secondary {
+    background-color: var(--card-bg-light);
+    color: var(--text-primary-light);
+    border: 1px solid var(--border-light);
+}
+.dark-theme button.secondary {
+    background-color: var(--card-bg-dark);
+    color: var(--text-primary-dark);
+    border-color: var(--border-dark);
+}
+button.secondary:hover {
+    background-color: var(--bg-light);
+    border-color: var(--text-secondary-light);
+    box-shadow: none;
+    transform: translateY(0);
+}
+.dark-theme button.secondary:hover {
+    background-color: #2a2a2a;
+    border-color: var(--text-secondary-dark);
+}
+button.danger {
+    background-color: #dc3545;
+}
+button.danger:hover {
+    background-color: #c82333;
+}
+
+/* User Management */
+.user-management-panel { display: flex; gap: 2rem; min-height: 400px; }
+.user-list-container { flex: 1; border-right: 1px solid var(--border-light); padding-right: 2rem; }
+.dark-theme .user-list-container { border-right-color: var(--border-dark); }
+.user-form-container { flex: 2; }
+#user-list { list-style-type: none; padding: 0; margin: 0; max-height: 350px; overflow-y: auto;}
+#user-list li { padding: 12px; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background-color 0.2s; }
+#user-list li:hover { background-color: var(--bg-light); }
+#user-list li.selected { background-color: var(--accent-light); color: white; }
+.dark-theme #user-list li:hover { background-color: #2a2a2a; }
+.dark-theme #user-list li.selected { background-color: var(--accent-dark); }
+.user-list-actions button { background: none; border: none; color: #999; cursor: pointer; padding: 0 5px; margin: 0; }
+.user-list-actions button:hover { color: #dc3545; }
+
+.checkbox-group {
+    border: 1px solid var(--border-light);
+    padding: 10px; border-radius: 8px; display: flex; flex-direction: column; gap: 8px;
+    max-height: 150px; overflow-y: auto;
+}
+.dark-theme .checkbox-group { border-color: var(--border-dark); }
+.checkbox-group div {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.checkbox-group input[type="checkbox"] {
+    width: auto;
+    flex-shrink: 0;
+}
+#user-form-roles.checkbox-group.horizontal {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    max-height: none;
+    overflow-y: hidden;
+}
+.user-form-buttons { display: flex; gap: 1rem; }
+.user-form-buttons button { flex: 1; margin-top: 0; }
+
+
+/* Category Management */
+.category-manager { display: flex; flex-direction: column; gap: 1rem; }
+#category-manager-list { list-style-type: none; padding: 0; margin: 0; max-height: 300px; overflow-y: auto; }
+#category-manager-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 10px;
+    border-radius: 6px;
+}
+#category-manager-list li input[type="checkbox"] {
+    width: auto;
+    flex-shrink: 0;
+}
+#category-manager-list li .category-name {
+    flex-grow: 1;
+}
+
+/* (新增) 为编辑按钮添加样式 */
+.edit-cat-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary-light);
+    padding: 5px;
+    margin: 0;
+    line-height: 1;
+}
+.dark-theme .edit-cat-btn {
+    color: var(--text-secondary-dark);
+}
+.edit-cat-btn:hover {
+    color: var(--accent-light);
+    background-color: transparent !important; /* 确保无背景色 */
+    box-shadow: none !important;
+    transform: none !important;
+}
+.dark-theme .edit-cat-btn:hover {
+    color: var(--accent-dark);
+}
+
+
+#category-manager-list li:hover {
+    background-color: var(--bg-light);
+}
+.dark-theme #category-manager-list li:hover {
+    background-color: #2a2a2a;
+}
+.category-manager-actions {
+    display: flex;
+    gap: 1rem;
+    border-top: 1px solid var(--border-light);
+    padding-top: 1rem;
+    margin-top: 0.5rem;
+}
+.dark-theme .category-manager-actions {
+    border-top-color: var(--border-dark);
+}
+#add-category-form {
+    flex-grow: 1;
+    display: flex;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+#add-category-form input {
+    flex-grow: 1;
+    margin: 0;
+}
+#add-category-form button {
+    margin-top: 0;
+    flex-shrink: 0;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #aaa; }
+.dark-theme ::-webkit-scrollbar-thumb { background: #444; }
+.dark-theme ::-webkit-scrollbar-thumb:hover { background: #666; }
+
+
+/* ... 在文件末尾添加以下新样式 ... */
+
+/* Drag-and-Drop 样式 (由 SortableJS 驱动) */
 .sortable-ghost {
     opacity: 0.4;
     background: var(--accent-light);
 }
+
 .sortable-drag {
-    opacity: 1 !important;
+    opacity: 1 !important; /* 确保被拖拽的元素本身不透明 */
 }
