@@ -40,10 +40,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const confirmText = document.getElementById('confirm-text');
     const confirmBtnYes = document.getElementById('confirm-btn-yes');
     const bulkDeleteCatBtn = document.getElementById('bulk-delete-cat-btn');
+    const manageMenu = document.getElementById('manage-menu');
+    const importBookmarksBtn = document.getElementById('import-bookmarks-btn');
+    const importFileInput = document.getElementById('import-file-input');
 
-    // --- State ---
+   // --- State ---
     let allBookmarks = [], allCategories = [], allUsers = [], currentUser = null, isGuestView = false;
-    let categorySortable, bookmarkSortable; // SortableJS 实例
+    let categorySortable, bookmarkSortable;
 
 
 // --- API Helper ---
@@ -69,20 +72,21 @@ document.addEventListener('DOMContentLoaded', () => {
         return result;
     };
 
-     const persistOrder = async () => {
+     const persistData = async () => {
         try {
             await apiRequest('data', 'PUT', {
                 categories: allCategories,
                 bookmarks: allBookmarks
             });
         } catch (error) {
-            alert('顺序保存失败: ' + error.message);
+            alert('数据保存失败: ' + error.message);
             await loadData();
         }
     };
 
+    
   // --- Theme Logic ---
-   const applyTheme = (theme) => {
+  const applyTheme = (theme) => {
         const currentClass = document.body.className;
         document.body.className = theme;
         if(currentClass.includes('is-loading')) {
@@ -126,8 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-
-   loginForm.addEventListener('submit', async (e) => {
+    loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         loginError.textContent = '';
         try {
@@ -153,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
      // --- Data Loading & UI Rendering ---
-   const loadData = async () => {
+  const loadData = async () => {
         const data = await apiRequest('data');
         const token = localStorage.getItem('jwt_token');
         if (data.isPublic) {
@@ -173,7 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderUI();
     };
     
-   const renderUI = () => {
+    const renderUI = () => {
         updateButtonVisibility();
         renderCategories();
         renderBookmarks(categoryNav.querySelector('.active')?.dataset.id || 'all', localSearchInput.value);
@@ -199,7 +202,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-  const renderCategories = () => {
+
+ const renderCategories = () => {
         const activeId = categoryNav.querySelector('.active')?.dataset.id || 'all';
         categoryNav.innerHTML = '';
         
