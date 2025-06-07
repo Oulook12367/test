@@ -75,6 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
             appLayout.style.display = 'flex';
             try {
                 const payload = JSON.parse(atob(token.split('.')[1]));
+                // Temporary user object for initial UI, will be replaced by full data from /data
                 currentUser = { username: payload.sub, roles: payload.roles, permissions: {} }; 
             } catch (e) {
                 console.error("无法解码Token", e);
@@ -98,7 +99,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 password: document.getElementById('password').value,
                 noExpiry: document.getElementById('no-expiry').checked
             });
-            // This is the only place we should trust the result object fully
             if (!result || !result.token) {
                 throw new Error('从服务器返回的响应无效');
             }
@@ -121,7 +121,6 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const data = await apiRequest('/data');
             
-            // For admins, the full user list is in data.users. Update currentUser from there.
             if(data.users && data.users[currentUser.username]){
                 currentUser = data.users[currentUser.username];
             }
@@ -129,7 +128,6 @@ document.addEventListener('DOMContentLoaded', () => {
             allCategories = data.categories || [];
             allBookmarks = data.bookmarks || [];
 
-            // Update UI based on granular permissions
             document.getElementById('add-bookmark-btn').style.display = currentUser?.permissions?.canEditBookmarks ? 'flex' : 'none';
             document.getElementById('manage-categories-btn').style.display = currentUser?.permissions?.canEditCategories ? 'block' : 'none';
             document.getElementById('user-management-btn').style.display = currentUser?.permissions?.canEditUsers ? 'flex' : 'none';
