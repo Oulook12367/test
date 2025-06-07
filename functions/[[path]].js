@@ -117,8 +117,15 @@ export async function onRequest(context) {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // ... 省略了其他路由判断逻辑 ...
-
+    const apiRoutePatterns = ['/login', '/data', '/bookmarks', '/change-password', '/users', '/categories'];
+    const isApiRequest = apiRoutePatterns.some(p => path.startsWith(p));
+    
+    if (!isApiRequest) {
+        return next();
+    }
+    
+    globalThis.JWT_SECRET_STRING = env.JWT_SECRET;
+    
     // Login (登录处理逻辑)
     if (path === '/login' && request.method === 'POST') {
         const { username, password, noExpiry } = await request.json();
