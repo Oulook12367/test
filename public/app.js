@@ -46,17 +46,40 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- State ---
     let allBookmarks = [], allCategories = [], allUsers = [], currentUser = null;
 
-    // --- API Helper ---
-    const apiRequest = async (endpoint, method = 'GET', body = null) => {
-        const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` };
-        const options = { method, headers };
-        if (body) options.body = JSON.stringify(body);
-        const response = await fetch(endpoint, options);
-        if (response.status === 204 || (response.headers.get('content-length') || '0') === '0') return null;
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || `请求失败: ${response.status}`);
-        return result;
-    };
+    // --- API Helper --- (替换原有函数)
+const apiRequest = async (endpoint, method = 'GET', body = null) => {
+    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` };
+    const options = { method, headers };
+    if (body) options.body = JSON.stringify(body);
+
+    const response = await fetch(endpoint, options);
+
+    // 首先，处理没有内容的成功响应 (e.g., DELETE success)
+    if (response.status === 204) {
+        return null;
+    }
+
+    let result;
+    try {
+        // 尝试将所有其他响应解析为 JSON
+        // 即使是错误响应(如401, 400)，后端通常也会返回JSON格式的错误信息
+        result = await response.json();
+    } catch (e) {
+        // 如果响应体为空或不是有效的JSON，这会捕获到错误
+        // 这意味着服务器行为不符合预期
+        throw new Error(`从服务器返回的响应无效，无法解析内容。`);
+    }
+
+    // 接下来，检查HTTP状态码是否表示成功
+    if (!response.ok) {
+        // 如果不成功 (e.g., 401, 403, 500)
+        // 从已解析的JSON中提取错误信息
+        throw new Error(result.error || `请求失败，状态码: ${response.status}`);
+    }
+
+    // 如果代码执行到这里，说明请求成功并且响应体是有效的JSON
+    return result;
+};
 
     // --- Theme Logic ---
     const applyTheme = (theme) => {
