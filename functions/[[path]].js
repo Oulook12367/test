@@ -2,14 +2,87 @@
 
 import { SignJWT, jwtVerify } from 'jose';
 
+// --- Helper Functions ---
 const JWT_SECRET = () => new TextEncoder().encode(globalThis.JWT_SECRET_STRING);
 
-const hashPassword = async (password) => { /* ... full function ... */ };
-const getSiteData = async (env) => { /* ... full function ... */ };
-const saveSiteData = async (env, data) => { /* ... full function ... */ };
-const authenticateRequest = async (request, env, requiredRole) => { /* ... full function ... */ };
-const jsonResponse = (data, status = 200) => { /* ... full function ... */ };
+const hashPassword = async (password) => {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+};
 
+const getSiteData = async (env) => {
+    let data = await env.NAVI_DATA.get('data', { type: 'json' });
+    if (!data || !data.categories || data.categories.length === 0) {
+        const adminPasswordHash = await hashPassword('admin123');
+        const defaultCatId = `cat-${Date.now()}`;
+        return {
+            users: {
+                'admin': {
+                    username: 'admin',
+                    passwordHash: adminPasswordHash,
+                    roles: ['admin'],
+                    permissions: { canSetNoExpiry: true, visibleCategories: [defaultCatId] }
+                }
+            },
+            categories: [{id: defaultCatId, name: '默认分类'}],
+            bookmarks: []
+        };
+    }
+    for (const user in data.users) {
+        if (!data.users[user].permissions) {
+            data.users[user].permissions = { visibleCategories: [] };
+        }
+    }
+    return data;
+};
+
+const saveSiteData = async (env, data) => {
+    const currentData = await env.NAVI_DATA.get('data');
+    if (currentData) {
+        const timestamp = new Date().toISOString();
+        await env.NAVI_BACKUPS.put(`backup-${timestamp}`, currentData);
+        const backups = await env.NAVI_BACKUPS.list({ prefix: "backup-" });
+        if (backups.keys.length > 10) {
+            const sortedKeys = backups.keys.sort((a, b) => a.name.localeCompare(b.name));
+            for (let i = 0; i < sortedKeys.length - 10; i++) {
+                await env.NAVI_BACKUPS.delete(sortedKeys[i].name);
+            }
+        }
+    }
+    await env.NAVI_DATA.put('data', JSON.stringify(data));
+};
+
+const authenticateRequest = async (request, env, requiredRole) => {
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return { error: '认证失败：缺少 Token', status: 401 };
+    }
+    const token = authHeader.substring(7);
+    try {
+        const { payload } = await jwtVerify(token, await JWT_SECRET());
+        if (!payload) { throw new Error("无效的 payload"); }
+        if (requiredRole && !payload.roles?.includes(requiredRole)) {
+            return { error: '权限不足', status: 403 };
+        }
+        return { payload };
+    } catch (e) {
+        return { error: '认证失败：无效或已过期的 Token', status: 401 };
+    }
+};
+
+const jsonResponse = (data, status = 200) => {
+    if (data === null) {
+        return new Response(null, { status: 204 });
+    }
+    return new Response(JSON.stringify(data), {
+        status: status,
+        headers: { 'Content-Type': 'application/json;charset=UTF-8' }
+    });
+};
+
+// --- Main Entry Point ---
 export async function onRequest(context) {
     const { request, env, next } = context;
     const url = new URL(request.url);
@@ -24,23 +97,149 @@ export async function onRequest(context) {
     
     globalThis.JWT_SECRET_STRING = env.JWT_SECRET;
     
-    // Login Route
-    if (path === '/login' && request.method === 'POST') { /* ... full logic ... */ }
+    // --- API Routes ---
     
-    // Get Data Route
-    if (path === '/data' && request.method === 'GET') { /* ... full logic ... */ }
+    // Login
+    if (path === '/login' && request.method === 'POST') {
+        const { username, password, noExpiry } = await request.json();
+        const data = await getSiteData(env);
+        const user = data.users[username];
+        if (!user) return jsonResponse({ error: '用户名或密码错误' }, 401);
+        const passwordHash = await hashPassword(password);
+        if (user.passwordHash !== passwordHash) return jsonResponse({ error: '用户名或密码错误' }, 401);
+        const payload = { sub: user.username, roles: user.roles };
+        const expirationTime = noExpiry && user.permissions?.canSetNoExpiry ? '365d' : '15m';
+        const token = await new SignJWT(payload).setProtectedHeader({ alg: 'HS256' }).setExpirationTime(expirationTime).sign(await JWT_SECRET());
+        return jsonResponse({ token, user: { username: user.username, roles: user.roles, permissions: user.permissions } });
+    }
+    
+    // Get Data
+    if (path === '/data' && request.method === 'GET') {
+        const authResult = await authenticateRequest(request, env);
+        if (authResult.error) return jsonResponse({ error: authResult.error }, authResult.status);
+        const { payload } = authResult;
+        const data = await getSiteData(env);
+        const currentUser = data.users[payload.sub];
+        if (payload.roles.includes('admin')) {
+            return jsonResponse(data);
+        }
+        const visibleCategories = data.categories.filter(cat => currentUser.permissions?.visibleCategories?.includes(cat.id));
+        const visibleCategoryIds = visibleCategories.map(cat => cat.id);
+        const visibleBookmarks = data.bookmarks.filter(bm => visibleCategoryIds.includes(bm.categoryId));
+        return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks, users: {} });
+    }
     
     // Bookmarks CRUD
-    if (path.startsWith('/bookmarks')) { /* ... full logic ... */ }
+    if (path.startsWith('/bookmarks')) {
+        const authResult = await authenticateRequest(request, env, 'admin');
+        if (authResult.error) return jsonResponse({ error: authResult.error }, authResult.status);
+        const data = await getSiteData(env);
+        if (request.method === 'POST' && path === '/bookmarks') {
+            const bookmark = await request.json();
+            bookmark.id = `bm-${Date.now()}`;
+            data.bookmarks.push(bookmark);
+            await saveSiteData(env, data);
+            return jsonResponse(bookmark, 201);
+        }
+        const id = path.split('/').pop();
+        const bookmarkIndex = data.bookmarks.findIndex(bm => bm.id === id);
+        if (bookmarkIndex === -1) return jsonResponse({ error: '书签未找到' }, 404);
+        if (request.method === 'PUT') {
+            const updatedBookmark = await request.json();
+            data.bookmarks[bookmarkIndex] = { ...data.bookmarks[bookmarkIndex], ...updatedBookmark };
+            await saveSiteData(env, data);
+            return jsonResponse(data.bookmarks[bookmarkIndex]);
+        }
+        if (request.method === 'DELETE') {
+            data.bookmarks.splice(bookmarkIndex, 1);
+            await saveSiteData(env, data);
+            return jsonResponse(null);
+        }
+    }
     
     // Change Password
-    if (path === '/change-password' && request.method === 'POST') { /* ... full logic ... */ }
+    if (path === '/change-password' && request.method === 'POST') {
+        const authResult = await authenticateRequest(request, env);
+        if (authResult.error) return jsonResponse(authResult, authResult.status);
+        const { oldPassword, newPassword } = await request.json();
+        if (!oldPassword || !newPassword || newPassword.length < 6) return jsonResponse({ error: '新密码无效或长度不足6位' }, 400);
+        const data = await getSiteData(env);
+        const username = authResult.payload.sub;
+        const user = data.users[username];
+        const oldPasswordHash = await hashPassword(oldPassword);
+        if (user.passwordHash !== oldPasswordHash) return jsonResponse({ error: '旧密码不正确' }, 403);
+        user.passwordHash = await hashPassword(newPassword);
+        await saveSiteData(env, data);
+        return jsonResponse({ success: true, message: '密码已成功更改' });
+    }
     
     // User Management
-    if (path.startsWith('/users')) { /* ... full logic ... */ }
+    if (path.startsWith('/users')) {
+        const authResult = await authenticateRequest(request, env, 'admin');
+        if (authResult.error) return jsonResponse(authResult, authResult.status);
+        const data = await getSiteData(env);
+        if (request.method === 'GET' && path === '/users') {
+            const safeUsers = Object.values(data.users).map(({ passwordHash, ...user }) => user);
+            return jsonResponse(safeUsers);
+        }
+        if (request.method === 'POST' && path === '/users') {
+            const { username, password, permissions } = await request.json();
+            if (!username || !password || data.users[username]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
+            data.users[username] = { username, passwordHash: await hashPassword(password), roles: ['user'], permissions: permissions || { visibleCategories: [] } };
+            await saveSiteData(env, data);
+            const { passwordHash, ...newUser } = data.users[username];
+            return jsonResponse(newUser, 201);
+        }
+        const username = path.split('/').pop();
+        const userToManage = data.users[username];
+        if (!userToManage) return jsonResponse({ error: '用户未找到' }, 404);
+        if (request.method === 'PUT') {
+            const { roles, permissions, password } = await request.json();
+            if (roles) userToManage.roles = roles;
+            if (permissions) userToManage.permissions = permissions;
+            if (password && password.length > 0) userToManage.passwordHash = await hashPassword(password);
+            await saveSiteData(env, data);
+            const { passwordHash, ...updatedUser } = userToManage;
+            return jsonResponse(updatedUser);
+        }
+        if (request.method === 'DELETE') {
+            if (username === 'admin') return jsonResponse({ error: '无法删除管理员账户' }, 403);
+            delete data.users[username];
+            await saveSiteData(env, data);
+            return jsonResponse(null);
+        }
+    }
     
     // Categories CRUD
-    if (path.startsWith('/categories')) { /* ... full logic ... */ }
+    if (path.startsWith('/categories')) {
+        const authResult = await authenticateRequest(request, env, 'admin');
+        if (authResult.error) return jsonResponse({ error: authResult.error }, authResult.status);
+        const data = await getSiteData(env);
+        if (request.method === 'POST' && path === '/categories') {
+            const { name } = await request.json();
+            if (!name || data.categories.find(c => c.name === name)) return jsonResponse({ error: '分类名称无效或已存在' }, 400);
+            const newCategory = { id: `cat-${Date.now()}`, name };
+            data.categories.push(newCategory);
+            await saveSiteData(env, data);
+            return jsonResponse(newCategory, 201);
+        }
+        const id = path.split('/').pop();
+        const categoryIndex = data.categories.findIndex(c => c.id === id);
+        if (categoryIndex === -1 && path !== '/categories') return jsonResponse({ error: '分类未找到' }, 404);
+        if (request.method === 'PUT') {
+            const { name } = await request.json();
+            if (!name) return jsonResponse({ error: '分类名称不能为空' }, 400);
+            data.categories[categoryIndex].name = name;
+            await saveSiteData(env, data);
+            return jsonResponse(data.categories[categoryIndex]);
+        }
+        if (request.method === 'DELETE') {
+            if (data.bookmarks.some(bm => bm.categoryId === id)) return jsonResponse({ error: '无法删除：该分类下仍有书签存在' }, 400);
+            data.categories.splice(categoryIndex, 1);
+            await saveSiteData(env, data);
+            return jsonResponse(null);
+        }
+    }
 
     return jsonResponse({ error: 'API endpoint not found' }, 404);
 }
