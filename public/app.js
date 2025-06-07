@@ -75,7 +75,6 @@ document.addEventListener('DOMContentLoaded', () => {
             appLayout.style.display = 'flex';
             try {
                 const payload = JSON.parse(atob(token.split('.')[1]));
-                // Temporary user object for initial UI, will be replaced by full data from /data
                 currentUser = { username: payload.sub, roles: payload.roles, permissions: {} }; 
             } catch (e) {
                 console.error("无法解码Token", e);
@@ -99,12 +98,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 password: document.getElementById('password').value,
                 noExpiry: document.getElementById('no-expiry').checked
             });
-
-            // FIX: Add a check to ensure result and result.token are valid
+            // This is the only place we should trust the result object fully
             if (!result || !result.token) {
                 throw new Error('从服务器返回的响应无效');
             }
-
             localStorage.setItem('jwt_token', result.token);
             currentUser = result.user; // Use the full user object from login response
             await checkLoginStatus();
@@ -123,8 +120,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const loadData = async () => {
         try {
             const data = await apiRequest('/data');
-            // The full user object with permissions is in the data object for admins
-            // For regular users, we need to get it from the login response.
+            
+            // For admins, the full user list is in data.users. Update currentUser from there.
             if(data.users && data.users[currentUser.username]){
                 currentUser = data.users[currentUser.username];
             }
