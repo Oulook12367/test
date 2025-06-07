@@ -12,25 +12,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const logoutButton = document.getElementById('logout-btn');
     const modalBackdrop = document.getElementById('modal-backdrop');
     const adminActions = document.getElementById('admin-actions');
-    const bookmarkModal = document.getElementById('bookmark-modal');
-    const bookmarkModalTitle = document.getElementById('bookmark-modal-title');
-    const bookmarkForm = document.getElementById('bookmark-form');
     const addBookmarkBtn = document.getElementById('add-bookmark-btn');
-    const changePasswordBtn = document.getElementById('change-password-btn');
-    const changePasswordModal = document.getElementById('change-password-modal');
-    const changePasswordForm = document.getElementById('change-password-form');
     const userManagementBtn = document.getElementById('user-management-btn');
+    const changePasswordBtn = document.getElementById('change-password-btn');
+    const manageCategoriesBtn = document.getElementById('manage-categories-btn');
+    
+    // Modals
+    const bookmarkModal = document.getElementById('bookmark-modal');
+    const changePasswordModal = document.getElementById('change-password-modal');
     const userManagementModal = document.getElementById('user-management-modal');
-    const userList = document.getElementById('user-list');
+    const categoryManagementModal = document.getElementById('category-management-modal');
+    const confirmModal = document.getElementById('confirm-modal');
+
+    // Forms
+    const bookmarkForm = document.getElementById('bookmark-form');
+    const changePasswordForm = document.getElementById('change-password-form');
     const userForm = document.getElementById('user-form');
+    const addCategoryForm = document.getElementById('add-category-form');
+
+    // Modal Internals
+    const bookmarkModalTitle = document.getElementById('bookmark-modal-title');
+    const userList = document.getElementById('user-list');
     const userFormTitle = document.getElementById('user-form-title');
     const userFormClearBtn = document.getElementById('user-form-clear-btn');
+    const userFormPermissions = document.getElementById('user-form-permissions');
     const userFormCategories = document.getElementById('user-form-categories');
-    const manageCategoriesBtn = document.getElementById('manage-categories-btn');
-    const categoryManagementModal = document.getElementById('category-management-modal');
     const categoryManagerList = document.getElementById('category-manager-list');
-    const addCategoryForm = document.getElementById('add-category-form');
-    const confirmModal = document.getElementById('confirm-modal');
     const confirmTitle = document.getElementById('confirm-title');
     const confirmText = document.getElementById('confirm-text');
     const confirmBtnYes = document.getElementById('confirm-btn-yes');
@@ -45,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const options = { method, headers };
         if (body) options.body = JSON.stringify(body);
         const response = await fetch(endpoint, options);
-        if (response.status === 204 || response.headers.get('content-length') === '0') return null;
+        if (response.status === 204 || (response.headers.get('content-length') || '0') === '0') return null;
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || `请求失败: ${response.status}`);
         return result;
@@ -68,7 +75,8 @@ document.addEventListener('DOMContentLoaded', () => {
             appLayout.style.display = 'flex';
             try {
                 const payload = JSON.parse(atob(token.split('.')[1]));
-                currentUser = { username: payload.sub, roles: payload.roles };
+                // Temporary user object for initial UI, will be replaced by full data from /data
+                currentUser = { username: payload.sub, roles: payload.roles, permissions: {} }; 
             } catch (e) {
                 console.error("无法解码Token", e);
                 localStorage.removeItem('jwt_token');
@@ -92,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 noExpiry: document.getElementById('no-expiry').checked
             });
             localStorage.setItem('jwt_token', result.token);
-            currentUser = result.user;
+            currentUser = result.user; // Use the full user object from login response
             await checkLoginStatus();
         } catch (error) {
             loginError.textContent = error.message;
@@ -105,17 +113,24 @@ document.addEventListener('DOMContentLoaded', () => {
         checkLoginStatus();
     });
 
-    // --- Data Loading & Rendering ---
+    // --- Data Loading & UI Rendering ---
     const loadData = async () => {
         try {
             const data = await apiRequest('/data');
+            // The full user object with permissions is in the data object for admins
+            // For regular users, we need to get it from the login response.
+            if(data.users && data.users[currentUser.username]){
+                currentUser = data.users[currentUser.username];
+            }
+
             allCategories = data.categories || [];
             allBookmarks = data.bookmarks || [];
-            if (currentUser?.roles.includes('admin')) {
-                document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'flex');
-            } else {
-                document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
-            }
+
+            // Update UI based on granular permissions
+            document.getElementById('add-bookmark-btn').style.display = currentUser?.permissions?.canEditBookmarks ? 'flex' : 'none';
+            document.getElementById('manage-categories-btn').style.display = currentUser?.permissions?.canEditCategories ? 'block' : 'none';
+            document.getElementById('user-management-btn').style.display = currentUser?.permissions?.canEditUsers ? 'flex' : 'none';
+            
             renderCategories();
             renderBookmarks();
         } catch (error) {
@@ -165,11 +180,11 @@ document.addEventListener('DOMContentLoaded', () => {
             card.rel = 'noopener noreferrer';
             const defaultIcon = `https://www.google.com/s2/favicons?domain=${new URL(bm.url).hostname}`;
             let actionsHTML = '';
-            if (currentUser?.roles.includes('admin')) {
+            if (currentUser?.permissions?.canEditBookmarks) {
                 actionsHTML = `<div class="bookmark-card-actions"><button class="edit-btn" title="编辑"><i class="fas fa-pencil-alt"></i></button><button class="delete-btn" title="删除"><i class="fas fa-trash-alt"></i></button></div>`;
             }
             card.innerHTML = `${actionsHTML}<h3><img src="${bm.icon || defaultIcon}" alt="" onerror="this.src='${defaultIcon}'; this.onerror=null;"> ${bm.name}</h3><p>${bm.description || ''}</p>`;
-            if (currentUser?.roles.includes('admin')) {
+            if (currentUser?.permissions?.canEditBookmarks) {
                 card.querySelector('.edit-btn').addEventListener('click', (e) => { e.preventDefault(); handleEditBookmark(bm); });
                 card.querySelector('.delete-btn').addEventListener('click', (e) => { e.preventDefault(); handleDeleteBookmark(bm); });
             }
@@ -204,14 +219,10 @@ document.addEventListener('DOMContentLoaded', () => {
             confirmTitle.textContent = title;
             confirmText.textContent = text;
             showModal(confirmModal);
-            const yesHandler = () => { hideAllModals(); resolve(true); cleanup(); };
-            const noHandler = () => { hideAllModals(); resolve(false); cleanup(); };
-            function cleanup() {
-                confirmBtnYes.removeEventListener('click', yesHandler);
-                confirmBtnNo.removeEventListener('click', noHandler);
-            }
-            confirmBtnYes.addEventListener('click', yesHandler);
-            confirmBtnNo.addEventListener('click', noHandler);
+            const yesHandler = () => { hideAllModals(); resolve(true); };
+            const noHandler = () => { hideAllModals(); resolve(false); };
+            confirmBtnYes.addEventListener('click', yesHandler, { once: true });
+            confirmBtnNo.addEventListener('click', noHandler, { once: true });
         });
     };
 
@@ -236,7 +247,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         showModal(bookmarkModal);
     };
-
     const handleDeleteBookmark = async (bookmark) => {
         if (await showConfirmDialog('确认删除', `您确定要删除书签 "${bookmark.name}" 吗？此操作无法撤销。`)) {
             try {
@@ -247,7 +257,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     };
-
     addBookmarkBtn.addEventListener('click', () => {
         bookmarkModalTitle.textContent = '添加新书签';
         bookmarkForm.reset();
@@ -256,6 +265,10 @@ document.addEventListener('DOMContentLoaded', () => {
         bookmarkForm.querySelector('#bm-id').value = '';
         const categorySelect = bookmarkForm.querySelector('#bm-category');
         categorySelect.innerHTML = '';
+        if (allCategories.length === 0) {
+            alert('请先创建一个分类！');
+            return;
+        }
         allCategories.forEach(cat => {
             const option = document.createElement('option');
             option.value = cat.id;
@@ -264,7 +277,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         showModal(bookmarkModal);
     });
-
     bookmarkForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const id = bookmarkForm.querySelector('#bm-id').value;
@@ -293,7 +305,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if(errorEl) errorEl.textContent = '';
         showModal(changePasswordModal);
     });
-
     changePasswordForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const passwordData = {
@@ -314,7 +325,6 @@ document.addEventListener('DOMContentLoaded', () => {
         showModal(userManagementModal);
         await renderUserManagementPanel();
     });
-
     const renderUserManagementPanel = async () => {
         try {
             allUsers = await apiRequest('/users');
@@ -341,7 +351,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if(errorEl) errorEl.textContent = error.message;
         }
     };
-    
     const populateUserForm = (user) => {
         userList.querySelector('.selected')?.classList.remove('selected');
         userList.querySelector(`li[data-username="${user.username}"]`).classList.add('selected');
@@ -355,13 +364,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const passwordInput = userForm.querySelector('#user-form-password');
         passwordInput.value = '';
         passwordInput.placeholder = "留空则不修改";
+
+        userFormPermissions.innerHTML = `
+            <div><input type="checkbox" id="perm-edit-bookmarks" ${user.permissions.canEditBookmarks ? 'checked' : ''}><label for="perm-edit-bookmarks">编辑书签</label></div>
+            <div><input type="checkbox" id="perm-edit-categories" ${user.permissions.canEditCategories ? 'checked' : ''}><label for="perm-edit-categories">编辑分类</label></div>
+            <div><input type="checkbox" id="perm-edit-users" ${user.permissions.canEditUsers ? 'checked' : ''}><label for="perm-edit-users">编辑用户</label></div>
+        `;
+        
         userFormCategories.innerHTML = '';
         allCategories.forEach(cat => {
             const isChecked = user.permissions?.visibleCategories?.includes(cat.id);
             userFormCategories.innerHTML += `<div><input type="checkbox" id="cat-perm-${cat.id}" value="${cat.id}" ${isChecked ? 'checked' : ''}><label for="cat-perm-${cat.id}">${cat.name}</label></div>`;
         });
     };
-
     const clearUserForm = () => {
         userList.querySelector('.selected')?.classList.remove('selected');
         userForm.reset();
@@ -373,13 +388,17 @@ document.addEventListener('DOMContentLoaded', () => {
         usernameInput.readOnly = false;
         usernameInput.placeholder = "新用户名";
         userForm.querySelector('#user-form-password').placeholder = "必填";
+        userFormPermissions.innerHTML = `
+            <div><input type="checkbox" id="perm-edit-bookmarks"><label for="perm-edit-bookmarks">编辑书签</label></div>
+            <div><input type="checkbox" id="perm-edit-categories"><label for="perm-edit-categories">编辑分类</label></div>
+            <div><input type="checkbox" id="perm-edit-users"><label for="perm-edit-users">编辑用户</label></div>
+        `;
         userFormCategories.innerHTML = '';
         allCategories.forEach(cat => {
             userFormCategories.innerHTML += `<div><input type="checkbox" id="cat-perm-${cat.id}" value="${cat.id}"><label for="cat-perm-${cat.id}">${cat.name}</label></div>`;
         });
     };
     userFormClearBtn.addEventListener('click', clearUserForm);
-
     userForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const username = userForm.querySelector('#user-form-username').value;
@@ -393,8 +412,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const visibleCategories = Array.from(userFormCategories.querySelectorAll('input:checked')).map(cb => cb.value);
-        const userData = { permissions: { visibleCategories } };
+        const permissions = {
+            canEditBookmarks: userForm.querySelector('#perm-edit-bookmarks').checked,
+            canEditCategories: userForm.querySelector('#perm-edit-categories').checked,
+            canEditUsers: userForm.querySelector('#perm-edit-users').checked,
+            visibleCategories: Array.from(userFormCategories.querySelectorAll('input:checked')).map(cb => cb.value)
+        };
+        
+        const userData = { permissions };
         if (password) userData.password = password;
 
         const endpoint = isEditing ? `/users/${hiddenUsername}` : `/users`;
@@ -414,7 +439,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderCategoryManagerList();
         showModal(categoryManagementModal);
     });
-
     const renderCategoryManagerList = () => {
         categoryManagerList.innerHTML = '';
         allCategories.forEach(cat => {
@@ -425,7 +449,6 @@ document.addEventListener('DOMContentLoaded', () => {
             categoryManagerList.appendChild(li);
         });
     };
-
     addCategoryForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const input = document.getElementById('new-category-name');
@@ -443,7 +466,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
-
     const handleEditCategory = async (category) => {
         const newName = prompt('输入新的分类名称:', category.name);
         if (newName && newName.trim() !== '' && newName.trim() !== category.name) {
@@ -458,7 +480,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     };
-    
     const handleDeleteCategory = async (category) => {
         if (await showConfirmDialog('确认删除分类', `确定要删除分类 "${category.name}" 吗？`)) {
             try {
