@@ -99,6 +99,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 password: document.getElementById('password').value,
                 noExpiry: document.getElementById('no-expiry').checked
             });
+
+            // FIX: Add a check to ensure result and result.token are valid
+            if (!result || !result.token) {
+                throw new Error('从服务器返回的响应无效');
+            }
+
             localStorage.setItem('jwt_token', result.token);
             currentUser = result.user; // Use the full user object from login response
             await checkLoginStatus();
