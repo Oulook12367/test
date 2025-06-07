@@ -21,15 +21,13 @@ const hashPassword = async (password, salt) => {
 const getSiteData = async (env) => {
     let data = await env.NAVI_DATA.get('data', { type: 'json' });
 
-    // 当数据不存在时，创建带有多级分类结构的默认数据
     if (!data || !data.users || !data.categories) {
         const adminSalt = generateSalt();
         const adminPasswordHash = await hashPassword('admin123', adminSalt);
-        
         const parentCatId = `cat-${Date.now()}`;
         const childCatId = `cat-${Date.now() + 1}`;
         const publicCatId = `cat-${Date.now() + 2}`;
-
+        
         data = {
             users: {
                 'admin': {
@@ -55,7 +53,8 @@ const getSiteData = async (env) => {
     }
 
     if (!data.users.public) {
-        const publicCatId = data.categories[0]?.id || `cat-${Date.now()}`;
+        const publicCatId = `cat-public-${Date.now()}`;
+        data.categories.push({ id: publicCatId, name: '公共分类', parentId: null });
         data.users.public = {
             username: 'public',
             roles: ['viewer'],
