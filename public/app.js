@@ -52,6 +52,29 @@ document.addEventListener('DOMContentLoaded', () => {
 const savedCollapsedState = localStorage.getItem('collapsedCategories');
 let collapsedCategories = savedCollapsedState ? new Set(JSON.parse(savedCollapsedState)) : new Set();
 
+
+
+// 【新增】递归获取所有子分类ID的辅助函数
+const getRecursiveCategoryIds = (initialIds) => {
+    const fullIdSet = new Set(initialIds);
+    const queue = [...initialIds];
+
+    while (queue.length > 0) {
+        const parentId = queue.shift();
+        const children = allCategories.filter(c => c.parentId === parentId);
+        for (const child of children) {
+            if (!fullIdSet.has(child.id)) {
+                fullIdSet.add(child.id);
+                queue.push(child.id);
+            }
+        }
+    }
+    return fullIdSet;
+};
+
+
+
+    
 // --- API Helper ---
     const apiRequest = async (endpoint, method = 'GET', body = null) => {
         const headers = { 'Content-Type': 'application/json' };
@@ -619,31 +642,41 @@ bookmarkForm.addEventListener('submit', async (e) => {
     };
 
 // 代码二 (app.js) 的修改
+// 代码二 (app.js) 的修改
 bulkDeleteCatBtn.addEventListener('click', () => {
     const checkedBoxes = categoryManagerList.querySelectorAll('input[type="checkbox"]:checked');
     const idsToDelete = Array.from(checkedBoxes).map(cb => cb.dataset.id);
+
     if (idsToDelete.length === 0) {
         return alert('请先选择要删除的分类。');
     }
-    showConfirm('确认强制删除', `确定要删除选中的 ${idsToDelete.length} 个分类吗？分类下的所有书签也将被一并删除！`, async () => {
+    
+    showConfirm('确认强制删除', `确定要删除选中的 ${idsToDelete.length} 个分类及其所有子分类吗？其下的所有书签也将被一并删除！`, async () => {
         const errorEl = document.getElementById('category-error-message');
         errorEl.textContent = '';
 
-        // --- 批量删除的乐观更新 ---
+        // --- 【修改】乐观更新逻辑 ---
         const originalCategories = [...allCategories];
         const originalBookmarks = [...allBookmarks];
 
-        // 立即从内存中删除
-        allCategories = allCategories.filter(c => !idsToDelete.includes(c.id));
-        allBookmarks = allBookmarks.filter(bm => !idsToDelete.includes(bm.categoryId));
-        renderUI(); // 立即刷新UI
+        // 1. 【重要】调用辅助函数，获取包含所有子孙后代的完整ID列表
+        const allIdsToDeleteSet = getRecursiveCategoryIds(idsToDelete);
+
+        // 2. 使用完整的ID Set来执行过滤，确保所有相关项都被移除
+        allCategories = allCategories.filter(c => !allIdsToDeleteSet.has(c.id));
+        allBookmarks = allBookmarks.filter(bm => !allIdsToDeleteSet.has(bm.categoryId));
+        
+        // 3. 立即刷新UI
+        renderUI(); 
         hideAllModals();
 
         try {
+            // API请求只发送用户最初选择的ID，后端会处理递归
             await apiRequest('categories', 'DELETE', { ids: idsToDelete });
         } catch (error) {
+            // 如果失败，则回滚前端状态
             alert(`删除失败: ${error.message}`);
-            allCategories = originalCategories; // 失败，回滚
+            allCategories = originalCategories;
             allBookmarks = originalBookmarks;
             renderUI();
         }
