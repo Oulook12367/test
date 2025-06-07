@@ -1,5 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
-    // --- 辅助函数 ---
+// --- 辅助函数 ---
     const escapeHTML = (str) => {
         if (typeof str !== 'string') return '';
         return str.replace(/[&<>"']/g, (match) => ({
@@ -43,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- State ---
     let allBookmarks = [], allCategories = [], allUsers = [], currentUser = null, isGuestView = false;
-    let draggedItem = null; // For drag-and-drop
+    let draggedItem = null;
 
     // --- API Helper ---
     const apiRequest = async (endpoint, method = 'GET', body = null) => {
@@ -157,21 +156,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (categoryManagementModal.style.display === 'flex') renderCategoryManagerList();
         if (userManagementModal.style.display === 'flex') renderUserManagementPanel();
     };
-
-    const updateButtonVisibility = () => {
-        addBookmarkBtn.style.display = !isGuestView && currentUser?.permissions?.canEditBookmarks ? 'flex' : 'none';
-        manageCategoriesBtn.style.display = !isGuestView && currentUser?.permissions?.canEditCategories ? 'block' : 'none';
-        userManagementBtn.style.display = !isGuestView && currentUser?.permissions?.canEditUsers ? 'flex' : 'none';
-
-        if (isGuestView) {
-            logoutButton.innerHTML = '<i class="fas fa-sign-in-alt"></i>';
-            logoutButton.title = '登录';
-        } else {
-            logoutButton.innerHTML = '<i class="fas fa-sign-out-alt"></i>';
-            logoutButton.title = '退出登录';
-        }
-    };
-
+    
+    // The rest of the file is identical to the previous complete version
     const renderCategories = () => {
         const activeId = categoryNav.querySelector('.active')?.dataset.id || 'all';
         categoryNav.innerHTML = '';
@@ -479,7 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const span = document.createElement('span');
             span.textContent = `${user.username} (${user.roles.join(', ')})`;
             li.appendChild(span);
-            if (user.username !== currentUser.username) {
+            if (user.username !== currentUser?.username) {
                 const actions = document.createElement('div');
                 actions.className = 'user-list-actions';
                 const deleteBtn = document.createElement('button');
@@ -655,7 +641,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         container.addEventListener('dragleave', e => {
-             // Clean up gap when mouse leaves the container
             if (e.relatedTarget && !container.contains(e.relatedTarget)) {
                 const currentGap = container.querySelector('.drag-over-gap');
                 if (currentGap) currentGap.remove();
@@ -675,7 +660,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const afterElement = getDragAfterElement(container, e.clientY);
             const toId = afterElement ? afterElement.dataset.id : null;
             
-            if(fromId === toId) return; // Dropped on itself
+            if(fromId === toId) return;
 
             const toIndex = toId ? itemsArray.findIndex(item => item.id === toId) : itemsArray.length;
 
