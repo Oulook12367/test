@@ -253,17 +253,43 @@ export async function onRequest(context) {
         if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
         // const data = await getSiteData(env); // 已被上面的统一逻辑取代
         const id = apiPath.split('/').pop();
-        if (request.method === 'DELETE' && apiPath === 'categories') {
-            const { ids } = await request.json();
-            if (!ids || !Array.isArray(ids)) return jsonResponse({ error: '无效的请求' }, 400);
-            data.bookmarks = data.bookmarks.filter(bm => !ids.includes(bm.categoryId));
-            data.categories = data.categories.filter(c => !ids.includes(c.id));
-            Object.values(data.users).forEach(user => {
-                user.permissions.visibleCategories = user.permissions.visibleCategories.filter(catId => !ids.includes(catId));
-            });
-            await saveSiteData(env, data);
-            return jsonResponse(null);
+if (request.method === 'DELETE' && apiPath === 'categories') {
+    const { ids } = await request.json();
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return jsonResponse({ error: '无效的请求' }, 400);
+    }
+
+    // --- 【新增】递归查找所有需要删除的分类ID ---
+    const allCategoryIdsToDelete = new Set(ids);
+    const queue = [...ids]; // 使用队列来进行广度优先搜索
+
+    while (queue.length > 0) {
+        const parentId = queue.shift(); // 取出队列中的一个父分类ID
+        // 查找其所有直接子分类
+        const children = data.categories.filter(c => c.parentId === parentId);
+        for (const child of children) {
+            if (!allCategoryIdsToDelete.has(child.id)) {
+                allCategoryIdsToDelete.add(child.id);
+                queue.push(child.id); // 将新的子分类ID加入队列，继续查找其后代
+            }
         }
+    }
+
+    const finalIdsToDelete = Array.from(allCategoryIdsToDelete);
+
+    // --- 【修改】使用完整的ID列表进行过滤删除 ---
+    // 1. 删除所有相关分类下的书签
+    data.bookmarks = data.bookmarks.filter(bm => !finalIdsToDelete.includes(bm.categoryId));
+    // 2. 删除所有相关分类自身
+    data.categories = data.categories.filter(c => !finalIdsToDelete.includes(c.id));
+    // 3. 从所有用户的权限中移除这些分类的访问权
+    Object.values(data.users).forEach(user => {
+        user.permissions.visibleCategories = user.permissions.visibleCategories.filter(catId => !finalIdsToDelete.includes(catId));
+    });
+
+    await saveSiteData(env, data);
+    return jsonResponse(null);
+}
         if (request.method === 'PUT' && id) {
             const { name } = await request.json();
             if (!name || name.trim() === '') return jsonResponse({ error: '分类名称不能为空' }, 400);
