@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- (新增) 辅助函数 ---
+    // --- 辅助函数 ---
     const escapeHTML = (str) => {
         if (typeof str !== 'string') return '';
         return str.replace(/[&<>"']/g, (match) => ({
@@ -22,8 +22,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const addBookmarkBtn = document.getElementById('add-bookmark-btn');
     const userManagementBtn = document.getElementById('user-management-btn');
     const manageCategoriesBtn = document.getElementById('manage-categories-btn');
-    
-    // Modals & Forms
     const bookmarkModal = document.getElementById('bookmark-modal');
     const userManagementModal = document.getElementById('user-management-modal');
     const categoryManagementModal = document.getElementById('category-management-modal');
@@ -31,23 +29,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const bookmarkForm = document.getElementById('bookmark-form');
     const userForm = document.getElementById('user-form');
     const addCategoryForm = document.getElementById('add-category-form');
-
-    // Modal Internals
     const bookmarkModalTitle = document.getElementById('bookmark-modal-title');
     const userList = document.getElementById('user-list');
     const userFormTitle = document.getElementById('user-form-title');
     const userFormClearBtn = document.getElementById('user-form-clear-btn');
-    const userFormRoles = document.getElementById('user-form-permissions'); // Corrected variable name
+    const userFormRoles = document.getElementById('user-form-roles');
     const userFormCategories = document.getElementById('user-form-categories');
     const categoryManagerList = document.getElementById('category-manager-list');
     const confirmTitle = document.getElementById('confirm-title');
     const confirmText = document.getElementById('confirm-text');
     const confirmBtnYes = document.getElementById('confirm-btn-yes');
+    const bulkDeleteCatBtn = document.getElementById('bulk-delete-cat-btn');
 
     // --- State ---
     let allBookmarks = [], allCategories = [], allUsers = [], currentUser = null;
 
-    // --- (已修复) API Helper ---
+    // --- API Helper ---
     const apiRequest = async (endpoint, method = 'GET', body = null) => {
         const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('jwt_token')}` };
         const options = { method, headers };
@@ -68,16 +65,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Theme Logic ---
     const applyTheme = (theme) => {
+        const currentClass = document.body.className;
         document.body.className = theme;
-        if (document.body.classList.contains('is-loading')) {
-            document.body.classList.remove('is-loading');
+        if(currentClass.includes('is-loading')) {
+            document.body.classList.add('is-loading');
         }
         themeToggleButton.innerHTML = theme === 'dark-theme' ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
         localStorage.setItem('theme', theme);
     };
     themeToggleButton.addEventListener('click', () => {
-        const currentTheme = document.body.classList.contains('dark-theme') ? 'dark-theme' : 'light-theme';
-        const newTheme = currentTheme === 'light-theme' ? 'dark-theme' : 'light-theme';
+        const newTheme = document.body.classList.contains('light-theme') ? 'dark-theme' : 'light-theme';
         applyTheme(newTheme);
     });
 
@@ -86,9 +83,9 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const token = localStorage.getItem('jwt_token');
             if (token) {
+                await loadData();
                 loginContainer.style.display = 'none';
                 appLayout.style.display = 'flex';
-                await loadData();
             } else {
                 loginContainer.style.display = 'block';
                 appLayout.style.display = 'none';
@@ -96,12 +93,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (error) {
             console.error("Authentication check failed:", error);
+            localStorage.removeItem('jwt_token');
             loginContainer.style.display = 'block';
             appLayout.style.display = 'none';
             currentUser = null;
         } finally {
-            const theme = localStorage.getItem('theme') || 'light-theme';
-            applyTheme(theme);
+            document.body.classList.remove('is-loading');
         }
     };
 
@@ -113,7 +110,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 username: document.getElementById('username').value,
                 password: document.getElementById('password').value,
             });
-            if (!result || !result.token) throw new Error('从服务器返回的响应无效');
             localStorage.setItem('jwt_token', result.token);
             await checkLoginStatus();
         } catch (error) {
@@ -128,32 +124,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Data Loading & UI Rendering ---
     const loadData = async () => {
-        try {
-            const data = await apiRequest('data');
-            const tokenPayload = JSON.parse(atob(localStorage.getItem('jwt_token').split('.')[1]));
-            
-            allCategories = data.categories || [];
-            allBookmarks = data.bookmarks || [];
-            allUsers = data.users || [];
-            currentUser = allUsers.find(u => u.username === tokenPayload.sub);
-            
-            if (!currentUser) throw new Error("无法验证当前用户身份。");
+        const data = await apiRequest('data');
+        const tokenPayload = JSON.parse(atob(localStorage.getItem('jwt_token').split('.')[1]));
+        
+        allCategories = data.categories || [];
+        allBookmarks = data.bookmarks || [];
+        allUsers = data.users || [];
+        currentUser = allUsers.find(u => u.username === tokenPayload.sub);
+        
+        if (!currentUser) throw new Error("无法验证当前用户身份，请重新登录。");
 
-            renderUI();
-        } catch (error) {
-            console.error('数据加载错误:', error);
-            if (error.message.includes('401') || error.message.includes('无法验证')) {
-                localStorage.removeItem('jwt_token');
-                checkLoginStatus();
-            }
-        }
+        renderUI();
     };
     
     const renderUI = () => {
-        renderCategories();
-        renderBookmarks();
         updateButtonVisibility();
-        // If modals are open, refresh their content
+        renderCategories();
+        renderBookmarks(categoryNav.querySelector('.active')?.dataset.id || 'all', localSearchInput.value);
         if (categoryManagementModal.style.display === 'flex') renderCategoryManagerList();
         if (userManagementModal.style.display === 'flex') renderUserManagementPanel();
     };
@@ -164,13 +151,12 @@ document.addEventListener('DOMContentLoaded', () => {
         userManagementBtn.style.display = currentUser?.permissions?.canEditUsers ? 'flex' : 'none';
     };
 
-    // ... (renderCategories and renderBookmarks functions are unchanged, they can be copied from previous response)
     const renderCategories = () => {
+        const activeId = categoryNav.querySelector('.active')?.dataset.id || 'all';
         categoryNav.innerHTML = '';
         const allLi = document.createElement('li');
         allLi.innerHTML = `<i class="fas fa-inbox"></i><span>全部书签</span>`;
         allLi.dataset.id = 'all';
-        allLi.classList.add('active');
         categoryNav.appendChild(allLi);
 
         allCategories.forEach(cat => {
@@ -179,16 +165,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const icon = document.createElement('i');
             icon.className = 'fas fa-folder';
             const span = document.createElement('span');
-            span.textContent = cat.name; // 安全
-            li.appendChild(icon);
-            li.appendChild(span);
+            span.textContent = cat.name;
+            li.append(icon, span);
             categoryNav.appendChild(li);
         });
         
+        const newActiveLi = categoryNav.querySelector(`li[data-id="${activeId}"]`) || categoryNav.querySelector(`li[data-id="all"]`);
+        newActiveLi.classList.add('active');
+
         categoryNav.querySelectorAll('li').forEach(li => li.addEventListener('click', (e) => {
             categoryNav.querySelector('.active')?.classList.remove('active');
             e.currentTarget.classList.add('active');
-            renderBookmarks(e.currentTarget.dataset.id);
+            renderBookmarks(e.currentTarget.dataset.id, localSearchInput.value);
         }));
     };
     
@@ -200,36 +188,35 @@ document.addEventListener('DOMContentLoaded', () => {
             filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lower) || bm.url.toLowerCase().includes(lower));
         }
 
+        if(filteredBookmarks.length === 0){
+            bookmarksGrid.innerHTML = '<p class="empty-message">这里什么都没有...</p>';
+            return;
+        }
+
         filteredBookmarks.forEach(bm => {
             const card = document.createElement('a');
             card.href = bm.url;
             card.className = 'bookmark-card';
             card.target = '_blank';
             card.rel = 'noopener noreferrer';
-
             const defaultIcon = `https://www.google.com/s2/favicons?domain=${new URL(bm.url).hostname}`;
             
             const img = document.createElement('img');
             img.src = bm.icon || defaultIcon;
             img.alt = "";
             img.onerror = function() { this.src=defaultIcon; this.onerror=null; };
-            
             const h3 = document.createElement('h3');
-            h3.appendChild(img);
-            h3.appendChild(document.createTextNode(' ' + bm.name)); // 安全
-
+            h3.append(img, document.createTextNode(' ' + bm.name));
             const p = document.createElement('p');
-            p.textContent = bm.description || ''; // 安全
-
+p.textContent = bm.description || '';
             card.append(h3, p);
-
             if (currentUser?.permissions?.canEditBookmarks) {
                 const actions = document.createElement('div');
                 actions.className = 'bookmark-card-actions';
                 const editBtn = document.createElement('button');
                 editBtn.title = '编辑';
                 editBtn.innerHTML = '<i class="fas fa-pencil-alt"></i>';
-                editBtn.addEventListener('click', (e) => { e.preventDefault(); /* handleEditBookmark(bm); */ });
+                // editBtn.addEventListener('click', (e) => { e.preventDefault(); handleEditBookmark(bm); });
                 const deleteBtn = document.createElement('button');
                 deleteBtn.title = '删除';
                 deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
@@ -240,8 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
             bookmarksGrid.appendChild(card);
         });
     };
-    // --- End of unchanged render functions ---
-
+    
     // --- Search Logic ---
     localSearchInput.addEventListener('keyup', (e) => {
         const term = e.target.value;
@@ -266,8 +252,62 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     document.getElementById('confirm-btn-no').onclick = hideAllModals;
 
+    // --- Bookmark Logic ---
+    addBookmarkBtn.addEventListener('click', () => {
+        bookmarkModalTitle.textContent = '添加新书签';
+        bookmarkForm.reset();
+        bookmarkForm.querySelector('.modal-error-message').textContent = '';
+        bookmarkForm.querySelector('#bm-id').value = '';
+        const categorySelect = bookmarkForm.querySelector('#bm-category');
+        categorySelect.innerHTML = '';
+        
+        const creatableCategories = allCategories.filter(cat => currentUser.permissions.visibleCategories.includes(cat.id));
+        if (creatableCategories.length === 0) {
+            alert('没有可添加书签的分类！请先创建分类，或在用户管理中获取分类权限。');
+            return;
+        }
+        creatableCategories.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat.id;
+            option.textContent = cat.name;
+            categorySelect.appendChild(option);
+        });
+        showModal(bookmarkModal);
+    });
+
+    const handleDeleteBookmark = (bookmark) => {
+        showConfirm('确认删除', `您确定要删除书签 "${escapeHTML(bookmark.name)}" 吗？`, async () => {
+            try {
+                await apiRequest(`bookmarks/${bookmark.id}`, 'DELETE');
+                await loadData();
+            } catch (error) { alert(`删除失败: ${error.message}`); }
+        });
+    };
+
+    bookmarkForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = bookmarkForm.querySelector('#bm-id').value;
+        const method = id ? 'PUT' : 'POST';
+        const endpoint = id ? `bookmarks/${id}` : 'bookmarks';
+        const data = {
+            name: bookmarkForm.querySelector('#bm-name').value,
+            url: bookmarkForm.querySelector('#bm-url').value,
+            description: bookmarkForm.querySelector('#bm-desc').value,
+            icon: bookmarkForm.querySelector('#bm-icon').value,
+            categoryId: bookmarkForm.querySelector('#bm-category').value,
+        };
+        try {
+            await apiRequest(endpoint, method, data);
+            hideAllModals();
+            await loadData();
+        } catch (error) {
+            bookmarkForm.querySelector('.modal-error-message').textContent = error.message;
+        }
+    });
+
     // --- Category Management ---
     manageCategoriesBtn.addEventListener('click', () => {
+        document.getElementById('category-error-message').textContent = '';
         renderCategoryManagerList();
         showModal(categoryManagementModal);
     });
@@ -276,43 +316,50 @@ document.addEventListener('DOMContentLoaded', () => {
         categoryManagerList.innerHTML = '';
         allCategories.forEach(cat => {
             const li = document.createElement('li');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = `del-cat-${cat.id}`;
+            checkbox.dataset.id = cat.id;
             const span = document.createElement('span');
             span.className = 'category-name';
             span.textContent = cat.name;
-            
-            const actions = document.createElement('div');
-            actions.className = 'category-item-actions';
-            const deleteBtn = document.createElement('button');
-            deleteBtn.title = '删除';
-            deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
-            deleteBtn.onclick = () => handleDeleteCategory(cat);
-            
-            actions.appendChild(deleteBtn);
-            li.append(span, actions);
+            li.append(checkbox, span);
             categoryManagerList.appendChild(li);
         });
     };
 
+    bulkDeleteCatBtn.addEventListener('click', () => {
+        const checkedBoxes = categoryManagerList.querySelectorAll('input[type="checkbox"]:checked');
+        const idsToDelete = Array.from(checkedBoxes).map(cb => cb.dataset.id);
+        if (idsToDelete.length === 0) {
+            alert('请先选择要删除的分类。');
+            return;
+        }
+        showConfirm('确认批量删除', `确定要删除选中的 ${idsToDelete.length} 个分类吗？`, async () => {
+            const errorEl = document.getElementById('category-error-message');
+            errorEl.textContent = '';
+            try {
+                await apiRequest('categories', 'DELETE', { ids: idsToDelete });
+                await loadData();
+            } catch (error) {
+                errorEl.textContent = error.message;
+            }
+        });
+    });
+
     addCategoryForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const input = document.getElementById('new-category-name');
+        const errorEl = document.getElementById('category-error-message');
+        errorEl.textContent = '';
         try {
             await apiRequest('categories', 'POST', { name: input.value.trim() });
             input.value = '';
             await loadData();
-        } catch (error) { alert(`添加失败: ${error.message}`); }
+        } catch (error) { errorEl.textContent = error.message; }
     });
-    
-    const handleDeleteCategory = (category) => {
-        showConfirm('确认删除分类', `确定要删除分类 "${escapeHTML(category.name)}" 吗？`, async () => {
-            try {
-                await apiRequest(`categories/${category.id}`, 'DELETE');
-                await loadData();
-            } catch (error) { alert(`删除失败: ${error.message}`); }
-        });
-    };
 
-    // --- User Management (Fully Implemented) ---
+    // --- User Management ---
     userManagementBtn.addEventListener('click', () => {
         renderUserManagementPanel();
         showModal(userManagementModal);
@@ -326,7 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const span = document.createElement('span');
             span.textContent = `${user.username} (${user.roles.join(', ')})`;
             li.appendChild(span);
-            if (user.username !== 'admin' && user.username !== currentUser.username) {
+            if (user.username !== currentUser.username) {
                 const actions = document.createElement('div');
                 actions.className = 'user-list-actions';
                 const deleteBtn = document.createElement('button');
@@ -335,8 +382,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 deleteBtn.onclick = (e) => {
                     e.stopPropagation();
                     showConfirm('确认删除用户', `确定删除用户 "${escapeHTML(user.username)}"?`, async () => {
-                        await apiRequest(`users/${user.username}`, 'DELETE');
-                        await loadData();
+                        try {
+                            await apiRequest(`users/${user.username}`, 'DELETE');
+                            await loadData();
+                        } catch (error) { alert(error.message); }
                     });
                 };
                 actions.appendChild(deleteBtn);
@@ -358,8 +407,6 @@ document.addEventListener('DOMContentLoaded', () => {
         usernameInput.readOnly = false;
         userForm.querySelector('#user-form-username-hidden').value = '';
         userForm.querySelector('#user-form-password').placeholder = "必填";
-        
-        // Render roles and categories for a new user
         renderUserFormRoles();
         renderUserFormCategories();
     };
@@ -375,15 +422,13 @@ document.addEventListener('DOMContentLoaded', () => {
         usernameInput.readOnly = true;
         userForm.querySelector('#user-form-username-hidden').value = user.username;
         userForm.querySelector('#user-form-password').placeholder = "留空则不修改";
-
         renderUserFormRoles(user.roles);
         renderUserFormCategories(user.permissions.visibleCategories);
     };
 
     const renderUserFormRoles = (activeRoles = []) => {
         userFormRoles.innerHTML = '';
-        const availableRoles = ['admin', 'editor', 'viewer'];
-        availableRoles.forEach(role => {
+        ['admin', 'editor', 'viewer'].forEach(role => {
             const id = `role-${role}`;
             const div = document.createElement('div');
             const input = document.createElement('input');
@@ -393,7 +438,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (activeRoles.includes(role)) input.checked = true;
             const label = document.createElement('label');
             label.htmlFor = id;
-            label.textContent = role.charAt(0).toUpperCase() + role.slice(1); // Capitalize
+            label.textContent = role.charAt(0).toUpperCase() + role.slice(1);
             div.append(input, label);
             userFormRoles.appendChild(div);
         });
@@ -447,12 +492,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!isEditing) userData.username = username;
 
         try {
-            await apiRequest(endpoint, method, userData);
-            await loadData(); // Reload all data to ensure consistency
+            const updatedUser = await apiRequest(endpoint, method, userData);
+            await loadData();
             if (isEditing) {
-                // After editing, re-populate the form with updated data
-                const updatedUser = allUsers.find(u => u.username === hiddenUsername);
-                if(updatedUser) populateUserForm(updatedUser);
+                populateUserForm(updatedUser);
             } else {
                 clearUserForm();
             }
@@ -462,5 +505,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Initial Load ---
+    applyTheme(localStorage.getItem('theme') || 'light-theme');
     checkLoginStatus();
 });
