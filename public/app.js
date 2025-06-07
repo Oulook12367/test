@@ -11,22 +11,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const categoryNav = document.getElementById('category-nav');
     const logoutButton = document.getElementById('logout-btn');
     const modalBackdrop = document.getElementById('modal-backdrop');
-
-    // Admin Elements
     const adminActions = document.getElementById('admin-actions');
-    
-    // Bookmark Modal Elements
     const bookmarkModal = document.getElementById('bookmark-modal');
     const bookmarkModalTitle = document.getElementById('bookmark-modal-title');
     const bookmarkForm = document.getElementById('bookmark-form');
     const addBookmarkBtn = document.getElementById('add-bookmark-btn');
-
-    // Change Password Elements
     const changePasswordBtn = document.getElementById('change-password-btn');
     const changePasswordModal = document.getElementById('change-password-modal');
     const changePasswordForm = document.getElementById('change-password-form');
-    
-    // User Management Elements
     const userManagementBtn = document.getElementById('user-management-btn');
     const userManagementModal = document.getElementById('user-management-modal');
     const userList = document.getElementById('user-list');
@@ -34,14 +26,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const userFormTitle = document.getElementById('user-form-title');
     const userFormClearBtn = document.getElementById('user-form-clear-btn');
     const userFormCategories = document.getElementById('user-form-categories');
-
-    // Category Management Elements
     const manageCategoriesBtn = document.getElementById('manage-categories-btn');
     const categoryManagementModal = document.getElementById('category-management-modal');
     const categoryManagerList = document.getElementById('category-manager-list');
     const addCategoryForm = document.getElementById('add-category-form');
-
-    // Confirm Dialog Elements
     const confirmModal = document.getElementById('confirm-modal');
     const confirmTitle = document.getElementById('confirm-title');
     const confirmText = document.getElementById('confirm-text');
@@ -69,26 +57,22 @@ document.addEventListener('DOMContentLoaded', () => {
         themeToggleButton.innerHTML = theme === 'dark-theme' ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
         localStorage.setItem('theme', theme);
     };
-    themeToggleButton.addEventListener('click', () => {
-        applyTheme(document.body.classList.contains('light-theme') ? 'dark-theme' : 'light-theme');
-    });
+    themeToggleButton.addEventListener('click', () => applyTheme(document.body.classList.contains('light-theme') ? 'dark-theme' : 'light-theme'));
 
     // --- Authentication ---
     const getToken = () => localStorage.getItem('jwt_token');
-
     const checkLoginStatus = async () => {
-        if (getToken()) {
+        const token = getToken();
+        if (token) {
             loginContainer.style.display = 'none';
             appLayout.style.display = 'flex';
-            // Simple decode to get user info without verification, for UI purposes only.
             try {
-                const payload = JSON.parse(atob(getToken().split('.')[1]));
+                const payload = JSON.parse(atob(token.split('.')[1]));
                 currentUser = { username: payload.sub, roles: payload.roles };
             } catch (e) {
-                console.error("Could not decode token", e);
+                console.error("无法解码Token", e);
                 localStorage.removeItem('jwt_token');
-                checkLoginStatus(); // Re-check to show login page
-                return;
+                checkLoginStatus(); return;
             }
             await loadData();
         } else {
@@ -127,7 +111,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await apiRequest('/data');
             allCategories = data.categories || [];
             allBookmarks = data.bookmarks || [];
-            
             if (currentUser?.roles.includes('admin')) {
                 document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'flex');
             } else {
@@ -136,8 +119,8 @@ document.addEventListener('DOMContentLoaded', () => {
             renderCategories();
             renderBookmarks();
         } catch (error) {
-            console.error('Data loading error:', error);
-            if (error.message.includes('401')) { // Token expired or invalid
+            console.error('数据加载错误:', error);
+            if (error.message.includes('401')) {
                 localStorage.removeItem('jwt_token');
                 checkLoginStatus();
             }
@@ -151,14 +134,12 @@ document.addEventListener('DOMContentLoaded', () => {
         allLi.dataset.id = 'all';
         allLi.classList.add('active');
         categoryNav.appendChild(allLi);
-
         allCategories.forEach(cat => {
             const li = document.createElement('li');
             li.innerHTML = `<i class="fas fa-folder"></i><span>${cat.name}</span>`;
             li.dataset.id = cat.id;
             categoryNav.appendChild(li);
         });
-
         categoryNav.querySelectorAll('li').forEach(li => {
             li.addEventListener('click', () => {
                 categoryNav.querySelector('.active')?.classList.remove('active');
@@ -172,38 +153,22 @@ document.addEventListener('DOMContentLoaded', () => {
         bookmarksGrid.innerHTML = '';
         let filteredBookmarks = allBookmarks;
         if (categoryId !== 'all') filteredBookmarks = allBookmarks.filter(bm => bm.categoryId === categoryId);
-        
         if (searchTerm) {
             const lowerCaseSearchTerm = searchTerm.toLowerCase();
-            filteredBookmarks = filteredBookmarks.filter(bm => 
-                bm.name.toLowerCase().includes(lowerCaseSearchTerm) || 
-                bm.url.toLowerCase().includes(lowerCaseSearchTerm)
-            );
+            filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lowerCaseSearchTerm) || bm.url.toLowerCase().includes(lowerCaseSearchTerm));
         }
-
         filteredBookmarks.forEach(bm => {
             const card = document.createElement('a');
             card.href = bm.url;
             card.className = 'bookmark-card';
             card.target = '_blank';
             card.rel = 'noopener noreferrer';
-            
             const defaultIcon = `https://www.google.com/s2/favicons?domain=${new URL(bm.url).hostname}`;
             let actionsHTML = '';
             if (currentUser?.roles.includes('admin')) {
-                actionsHTML = `
-                    <div class="bookmark-card-actions">
-                        <button class="edit-btn" title="编辑"><i class="fas fa-pencil-alt"></i></button>
-                        <button class="delete-btn" title="删除"><i class="fas fa-trash-alt"></i></button>
-                    </div>`;
+                actionsHTML = `<div class="bookmark-card-actions"><button class="edit-btn" title="编辑"><i class="fas fa-pencil-alt"></i></button><button class="delete-btn" title="删除"><i class="fas fa-trash-alt"></i></button></div>`;
             }
-
-            card.innerHTML = `
-                ${actionsHTML}
-                <h3><img src="${bm.icon || defaultIcon}" alt="" onerror="this.src='${defaultIcon}'; this.onerror=null;"> ${bm.name}</h3>
-                <p>${bm.description || ''}</p>
-            `;
-            
+            card.innerHTML = `${actionsHTML}<h3><img src="${bm.icon || defaultIcon}" alt="" onerror="this.src='${defaultIcon}'; this.onerror=null;"> ${bm.name}</h3><p>${bm.description || ''}</p>`;
             if (currentUser?.roles.includes('admin')) {
                 card.querySelector('.edit-btn').addEventListener('click', (e) => { e.preventDefault(); handleEditBookmark(bm); });
                 card.querySelector('.delete-btn').addEventListener('click', (e) => { e.preventDefault(); handleDeleteBookmark(bm); });
@@ -218,8 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const activeCategoryId = categoryNav.querySelector('.active')?.dataset.id || 'all';
         renderBookmarks(activeCategoryId, searchTerm);
         if (e.key === 'Enter' && searchTerm.trim() !== '') {
-            const searchURL = searchEngineSelect.value + encodeURIComponent(searchTerm);
-            window.open(searchURL, '_blank');
+            window.open(searchEngineSelect.value + encodeURIComponent(searchTerm), '_blank');
         }
     });
 
@@ -240,25 +204,27 @@ document.addEventListener('DOMContentLoaded', () => {
             confirmTitle.textContent = title;
             confirmText.textContent = text;
             showModal(confirmModal);
-            
-            const yesHandler = () => { hideAllModals(); resolve(true); };
-            const noHandler = () => { hideAllModals(); resolve(false); };
-            
-            confirmBtnYes.addEventListener('click', yesHandler, { once: true });
-            confirmBtnNo.addEventListener('click', noHandler, { once: true });
+            const yesHandler = () => { hideAllModals(); resolve(true); cleanup(); };
+            const noHandler = () => { hideAllModals(); resolve(false); cleanup(); };
+            function cleanup() {
+                confirmBtnYes.removeEventListener('click', yesHandler);
+                confirmBtnNo.removeEventListener('click', noHandler);
+            }
+            confirmBtnYes.addEventListener('click', yesHandler);
+            confirmBtnNo.addEventListener('click', noHandler);
         });
     };
 
     // --- Feature Logic: Bookmarks ---
     const handleEditBookmark = (bookmark) => {
         bookmarkModalTitle.textContent = '编辑书签';
-        bookmarkForm.querySelector('.modal-error-message').textContent = '';
+        const errorEl = bookmarkForm.querySelector('.modal-error-message');
+        if(errorEl) errorEl.textContent = '';
         bookmarkForm.querySelector('#bm-id').value = bookmark.id;
         bookmarkForm.querySelector('#bm-name').value = bookmark.name;
         bookmarkForm.querySelector('#bm-url').value = bookmark.url;
         bookmarkForm.querySelector('#bm-desc').value = bookmark.description || '';
         bookmarkForm.querySelector('#bm-icon').value = bookmark.icon || '';
-        
         const categorySelect = bookmarkForm.querySelector('#bm-category');
         categorySelect.innerHTML = '';
         allCategories.forEach(cat => {
@@ -272,8 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const handleDeleteBookmark = async (bookmark) => {
-        const confirmed = await showConfirmDialog('确认删除', `您确定要删除书签 "${bookmark.name}" 吗？此操作无法撤销。`);
-        if (confirmed) {
+        if (await showConfirmDialog('确认删除', `您确定要删除书签 "${bookmark.name}" 吗？此操作无法撤销。`)) {
             try {
                 await apiRequest(`/bookmarks/${bookmark.id}`, 'DELETE');
                 await loadData();
@@ -286,9 +251,9 @@ document.addEventListener('DOMContentLoaded', () => {
     addBookmarkBtn.addEventListener('click', () => {
         bookmarkModalTitle.textContent = '添加新书签';
         bookmarkForm.reset();
-        bookmarkForm.querySelector('.modal-error-message').textContent = '';
+        const errorEl = bookmarkForm.querySelector('.modal-error-message');
+        if(errorEl) errorEl.textContent = '';
         bookmarkForm.querySelector('#bm-id').value = '';
-        
         const categorySelect = bookmarkForm.querySelector('#bm-category');
         categorySelect.innerHTML = '';
         allCategories.forEach(cat => {
@@ -320,11 +285,12 @@ document.addEventListener('DOMContentLoaded', () => {
             bookmarkForm.querySelector('.modal-error-message').textContent = error.message;
         }
     });
-
+    
     // --- Feature Logic: Change Password ---
     changePasswordBtn.addEventListener('click', () => {
         changePasswordForm.reset();
-        changePasswordForm.querySelector('.modal-error-message').textContent = '';
+        const errorEl = changePasswordForm.querySelector('.modal-error-message');
+        if(errorEl) errorEl.textContent = '';
         showModal(changePasswordModal);
     });
 
@@ -356,12 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
             allUsers.forEach(user => {
                 const li = document.createElement('li');
                 li.dataset.username = user.username;
-                li.innerHTML = `
-                    <span>${user.username} ${user.roles.includes('admin') ? ' (Admin)' : ''}</span>
-                    <div class="user-list-actions">
-                        ${user.username !== 'admin' ? `<button class="delete-user-btn" title="删除用户"><i class="fas fa-trash-alt"></i></button>` : ''}
-                    </div>
-                `;
+                li.innerHTML = `<span>${user.username} ${user.roles.includes('admin') ? '(Admin)' : ''}</span><div class="user-list-actions">${user.username !== 'admin' ? `<button class="delete-user-btn" title="删除用户"><i class="fas fa-trash-alt"></i></button>` : ''}</div>`;
                 li.addEventListener('click', () => populateUserForm(user));
                 if (user.username !== 'admin') {
                     li.querySelector('.delete-user-btn').addEventListener('click', async (e) => {
@@ -376,7 +337,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             clearUserForm();
         } catch(error) {
-            userForm.querySelector('.modal-error-message').textContent = error.message;
+            const errorEl = userForm.querySelector('.modal-error-message');
+            if(errorEl) errorEl.textContent = error.message;
         }
     };
     
@@ -384,7 +346,8 @@ document.addEventListener('DOMContentLoaded', () => {
         userList.querySelector('.selected')?.classList.remove('selected');
         userList.querySelector(`li[data-username="${user.username}"]`).classList.add('selected');
         userFormTitle.textContent = '编辑用户';
-        userForm.querySelector('.modal-error-message').textContent = '';
+        const errorEl = userForm.querySelector('.modal-error-message');
+        if(errorEl) errorEl.textContent = '';
         userForm.querySelector('#user-form-username-hidden').value = user.username;
         const usernameInput = userForm.querySelector('#user-form-username');
         usernameInput.value = user.username;
@@ -392,7 +355,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const passwordInput = userForm.querySelector('#user-form-password');
         passwordInput.value = '';
         passwordInput.placeholder = "留空则不修改";
-
         userFormCategories.innerHTML = '';
         allCategories.forEach(cat => {
             const isChecked = user.permissions?.visibleCategories?.includes(cat.id);
@@ -404,13 +366,13 @@ document.addEventListener('DOMContentLoaded', () => {
         userList.querySelector('.selected')?.classList.remove('selected');
         userForm.reset();
         userFormTitle.textContent = '添加新用户';
-        userForm.querySelector('.modal-error-message').textContent = '';
+        const errorEl = userForm.querySelector('.modal-error-message');
+        if(errorEl) errorEl.textContent = '';
         userForm.querySelector('#user-form-username-hidden').value = '';
         const usernameInput = userForm.querySelector('#user-form-username');
         usernameInput.readOnly = false;
         usernameInput.placeholder = "新用户名";
         userForm.querySelector('#user-form-password').placeholder = "必填";
-        
         userFormCategories.innerHTML = '';
         allCategories.forEach(cat => {
             userFormCategories.innerHTML += `<div><input type="checkbox" id="cat-perm-${cat.id}" value="${cat.id}"><label for="cat-perm-${cat.id}">${cat.name}</label></div>`;
@@ -424,9 +386,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const hiddenUsername = userForm.querySelector('#user-form-username-hidden').value;
         const isEditing = !!hiddenUsername;
         const password = userForm.querySelector('#user-form-password').value;
+        const errorEl = userForm.querySelector('.modal-error-message');
         
         if (!isEditing && !password) {
-            userForm.querySelector('.modal-error-message').textContent = '新用户必须设置密码';
+            if(errorEl) errorEl.textContent = '新用户必须设置密码';
             return;
         }
 
@@ -442,7 +405,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await apiRequest(endpoint, method, userData);
             await renderUserManagementPanel();
         } catch(error) {
-            userForm.querySelector('.modal-error-message').textContent = error.message;
+            if(errorEl) errorEl.textContent = error.message;
         }
     });
 
