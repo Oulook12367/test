@@ -53,6 +53,7 @@ body.dark-theme { background-color: var(--bg-dark); color: var(--text-primary-da
 .dark-theme .no-expiry-option { color: var(--text-secondary-dark); }
 .no-expiry-option input { width: auto; }
 
+
 /* --- Main App Layout --- */
 #app-layout { display: flex; height: 100vh; }
 
@@ -233,13 +234,13 @@ input:focus, select:focus { outline: none; }
     position: absolute;
     top: 10px;
     right: 10px;
-    display: flex;
+    display: none;
     gap: 8px;
     opacity: 0;
     transform: translateY(5px);
     transition: all 0.2s ease-in-out;
 }
-.bookmark-card:hover .bookmark-card-actions { opacity: 1; transform: translateY(0); }
+.bookmark-card:hover .bookmark-card-actions { opacity: 1; transform: translateY(0); display: flex; }
 .bookmark-card-actions button {
     background-color: var(--bg-light);
     border: 1px solid var(--border-light);
@@ -322,35 +323,45 @@ form input:focus, form textarea:focus, form select:focus {
     border-color: var(--accent-dark);
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
-button[type="submit"], .confirm-buttons button {
+button, .button {
     padding: 12px; margin-top: 10px; border: none; border-radius: 8px;
     font-size: 1rem; font-weight: 600; color: #fff;
     background-color: var(--accent-light);
     cursor: pointer; transition: all 0.2s ease;
 }
-.dark-theme button[type="submit"], .dark-theme .confirm-buttons button { background-color: var(--accent-dark); }
-button[type="submit"]:hover, .confirm-buttons button:hover {
+.dark-theme button, .dark-theme .button { background-color: var(--accent-dark); }
+button:hover, .button:hover {
     background-color: var(--accent-hover-light);
     transform: translateY(-2px);
     box-shadow: 0 4px 15px rgba(0, 123, 255, 0.2);
 }
-.dark-theme button[type="submit"]:hover, .dark-theme .confirm-buttons button:hover {
+.dark-theme button:hover, .dark-theme .button:hover {
     background-color: var(--accent-hover-dark);
     box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
 }
 .modal-error-message { color: #dc3545; font-size: 0.9em; height: 1.2em; text-align: center;}
 
-/* Confirm Dialog */
+/* Confirm Dialog & Secondary Button */
 .confirm-buttons { display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem; }
-.confirm-buttons button.secondary {
+button.secondary {
     background-color: var(--card-bg-light);
     color: var(--text-primary-light);
     border: 1px solid var(--border-light);
 }
-.dark-theme .confirm-buttons button.secondary {
+.dark-theme button.secondary {
     background-color: var(--card-bg-dark);
     color: var(--text-primary-dark);
     border-color: var(--border-dark);
+}
+button.secondary:hover {
+    background-color: var(--bg-light);
+    border-color: var(--text-secondary-light);
+    box-shadow: none;
+    transform: translateY(0);
+}
+.dark-theme button.secondary:hover {
+    background-color: #2a2a2a;
+    border-color: var(--text-secondary-dark);
 }
 
 /* User Management */
@@ -364,12 +375,23 @@ button[type="submit"]:hover, .confirm-buttons button:hover {
 #user-list li.selected { background-color: var(--accent-light); color: white; }
 .dark-theme #user-list li:hover { background-color: #2a2a2a; }
 .dark-theme #user-list li.selected { background-color: var(--accent-dark); }
+.user-list-actions button { background: none; border: none; color: #999; cursor: pointer; }
+.user-list-actions button:hover { color: #dc3545; }
+
 .checkbox-group {
-    max-height: 150px; overflow-y: auto; border: 1px solid var(--border-light);
+    border: 1px solid var(--border-light);
     padding: 10px; border-radius: 8px; display: flex; flex-direction: column; gap: 8px;
 }
 .dark-theme .checkbox-group { border-color: var(--border-dark); }
+.checkbox-group div { display: flex; align-items: center; gap: 0.5rem; }
+.checkbox-group input[type="checkbox"] { width: auto; flex-shrink: 0; }
+.checkbox-group.horizontal {
+    flex-direction: row; flex-wrap: wrap; justify-content: flex-start;
+}
+.permissions-group { margin-top: 1rem; }
 .user-form-buttons { display: flex; gap: 1rem; }
+.user-form-buttons button { flex: 1; margin-top: 0; }
+
 
 /* Category Management */
 .category-manager { display: flex; flex-direction: column; gap: 1rem; }
