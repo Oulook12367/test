@@ -22,41 +22,53 @@ const hashPassword = async (password, salt) => {
 // --- (重构) 数据获取与权限填充 ---
 const getSiteData = async (env) => {
     let data = await env.NAVI_DATA.get('data', { type: 'json' });
+
+    // 步骤1：检查数据是否存在，如果不存在，则创建默认数据
     if (!data || !data.users || !data.categories) {
         const adminSalt = generateSalt();
         const adminPasswordHash = await hashPassword('admin123', adminSalt);
         const defaultCatId = `cat-${Date.now()}`;
-        return {
+        
+        // **修正点**: 不再直接 return，而是将新创建的数据赋值给 data 变量
+        data = {
             users: {
                 'admin': {
                     username: 'admin',
                     passwordHash: adminPasswordHash,
                     salt: adminSalt,
                     roles: ['admin'],
-                    permissions: { visibleCategories: [defaultCatId] }
+                    permissions: { visibleCategories: [defaultCatId] } // 初始权限
                 }
             },
             categories: [{ id: defaultCatId, name: '默认分类' }],
             bookmarks: []
         };
     }
+
+    // 步骤2：权限计算与填充（现在对所有情况都会执行）
+    // 无论是从KV加载的旧数据，还是上面刚创建的新数据，都会经过这里
     for (const username in data.users) {
         const user = data.users[username];
         if (!user.permissions) user.permissions = {};
+        
+        // 如果旧数据没有 roles 字段，默认为 'viewer'
         if (!user.roles) user.roles = ['viewer'];
 
         const isEditor = user.roles.includes('editor');
         const isAdmin = user.roles.includes('admin');
 
+        // 根据角色，完整地构建 permissions 对象
         user.permissions = {
             canEditBookmarks: isEditor || isAdmin,
             canEditCategories: isEditor || isAdmin,
-            canEditUsers: isAdmin,
+            canEditUsers: isAdmin, // 只有 admin 角色才有这个权限
             visibleCategories: user.permissions.visibleCategories || []
         };
     }
+    
     return data;
 };
+
 
 const saveSiteData = async (env, data) => {
     const currentData = await env.NAVI_DATA.get('data');
