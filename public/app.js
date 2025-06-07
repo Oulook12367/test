@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
   // --- Theme Logic ---
-    const applyTheme = (theme) => {
+   const applyTheme = (theme) => {
         const currentClass = document.body.className;
         document.body.className = theme;
         if(currentClass.includes('is-loading')) {
@@ -96,8 +96,19 @@ document.addEventListener('DOMContentLoaded', () => {
         applyTheme(newTheme);
     });
 
+    manageMenu.addEventListener('click', (e) => {
+        if(e.target.closest('.dropdown-toggle')) {
+            manageMenu.classList.toggle('open');
+        }
+    });
+    document.addEventListener('click', (e) => {
+        if (!manageMenu.contains(e.target)) {
+            manageMenu.classList.remove('open');
+        }
+    });
+
    // --- Authentication & UI Flow ---
-    const showLoginPage = () => {
+ const showLoginPage = () => {
         appLayout.style.display = 'none';
         loginContainer.style.display = 'block';
     };
@@ -142,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
      // --- Data Loading & UI Rendering ---
-    const loadData = async () => {
+   const loadData = async () => {
         const data = await apiRequest('data');
         const token = localStorage.getItem('jwt_token');
         if (data.isPublic) {
@@ -166,15 +177,19 @@ document.addEventListener('DOMContentLoaded', () => {
         updateButtonVisibility();
         renderCategories();
         renderBookmarks(categoryNav.querySelector('.active')?.dataset.id || 'all', localSearchInput.value);
-        initSortables(); // 每次渲染后都重新初始化拖拽
+        initSortables();
         if (categoryManagementModal.style.display === 'flex') renderCategoryManagerList();
         if (userManagementModal.style.display === 'flex') renderUserManagementPanel();
     };
 
     const updateButtonVisibility = () => {
         addBookmarkBtn.style.display = !isGuestView && currentUser?.permissions?.canEditBookmarks ? 'flex' : 'none';
-        manageCategoriesBtn.style.display = !isGuestView && currentUser?.permissions?.canEditCategories ? 'block' : 'none';
-        userManagementBtn.style.display = !isGuestView && currentUser?.permissions?.canEditUsers ? 'flex' : 'none';
+        manageMenu.style.display = !isGuestView && (currentUser?.permissions?.canEditCategories || currentUser?.permissions?.canEditUsers) ? 'inline-block' : 'none';
+        if (manageMenu.style.display !== 'none') {
+            document.getElementById('manage-categories-btn').style.display = currentUser.permissions.canEditCategories ? 'block' : 'none';
+            document.getElementById('user-management-btn').style.display = currentUser.permissions.canEditUsers ? 'block' : 'none';
+            document.getElementById('import-bookmarks-btn').style.display = currentUser.permissions.canEditBookmarks ? 'block' : 'none';
+        }
         if (isGuestView) {
             logoutButton.innerHTML = '<i class="fas fa-key"></i>';
             logoutButton.title = '登录';
@@ -184,31 +199,44 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-   const renderCategories = () => {
+  const renderCategories = () => {
         const activeId = categoryNav.querySelector('.active')?.dataset.id || 'all';
         categoryNav.innerHTML = '';
+        
         const allLi = document.createElement('li');
         allLi.dataset.id = 'all';
         allLi.innerHTML = `<i class="fas fa-inbox"></i><span>全部书签</span>`;
         categoryNav.appendChild(allLi);
-        allCategories.forEach(cat => {
-            const li = document.createElement('li');
-            li.dataset.id = cat.id;
-            li.innerHTML = `<i class="fas fa-folder"></i><span>${escapeHTML(cat.name)}</span>`;
-            categoryNav.appendChild(li);
-        });
+
+        const buildTree = (parentId, level) => {
+            allCategories
+                .filter(cat => cat.parentId === parentId)
+                .forEach(cat => {
+                    const li = document.createElement('li');
+                    li.dataset.id = cat.id;
+                    li.style.paddingLeft = `${level * 20}px`;
+                    li.innerHTML = `<i class="fas fa-folder"></i><span>${escapeHTML(cat.name)}</span>`;
+                    if (!isGuestView && currentUser?.permissions?.canEditCategories) {
+                        li.draggable = true;
+                    }
+                    categoryNav.appendChild(li);
+                    buildTree(cat.id, level + 1);
+                });
+        };
+        buildTree(null, 1);
+
         const newActiveLi = categoryNav.querySelector(`li[data-id="${activeId}"]`) || categoryNav.querySelector(`li[data-id="all"]`);
-        newActiveLi.classList.add('active');
+        if(newActiveLi) newActiveLi.classList.add('active');
     };
     
     categoryNav.addEventListener('click', (e) => {
         const clickedLi = e.target.closest('li');
-        if (!clickedLi || !categoryNav.contains(clickedLi)) return;
-        if (clickedLi.classList.contains('sortable-ghost')) return;
+        if (!clickedLi || !categoryNav.contains(clickedLi) || clickedLi.classList.contains('sortable-ghost')) return;
         categoryNav.querySelector('.active')?.classList.remove('active');
         clickedLi.classList.add('active');
         renderBookmarks(clickedLi.dataset.id, localSearchInput.value);
     });
+
 
     const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
         bookmarksGrid.innerHTML = '';
@@ -288,24 +316,34 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     document.getElementById('confirm-btn-no').onclick = hideAllModals;
 
+   const populateCategoryDropdown = (selectElement, selectedId = null) => {
+        selectElement.innerHTML = '';
+        const buildOptions = (parentId, level) => {
+            allCategories
+                .filter(cat => cat.parentId === parentId)
+                .forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat.id;
+                    option.textContent = `${'—'.repeat(level)} ${cat.name}`;
+                    if (cat.id === selectedId) option.selected = true;
+                    selectElement.appendChild(option);
+                    buildOptions(cat.id, level + 1);
+                });
+        };
+        buildOptions(null, 0);
+    };
+
     addBookmarkBtn.addEventListener('click', () => {
         bookmarkModalTitle.textContent = '添加新书签';
         bookmarkForm.reset();
         bookmarkForm.querySelector('.modal-error-message').textContent = '';
         bookmarkForm.querySelector('#bm-id').value = '';
         const categorySelect = bookmarkForm.querySelector('#bm-category');
-        categorySelect.innerHTML = '';
-        const creatableCategories = allCategories.filter(cat => currentUser.permissions.visibleCategories.includes(cat.id));
-        if (creatableCategories.length === 0) {
-            alert('没有可添加书签的分类！请先创建分类，或在用户管理中获取分类权限。');
+        populateCategoryDropdown(categorySelect);
+        if (categorySelect.options.length === 0) {
+            alert('没有可添加书签的分类！请先创建分类。');
             return;
         }
-        creatableCategories.forEach(cat => {
-            const option = document.createElement('option');
-            option.value = cat.id;
-            option.textContent = cat.name;
-            categorySelect.appendChild(option);
-        });
         showModal(bookmarkModal);
     });
 
@@ -318,16 +356,8 @@ document.addEventListener('DOMContentLoaded', () => {
         bookmarkForm.querySelector('#bm-url').value = bookmark.url;
         bookmarkForm.querySelector('#bm-desc').value = bookmark.description || '';
         bookmarkForm.querySelector('#bm-icon').value = bookmark.icon || '';
-        const categorySelect = bookmarkForm.querySelector('#bm-category');
-        categorySelect.innerHTML = '';
-        const creatableCategories = allCategories.filter(cat => currentUser.permissions.visibleCategories.includes(cat.id));
-        creatableCategories.forEach(cat => {
-            const option = document.createElement('option');
-            option.value = cat.id;
-            option.textContent = cat.name;
-            if (cat.id === bookmark.categoryId) option.selected = true;
-            categorySelect.appendChild(option);
-        });
+       const categorySelect = bookmarkForm.querySelector('#bm-category');
+        populateCategoryDropdown(categorySelect, bookmark.categoryId);
         showModal(bookmarkModal);
     };
 
@@ -608,6 +638,89 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+// --- Bookmark Import Logic ---
+    importBookmarksBtn.addEventListener('click', () => {
+        if (!currentUser?.permissions?.canEditBookmarks) {
+            alert('权限不足，无法导入书签。');
+            return;
+        }
+        importFileInput.click();
+    });
+
+    importFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const content = event.target.result;
+                await parseAndImport(content);
+                alert('书签导入成功！');
+            } catch (error) {
+                console.error('导入失败:', error);
+                alert(`导入失败: ${error.message}`);
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    });
+
+    const parseAndImport = async (htmlContent) => {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlContent, 'text/html');
+        let newCategories = [];
+        let newBookmarks = [];
+        let uncategorizedBookmarks = [];
+        const generateId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        const parseNode = (node, parentId) => {
+            const children = Array.from(node.children).filter(c => c.tagName === 'DT');
+            for (const child of children) {
+                const folderHeader = child.querySelector('h3');
+                const link = child.querySelector('a');
+                if (folderHeader) {
+                    const newCategoryId = generateId('cat');
+                    newCategories.push({ id: newCategoryId, name: folderHeader.textContent.trim(), parentId: parentId });
+                    const subList = child.nextElementSibling;
+                    if (subList && subList.tagName === 'DL') {
+                        parseNode(subList, newCategoryId);
+                    }
+                } else if (link) {
+                    const bookmark = { id: generateId('bm'), name: link.textContent.trim(), url: link.href, categoryId: parentId, description: '', icon: link.getAttribute('icon') || '' };
+                    if (parentId) {
+                        newBookmarks.push(bookmark);
+                    } else {
+                        uncategorizedBookmarks.push(bookmark);
+                    }
+                }
+            }
+        };
+
+        const root = doc.querySelector('dl');
+        if (!root) throw new Error('无效的书签文件格式。');
+        parseNode(root, null);
+
+        if (uncategorizedBookmarks.length > 0) {
+            let uncategorizedCat = allCategories.find(c => c.name === '未分类书签' && c.parentId === null);
+            if (!uncategorizedCat) {
+                uncategorizedCat = { id: generateId('cat'), name: '未分类书签', parentId: null };
+                newCategories.push(uncategorizedCat);
+            }
+            uncategorizedBookmarks.forEach(bm => bm.categoryId = uncategorizedCat.id);
+            newBookmarks.push(...uncategorizedBookmarks);
+        }
+
+        if (newCategories.length === 0 && newBookmarks.length === 0) {
+            throw new Error('未在文件中找到可导入的书签或文件夹。');
+        }
+
+        allCategories.push(...newCategories);
+        allBookmarks.push(...newBookmarks);
+        await persistData();
+        await loadData();
+    };
+
+    
     // --- Drag and Drop Logic ---
     const destroySortables = () => {
         if (categorySortable) categorySortable.destroy();
