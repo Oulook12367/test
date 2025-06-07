@@ -70,12 +70,17 @@ const getSiteData = async (env) => {
         const isEditor = user.roles.includes('editor');
         const isAdmin = user.roles.includes('admin');
 
-        user.permissions = {
+        // 【修改】使用 Object.assign 进行非破坏性更新，避免覆盖整个 permissions 对象
+        Object.assign(user.permissions, {
             canEditBookmarks: isEditor || isAdmin,
             canEditCategories: isEditor || isAdmin,
             canEditUsers: isAdmin,
-            visibleCategories: user.permissions.visibleCategories || []
-        };
+        });
+
+        // 【修改】确保 visibleCategories 数组存在
+        if (!user.permissions.visibleCategories) {
+            user.permissions.visibleCategories = [];
+        }
     }
     
     return data;
@@ -97,15 +102,17 @@ const saveSiteData = async (env, data) => {
     await env.NAVI_DATA.put('data', JSON.stringify(data));
 };
 
-const authenticateRequest = async (request, env) => {
+// 【修改】authenticateRequest 函数现在接受 siteData 作为参数，以避免重复IO
+const authenticateRequest = async (request, env, siteData) => {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) return { error: '认证失败：缺少 Token', status: 401 };
     const token = authHeader.substring(7);
     try {
         const { payload } = await jwtVerify(token, JWT_SECRET());
         if (!payload || !payload.sub) throw new Error("无效的 payload");
-        const data = await getSiteData(env);
-        const user = data.users[payload.sub];
+        
+        // 【修改】直接使用传入的 siteData 对象
+        const user = siteData.users[payload.sub];
         if (!user) return { error: '用户不存在', status: 401 };
         return { user };
     } catch (e) {
@@ -134,7 +141,6 @@ export async function onRequest(context) {
 
     if (apiPath === 'login' && request.method === 'POST') {
         const { username, password } = await request.json();
-     // 新增：明确禁止 public 用户登录
         if (username.toLowerCase() === 'public') {
             return jsonResponse({ error: '此为保留账户，禁止登录。' }, 403);
         }
@@ -157,8 +163,10 @@ export async function onRequest(context) {
     if (apiPath === 'data' && request.method === 'GET') {
         const authHeader = request.headers.get('Authorization');
         
+        // 【优化】先获取一次数据，后续逻辑中重复使用
+        const data = await getSiteData(env);
+
         if (env.PUBLIC_MODE_ENABLED === 'true' && !authHeader) {
-            const data = await getSiteData(env);
             const publicUser = data.users.public;
             const publicCategories = data.categories.filter(cat => publicUser.permissions.visibleCategories.includes(cat.id));
             const publicCategoryIds = publicCategories.map(cat => cat.id);
@@ -171,11 +179,13 @@ export async function onRequest(context) {
             });
         }
         
-        const authResult = await authenticateRequest(request, env);
+        // 【优化】将获取到的 data 传递给认证函数
+        const authResult = await authenticateRequest(request, env, data);
         if (authResult.error) return jsonResponse(authResult, authResult.status);
         const currentUser = authResult.user;
 
-        const data = await getSiteData(env);
+        // 【优化】不再需要第二次调用 getSiteData
+
         if (currentUser.roles.includes('admin')) {
              const usersForAdmin = Object.values(data.users).map(({ passwordHash, salt, ...u }) => u);
              return jsonResponse({...data, users: usersForAdmin});
@@ -187,17 +197,19 @@ export async function onRequest(context) {
         return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks, users: [safeUser] });
     }
     
-    // Auth Wall for all write operations
-    const authResult = await authenticateRequest(request, env);
+    // 【优化】为所有需要授权的写操作（PUT/POST/DELETE）建立统一的认证墙
+    const dataForWriteOps = await getSiteData(env);
+    const authResult = await authenticateRequest(request, env, dataForWriteOps);
     if (authResult.error) return jsonResponse(authResult, authResult.status);
-    const currentUser = authResult.user;
+    const currentUser = authResult.user; // 这个 currentUser 用于所有后续的写操作
+    const data = dataForWriteOps; // 这个 data 也一样
 
     if (apiPath === 'data' && request.method === 'PUT') {
         if (!currentUser.permissions.canEditBookmarks && !currentUser.permissions.canEditCategories) {
             return jsonResponse({ error: '权限不足' }, 403);
         }
         const dataToUpdate = await request.json();
-        const data = await getSiteData(env);
+        // const data = await getSiteData(env); // 已被上面的统一逻辑取代
         if (dataToUpdate.categories) data.categories = dataToUpdate.categories;
         if (dataToUpdate.bookmarks) data.bookmarks = dataToUpdate.bookmarks;
         await saveSiteData(env, data);
@@ -205,7 +217,7 @@ export async function onRequest(context) {
     }
     
     if (apiPath.startsWith('bookmarks')) {
-        const data = await getSiteData(env);
+        // const data = await getSiteData(env); // 已被上面的统一逻辑取代
         const id = apiPath.split('/').pop();
         if (request.method === 'POST') {
             if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
@@ -239,7 +251,7 @@ export async function onRequest(context) {
     
     if (apiPath.startsWith('categories')) {
         if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
-        const data = await getSiteData(env);
+        // const data = await getSiteData(env); // 已被上面的统一逻辑取代
         const id = apiPath.split('/').pop();
         if (request.method === 'DELETE' && apiPath === 'categories') {
             const { ids } = await request.json();
@@ -265,7 +277,7 @@ export async function onRequest(context) {
         if (request.method === 'POST') {
             const { name } = await request.json();
             if (!name || data.categories.find(c => c.name === name)) return jsonResponse({ error: '分类名称无效或已存在' }, 400);
-            const newCategory = { id: `cat-${Date.now()}`, name };
+            const newCategory = { id: `cat-${Date.now()}`, name, parentId: null }; // 确保新分类是顶级分类
             data.categories.push(newCategory);
             Object.values(data.users).forEach(user => {
                 if (user.roles.includes('admin') || user.username === currentUser.username) {
@@ -281,7 +293,7 @@ export async function onRequest(context) {
 
     if (apiPath.startsWith('users')) {
         if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
-        const data = await getSiteData(env);
+        // const data = await getSiteData(env); // 已被上面的统一逻辑取代
         const username = apiPath.split('/').pop();
         if (request.method === 'POST') {
             const { username, password, roles, permissions } = await request.json();
