@@ -35,13 +35,13 @@ const getSiteData = async (env) => {
                     salt: adminSalt,
                     roles: ['admin'],
                     permissions: { visibleCategories: [parentCatId, publicCatId] },
-                    defaultCategoryId: 'all' // 【新增】为admin设置默认值
+                    defaultCategoryId: 'all'
                 },
                 'public': {
                     username: 'public',
                     roles: ['viewer'],
                     permissions: { visibleCategories: [publicCatId] },
-                    defaultCategoryId: publicCatId // 【新增】为public设置默认值
+                    defaultCategoryId: publicCatId
                 }
             },
             categories: [
@@ -66,7 +66,6 @@ const getSiteData = async (env) => {
             const user = data.users[username];
             if (!user.permissions) user.permissions = {};
             if (!user.roles) user.roles = ['viewer'];
-            // 【新增】确保每个用户都有默认分类ID
             if (!user.defaultCategoryId) user.defaultCategoryId = 'all';
 
             const isEditor = user.roles.includes('editor');
@@ -165,7 +164,7 @@ export async function onRequest(context) {
             const publicCategories = data.categories.filter(cat => publicUser.permissions.visibleCategories.includes(cat.id));
             const publicCategoryIds = publicCategories.map(cat => cat.id);
             const publicBookmarks = data.bookmarks.filter(bm => publicCategoryIds.includes(bm.categoryId));
-            return jsonResponse({ isPublic: true, categories: publicCategories, bookmarks: publicBookmarks, users: [], publicModeEnabled: true });
+            return jsonResponse({ isPublic: true, categories: publicCategories, bookmarks: publicBookmarks, users: [], publicModeEnabled: true, defaultCategoryId: publicUser.defaultCategoryId });
         }
     }
     
@@ -231,7 +230,6 @@ export async function onRequest(context) {
         }
     }
     
-    // 【新增】用户自己更新自己信息的接口
     if (apiPath === 'users/self' && request.method === 'PUT') {
         const { defaultCategoryId } = await request.json();
         if (typeof defaultCategoryId === 'undefined') {
@@ -247,10 +245,11 @@ export async function onRequest(context) {
         return jsonResponse({ error: '用户未找到'}, 404);
     }
 
+    // 【重要修改】采用更健壮的路由逻辑
     if (apiPath.startsWith('users')) {
         if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
-        const username = apiPath.split('/').pop();
 
+        // 新增用户: POST /api/users
         if (request.method === 'POST' && apiPath === 'users') {
             const { username: newUsername, password, roles, permissions } = await request.json();
             if (!newUsername || !password || data.users[newUsername]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
@@ -262,41 +261,51 @@ export async function onRequest(context) {
             return jsonResponse(newUser, 201);
         }
 
-        const userToManage = data.users[username];
-        if (!userToManage) return jsonResponse({ error: '用户未找到' }, 404);
+        // 修改或删除单个用户: /api/users/:username
+        if (apiPath.startsWith('users/')) {
+            const username = apiPath.substring('users/'.length);
 
-        if (request.method === 'PUT') {
-            // 【修改】增加对 defaultCategoryId 的支持
-            const { roles, permissions, password, defaultCategoryId } = await request.json();
-            if (username === 'public') {
-                if (permissions && typeof permissions.visibleCategories !== 'undefined') {
-                    userToManage.permissions.visibleCategories = permissions.visibleCategories;
-                }
-                userToManage.roles = ['viewer'];
-            } else {
-                if (roles) userToManage.roles = roles;
-                if (permissions) userToManage.permissions.visibleCategories = permissions.visibleCategories;
-                if (typeof defaultCategoryId !== 'undefined') userToManage.defaultCategoryId = defaultCategoryId;
-                if (password) {
-                    userToManage.salt = generateSalt();
-                    userToManage.passwordHash = await hashPassword(password, userToManage.salt);
-                }
+            if (!username) {
+                return jsonResponse({ error: '未提供用户名' }, 400);
             }
-            await saveSiteData(env, data);
-            const { passwordHash, salt, ...updatedUser } = userToManage;
-            return jsonResponse(updatedUser);
-        }
+            
+            const userToManage = data.users[username];
+            if (!userToManage) {
+                return jsonResponse({ error: `用户 '${username}' 未找到` }, 404);
+            }
 
-        if (request.method === 'DELETE') {
-            if (username === 'public') return jsonResponse({ error: '公共账户为系统保留账户，禁止删除。' }, 403);
-            if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
-            if (userToManage.roles.includes('admin')) {
-                const adminCount = Object.values(data.users).filter(u => u.roles.includes('admin')).length;
-                if (adminCount <= 1) return jsonResponse({ error: '无法删除最后一个管理员账户' }, 403);
+            if (request.method === 'PUT') {
+                const { roles, permissions, password, defaultCategoryId } = await request.json();
+                if (username === 'public') {
+                    if (permissions && typeof permissions.visibleCategories !== 'undefined') {
+                        userToManage.permissions.visibleCategories = permissions.visibleCategories;
+                    }
+                    userToManage.roles = ['viewer'];
+                } else {
+                    if (roles) userToManage.roles = roles;
+                    if (permissions) userToManage.permissions.visibleCategories = permissions.visibleCategories;
+                    if (typeof defaultCategoryId !== 'undefined') userToManage.defaultCategoryId = defaultCategoryId;
+                    if (password) {
+                        userToManage.salt = generateSalt();
+                        userToManage.passwordHash = await hashPassword(password, userToManage.salt);
+                    }
+                }
+                await saveSiteData(env, data);
+                const { passwordHash, salt, ...updatedUser } = userToManage;
+                return jsonResponse(updatedUser);
             }
-            delete data.users[username];
-            await saveSiteData(env, data);
-            return jsonResponse(null);
+
+            if (request.method === 'DELETE') {
+                if (username === 'public') return jsonResponse({ error: '公共账户为系统保留账户，禁止删除。' }, 403);
+                if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
+                if (userToManage.roles.includes('admin')) {
+                    const adminCount = Object.values(data.users).filter(u => u.roles.includes('admin')).length;
+                    if (adminCount <= 1) return jsonResponse({ error: '无法删除最后一个管理员账户' }, 403);
+                }
+                delete data.users[username];
+                await saveSiteData(env, data);
+                return jsonResponse(null);
+            }
         }
     }
 
