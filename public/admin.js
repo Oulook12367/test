@@ -590,8 +590,7 @@ bookmarkEditForm.addEventListener('submit', async (e) => {
     const endpoint = isEditing ? `bookmarks/${id}` : 'bookmarks';
     const method = isEditing ? 'PUT' : 'POST';
 
-    // 【重要】在这里增加一行日志，用于调试
-    console.log('正在向后端发送请求:', { endpoint: endpoint, method: method });
+   
 
     try {
         await apiRequest(endpoint, method, data);
