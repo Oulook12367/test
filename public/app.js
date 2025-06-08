@@ -139,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
             throw new Error("需要认证。");
         }
         allCategories = data.categories || [];
-        allBookmarks = data.bookmarks || [];
+        allBookmarks = (data.bookmarks || []).map((bm, index) => ({...bm, sortOrder: bm.sortOrder ?? index }));
         allUsers = data.users || [];
         renderUI();
     };
@@ -213,6 +213,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const lower = searchTerm.toLowerCase();
             filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lower) || bm.url.toLowerCase().includes(lower));
         }
+        
+        // Sort by sortOrder
+        filteredBookmarks.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 
         if(filteredBookmarks.length === 0){
             bookmarksGrid.innerHTML = '<p class="empty-message">这里什么都没有...</p>';
@@ -424,17 +427,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 hasError = true;
             }
             updatedCategories.push({
-                id: id.startsWith('new-') ? `cat-${Date.now()}-${Math.random()}`.slice(-10) : id,
+                id: id, // Keep original ID, backend will handle 'new-' if needed
                 sortOrder: parseInt(li.querySelector('.cat-order-input').value) || 0,
                 name: name,
                 parentId: li.querySelector('.cat-parent-select').value || null,
             });
         });
 
+        const finalCategories = updatedCategories.map(cat => cat.id.startsWith('new-') ? {...cat, id: `cat-${Date.now()}-${Math.random()}`.slice(-10)} : cat);
+
         if (hasError) return;
 
         try {
-            await apiRequest('data', 'PUT', { categories: updatedCategories });
+            await apiRequest('data', 'PUT', { categories: finalCategories });
             alert('分类保存成功！');
             await loadData();
             renderCategoryAdminTab();
@@ -518,7 +523,7 @@ document.addEventListener('DOMContentLoaded', () => {
         form.querySelector('#user-form-password').placeholder = "留空则不修改";
 
         renderUserFormRoles(user.roles);
-        renderUserFormCategories(user.permissions.visibleCategories, user.roles.includes('admin'));
+        renderUserFormCategories(user.permissions?.visibleCategories || [], user.roles.includes('admin'));
         document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
         document.querySelector(`#user-list li[data-username="${user.username}"]`)?.classList.add('selected');
     };
@@ -623,8 +628,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         sortedBookmarks.forEach(bm => {
             const li = document.createElement('li');
+            li.dataset.id = bm.id;
             const category = allCategories.find(c => c.id === bm.categoryId);
             li.innerHTML = `
+                <input type="number" class="bm-sort-order" value="${bm.sortOrder || 0}">
                 <span class="bm-admin-name">${escapeHTML(bm.name)}</span>
                 <span class="bm-admin-cat">${category ? escapeHTML(category.name) : '无分类'}</span>
                 <div class="bm-admin-actions">
@@ -639,6 +646,29 @@ document.addEventListener('DOMContentLoaded', () => {
         container.innerHTML = '';
         container.appendChild(ul);
     };
+    
+    document.getElementById('save-bookmarks-btn').addEventListener('click', async () => {
+        const listItems = document.querySelectorAll('#bookmark-admin-list-container li');
+        let updatedBookmarks = [...allBookmarks];
+        
+        listItems.forEach(li => {
+            const id = li.dataset.id;
+            const sortOrder = parseInt(li.querySelector('.bm-sort-order').value) || 0;
+            const bookmark = updatedBookmarks.find(bm => bm.id === id);
+            if (bookmark) {
+                bookmark.sortOrder = sortOrder;
+            }
+        });
+
+        try {
+            await apiRequest('data', 'PUT', { bookmarks: updatedBookmarks });
+            alert('书签顺序保存成功！');
+            await loadData();
+            renderBookmarkAdminTab(document.getElementById('bookmark-sort-select').value);
+        } catch (error) {
+            alert(`保存失败: ${error.message}`);
+        }
+    });
 
     document.getElementById('bookmark-sort-select').onchange = (e) => {
         renderBookmarkAdminTab(e.target.value);
@@ -715,8 +745,10 @@ document.addEventListener('DOMContentLoaded', () => {
         let importedCategories = [];
         let importedBookmarks = [];
         const generateId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const highestSortOrder = allCategories.length > 0 ? Math.max(...allCategories.map(c => c.sortOrder || 0)) : -1;
-        let currentSort = highestSortOrder + 10;
+        const highestCatSortOrder = allCategories.length > 0 ? Math.max(...allCategories.map(c => c.sortOrder || 0)) : -1;
+        const highestBmSortOrder = allBookmarks.length > 0 ? Math.max(...allBookmarks.map(bm => bm.sortOrder || 0)) : -1;
+        let currentCatSort = highestCatSortOrder + 10;
+        let currentBmSort = highestBmSortOrder + 10;
 
         const parseNode = (node, parentId) => {
             if (!node || !node.children) return;
@@ -732,7 +764,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         id: newCategoryId,
                         name: folderHeader.textContent.trim(),
                         parentId: parentId,
-                        sortOrder: currentSort++
+                        sortOrder: currentCatSort++
                     });
                     const subList = child.nextElementSibling;
                     if (subList && subList.tagName === 'DL') {
@@ -745,7 +777,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         url: link.href,
                         categoryId: parentId,
                         description: '',
-                        icon: link.getAttribute('icon') || ''
+                        icon: link.getAttribute('icon') || '',
+                        sortOrder: currentBmSort++
                     });
                 }
             }
@@ -756,7 +789,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         let uncategorizedCatId = null;
         
-        // Find links at root level and create a folder for them if needed
         const rootItems = Array.from(rootDl.children);
         const hasRootLinks = rootItems.some(child => child.tagName === 'DT' && child.querySelector('A'));
         
@@ -764,7 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let uncategorizedCat = allCategories.find(c => c.name === '导入的未分类书签');
             if (!uncategorizedCat) {
                 uncategorizedCatId = generateId('cat');
-                importedCategories.push({ id: uncategorizedCatId, name: '导入的未分类书签', parentId: null, sortOrder: currentSort++ });
+                importedCategories.push({ id: uncategorizedCatId, name: '导入的未分类书签', parentId: null, sortOrder: currentCatSort++ });
             } else {
                 uncategorizedCatId = uncategorizedCat.id;
             }
