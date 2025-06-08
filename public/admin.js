@@ -249,98 +249,102 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Tab 2: User Management ---
-    const renderUserAdminTab = (container) => {
-        // 【重要修改】重构HTML以支持新的三段式布局
-        container.innerHTML = `<div id="user-management-container">
-            <div class="user-list-container">
-                <h3>用户列表</h3>
-                <ul id="user-list"></ul>
-            </div>
-            <div class="user-form-container">
-                <form id="user-form">
-                    <h3 id="user-form-title">添加新用户</h3>
-                    <div class="user-form-static-fields">
-                        <input type="hidden" id="user-form-username-hidden">
-                        <div class="form-group-inline">
-                            <label for="user-form-username">用户名:</label>
-                            <input type="text" id="user-form-username" required>
-                        </div>
-                        <div class="form-group-inline">
-                            <label for="user-form-password">密码:</label>
-                            <input type="password" id="user-form-password">
-                        </div>
-                        <div class="form-group-inline">
-                            <label>角色:</label>
-                            <div id="user-form-roles" class="checkbox-group horizontal"></div>
-                        </div>
-                        <div class="form-group-inline">
-                            <label for="user-form-default-cat">默认显示分类:</label>
-                            <select id="user-form-default-cat"></select>
-                        </div>
+// 在 admin.js 中找到并替换此函数
+const renderUserAdminTab = (container) => {
+    container.innerHTML = `<div id="user-management-container">
+        <div class="user-list-container">
+            <h3>用户列表</h3>
+            <ul id="user-list"></ul>
+        </div>
+        <div class="user-form-container">
+            <form id="user-form">
+                <h3 id="user-form-title">添加新用户</h3>
+                <div class="user-form-static-fields">
+                    <input type="hidden" id="user-form-username-hidden">
+                    <div class="form-group-inline">
+                        <label for="user-form-username">用户名:</label>
+                        <input type="text" id="user-form-username" required>
                     </div>
-                    <div class="form-group flex-grow">
-                        <label>可见分类:</label>
-                        <div id="user-form-categories" class="checkbox-group"></div>
+                    <div class="form-group-inline">
+                        <label for="user-form-password">密码:</label>
+                        <input type="password" id="user-form-password">
                     </div>
-                    <div class="user-form-buttons">
-                        <button type="submit" class="button-primary">保存用户</button>
-                        <button type="button" id="user-form-clear-btn" class="secondary">新增/清空</button>
+                    <div class="form-group-inline">
+                        <label>角色:</label>
+                        <div id="user-form-roles" class="checkbox-group horizontal"></div>
                     </div>
-                    <p class="modal-error-message"></p>
-                </form>
-            </div>
-        </div>`;
-        
-        const userList = container.querySelector('#user-list');
-        const form = container.querySelector('#user-form');
-        const token = localStorage.getItem('jwt_token');
-        let currentUsername = '';
-        if (token) {
-            try { currentUsername = JSON.parse(atob(token.split('.')[1])).sub; } catch (e) { console.error("无法解析Token:", e); }
+                    <div class="form-group-inline">
+                        <label for="user-form-default-cat">默认显示分类:</label>
+                        <select id="user-form-default-cat"></select>
+                    </div>
+                </div>
+                <div class="form-group flex-grow">
+                    <label>可见分类:</label>
+                    <div id="user-form-categories" class="checkbox-group"></div>
+                </div>
+                <div class="user-form-buttons">
+                    <button type="submit" class="button-primary">保存用户</button>
+                    <button type="button" id="user-form-clear-btn" class="secondary">新增/清空</button>
+                </div>
+                <p class="modal-error-message"></p>
+            </form>
+        </div>
+    </div>`;
+    
+    const userList = container.querySelector('#user-list');
+    const form = container.querySelector('#user-form');
+    const token = localStorage.getItem('jwt_token');
+    let currentUsername = '';
+    if (token) {
+        try { currentUsername = JSON.parse(atob(token.split('.')[1])).sub; } catch (e) { console.error("无法解析Token:", e); }
+    }
+    allUsers.forEach(user => {
+        const li = document.createElement('li');
+        li.dataset.username = user.username;
+        if (user.username === 'public') {
+            li.innerHTML = `<span><i class="fas fa-eye fa-fw"></i> ${user.username} (公共模式)</span>`;
+        } else {
+            li.innerHTML = `<span>${user.username} (${user.roles.join(', ')})</span>`;
         }
-        allUsers.forEach(user => {
-            const li = document.createElement('li');
-            li.dataset.username = user.username;
-            if (user.username === 'public') {
-                li.innerHTML = `<span><i class="fas fa-eye fa-fw"></i> ${user.username} (公共模式)</span>`;
-            } else {
-                li.innerHTML = `<span>${user.username} (${user.roles.join(', ')})</span>`;
-            }
-            if (user.username !== 'public' && user.username !== currentUsername) {
-                const delBtn = document.createElement('button');
-                delBtn.className = 'button-icon danger';
-                delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
-                delBtn.title = '删除用户';
-                delBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    showConfirm('删除用户', `确定删除用户 "${user.username}"?`, async () => {
-                        try {
-                            await apiRequest(`users/${user.username}`, 'DELETE');
-                            await initializePage('tab-users');
-                        } catch (error) { alert(error.message); }
-                    });
-                };
-                li.appendChild(delBtn);
-            }
-            userList.appendChild(li);
-        });
-        userList.addEventListener('click', (e) => {
-            const li = e.target.closest('li[data-username]');
-            if (li && !e.target.closest('button')) {
-                const user = allUsers.find(u => u.username === li.dataset.username);
-                if (user) populateUserForm(user);
-            }
-        });
-        
-        const visibleCategoriesContainer = form.querySelector('#user-form-categories');
-        visibleCategoriesContainer.addEventListener('change', () => {
-            updateDefaultCategoryDropdown(form);
-        });
+        if (user.username !== 'public' && user.username !== currentUsername) {
+            const delBtn = document.createElement('button');
+            delBtn.className = 'button-icon danger';
+            delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+            delBtn.title = '删除用户';
+            delBtn.onclick = (e) => {
+                e.stopPropagation();
+                showConfirm('删除用户', `确定删除用户 "${user.username}"?`, async () => {
+                    try {
+                        // 【重要修正】对用户名进行URL编码
+                        await apiRequest(`users/${encodeURIComponent(user.username)}`, 'DELETE');
+                        await initializePage('tab-users');
+                    } catch (error) { alert(error.message); }
+                });
+            };
+            li.appendChild(delBtn);
+        }
+        userList.appendChild(li);
+    });
+    userList.addEventListener('click', (e) => {
+        const li = e.target.closest('li[data-username]');
+        if (li && !e.target.closest('button')) {
+            const user = allUsers.find(u => u.username === li.dataset.username);
+            if (user) populateUserForm(user);
+        }
+    });
+    
+    const visibleCategoriesContainer = form.querySelector('#user-form-categories');
+    visibleCategoriesContainer.addEventListener('change', () => {
+        updateDefaultCategoryDropdown(form);
+    });
 
-        container.querySelector('#user-form-clear-btn').onclick = clearUserForm;
-        form.onsubmit = handleUserFormSubmit;
-        clearUserForm();
-    };
+    container.querySelector('#user-form-clear-btn').onclick = clearUserForm;
+    form.onsubmit = handleUserFormSubmit;
+    clearUserForm();
+};
+
+
+    
     const populateUserForm = (user) => {
         const form = document.getElementById('user-form'); if (!form) return;
         form.reset();
@@ -425,46 +429,51 @@ document.addEventListener('DOMContentLoaded', () => {
             defaultCatSelect.value = 'all';
         }
     };
-    const handleUserFormSubmit = async (e) => {
-        e.preventDefault();
-        const form = e.target;
-        const hiddenUsername = form.querySelector('#user-form-username-hidden').value;
-        const isEditing = !!hiddenUsername;
-        const username = form.querySelector('#user-form-username').value.trim();
-        const password = form.querySelector('#user-form-password').value;
-        const errorEl = form.querySelector('.modal-error-message');
-        errorEl.textContent = '';
-        if (!username) { errorEl.textContent = '用户名不能为空'; return; }
-        if (!isEditing && !password) { errorEl.textContent = '新用户必须设置密码'; return; }
-        const selectedRole = form.querySelector('input[name="role-selection"]:checked').value;
-        const userData = {
-            roles: [selectedRole],
-            permissions: { visibleCategories: Array.from(form.querySelectorAll('#user-form-categories input:checked')).map(cb => cb.value) },
-            defaultCategoryId: form.querySelector('#user-form-default-cat').value
-        };
-        if (password) userData.password = password;
-        if (!isEditing) userData.username = username;
-        const endpoint = isEditing ? `users/${hiddenUsername}` : 'users';
-        const method = isEditing ? 'PUT' : 'POST';
-        try {
-            const updatedUser = await apiRequest(endpoint, method, userData);
-            alert('用户保存成功！');
-            const token = localStorage.getItem('jwt_token');
-            if (token) {
-                const payload = JSON.parse(atob(token.split('.')[1]));
-                const currentUsername = payload.sub;
-                if (currentUsername === updatedUser.username) {
-                    if (!updatedUser.roles.includes('admin')) {
-                        alert('您的管理员权限已被移除，将退出管理后台并返回主页。');
-                        localStorage.removeItem('jwt_token');
-                        window.location.href = 'index.html';
-                        return;
-                    }
+
+// 在 admin.js 中找到并替换此函数
+const handleUserFormSubmit = async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const hiddenUsername = form.querySelector('#user-form-username-hidden').value;
+    const isEditing = !!hiddenUsername;
+    const username = form.querySelector('#user-form-username').value.trim();
+    const password = form.querySelector('#user-form-password').value;
+    const errorEl = form.querySelector('.modal-error-message');
+    errorEl.textContent = '';
+    if (!username) { errorEl.textContent = '用户名不能为空'; return; }
+    if (!isEditing && !password) { errorEl.textContent = '新用户必须设置密码'; return; }
+    const selectedRole = form.querySelector('input[name="role-selection"]:checked').value;
+    const userData = {
+        roles: [selectedRole],
+        permissions: { visibleCategories: Array.from(form.querySelectorAll('#user-form-categories input:checked')).map(cb => cb.value) },
+        defaultCategoryId: form.querySelector('#user-form-default-cat').value
+    };
+    if (password) userData.password = password;
+    if (!isEditing) userData.username = username;
+    
+    // 【重要修正】对用户名进行URL编码
+    const endpoint = isEditing ? `users/${encodeURIComponent(hiddenUsername)}` : 'users';
+    const method = isEditing ? 'PUT' : 'POST';
+    try {
+        const updatedUser = await apiRequest(endpoint, method, userData);
+        alert('用户保存成功！');
+        const token = localStorage.getItem('jwt_token');
+        if (token) {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const currentUsername = payload.sub;
+            if (currentUsername === updatedUser.username) {
+                if (!updatedUser.roles.includes('admin')) {
+                    alert('您的管理员权限已被移除，将退出管理后台并返回主页。');
+                    localStorage.removeItem('jwt_token');
+                    window.location.href = 'index.html';
+                    return;
                 }
             }
-            await initializePage('tab-users');
-        } catch (error) { errorEl.textContent = error.message; }
-    };
+        }
+        await initializePage('tab-users');
+    } catch (error) { errorEl.textContent = error.message; }
+};
+    
 
     // --- Tab 3: Bookmark Management ---
     const renderBookmarkAdminTab = (container) => {
