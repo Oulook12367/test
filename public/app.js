@@ -560,10 +560,22 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- User Management ---
-   userManagementBtn.addEventListener('click', () => {
-        renderUserManagementPanel();
-        showModal(userManagementModal);
-    });
+  userManagementBtn.addEventListener('click', () => {
+    // 在显示 Modal 前，先准备好 UI
+    const userListContainer = document.querySelector('.user-list-container');
+    if (!userListContainer.querySelector('.user-list-header')) {
+        const header = document.createElement('div');
+        header.className = 'user-list-header';
+        header.innerHTML = `
+            <span class="user-col-username">用户名</span>
+            <span class="user-col-roles">角色</span>
+            <span class="user-col-actions" style="width: 40px;"></span>
+        `;
+        userListContainer.prepend(header);
+    }
+    renderUserManagementPanel();
+    showModal(userManagementModal);
+});
 
     const renderUserManagementPanel = () => {
     userList.innerHTML = '';
