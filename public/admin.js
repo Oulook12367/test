@@ -225,35 +225,57 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Tab 2: User Management ---
-    const renderUserAdminTab = (container) => {
-        container.innerHTML = `<h2>用户管理</h2><div id="user-management-container"><div class="user-list-container"><h3>用户列表</h3><ul id="user-list"></ul></div><div class="user-form-container"><h3 id="user-form-title">添加新用户</h3><form id="user-form"><input type="hidden" id="user-form-username-hidden"><div class="form-group"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required></div><div class="form-group"><label for="user-form-password">密码:</label><input type="password" id="user-form-password"></div><div class="form-group"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div><div class="form-group"><label>可见分类:</label><div id="user-form-categories" class="checkbox-group"></div></div><div class="user-form-buttons"><button type="submit" class="button-primary">保存用户</button><button type="button" id="user-form-clear-btn" class="secondary">新增/清空</button></div><p class="modal-error-message"></p></form></div></div>`;
-        const userList = container.querySelector('#user-list');
-        allUsers.forEach(user => {
-            const li = document.createElement('li');
-            li.dataset.username = user.username;
-            li.innerHTML = `<span>${user.username} (${user.roles.join(', ')})</span>`;
-            if (user.username !== 'admin') {
-                const delBtn = document.createElement('button');
-                delBtn.className = 'button-icon danger';
-                delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
-                delBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    showConfirm('删除用户', `确定删除用户 "${user.username}"?`, async () => {
-                        try {
-                            await apiRequest(`users/${user.username}`, 'DELETE');
-                            await initializePage();
-                        } catch (error) { alert(error.message); }
-                    });
-                };
-                li.appendChild(delBtn);
+  const renderUserAdminTab = (container) => {
+    container.innerHTML = `<h2>用户管理</h2><div id="user-management-container"><div class="user-list-container"><h3>用户列表</h3><ul id="user-list"></ul></div><div class="user-form-container"><form id="user-form"><h3 id="user-form-title">添加新用户</h3><input type="hidden" id="user-form-username-hidden"><div class="form-group"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required></div><div class="form-group"><label for="user-form-password">密码:</label><input type="password" id="user-form-password"></div><div class="form-group"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div><div class="form-group flex-grow"><label>可见分类:</label><div id="user-form-categories" class="checkbox-group"></div></div><div class="user-form-buttons"><button type="submit" class="button-primary">保存用户</button><button type="button" id="user-form-clear-btn" class="secondary">新增/清空</button></div><p class="modal-error-message"></p></form></div></div>`;
+    
+    const userList = container.querySelector('#user-list');
+    const form = container.querySelector('#user-form');
+    
+    allUsers.forEach(user => {
+        const li = document.createElement('li');
+        li.dataset.username = user.username;
+        li.innerHTML = `<span>${user.username} (${user.roles.join(', ')})</span>`;
+        // 【修正】同时禁止删除 admin 和 public 账户
+        if (user.username !== 'admin' && user.username !== 'public') {
+            const delBtn = document.createElement('button');
+            delBtn.className = 'button-icon danger';
+            delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+            delBtn.title = '删除用户';
+            delBtn.onclick = (e) => {
+                e.stopPropagation();
+                showConfirm('删除用户', `确定删除用户 "${user.username}"?`, async () => {
+                    try {
+                        await apiRequest(`users/${user.username}`, 'DELETE');
+                        // 【修正】刷新整个页面数据和UI
+                        await initializePage();
+                        // 手动切换回用户标签页
+                        document.querySelector('.admin-tab-link[data-tab="tab-users"]').click();
+                    } catch (error) { alert(error.message); }
+                });
+            };
+            li.appendChild(delBtn);
+        }
+        userList.appendChild(li);
+    });
+          // 【重要修正】使用事件委托处理用户列表点击，更稳定
+    userList.addEventListener('click', (e) => {
+        const li = e.target.closest('li[data-username]');
+        if (li && !e.target.closest('button')) { // 确保不是点击删除按钮
+            const user = allUsers.find(u => u.username === li.dataset.username);
+            if (user) {
+                populateUserForm(user);
             }
-            li.onclick = () => populateUserForm(user);
-            userList.appendChild(li);
-        });
-        container.querySelector('#user-form-clear-btn').onclick = clearUserForm;
-        container.querySelector('#user-form').onsubmit = handleUserFormSubmit;
-        clearUserForm();
-    };
+        }
+    });
+
+container.querySelector('#user-form-clear-btn').onclick = clearUserForm;
+    form.onsubmit = handleUserFormSubmit;
+    
+    // 【修正】确保在DOM渲染后，调用clearUserForm来正确填充“添加用户”的初始状态
+    clearUserForm(); 
+};
+
+    
     const populateUserForm = (user) => {
         const form = document.getElementById('user-form'); if (!form) return;
         form.reset();
@@ -263,22 +285,27 @@ document.addEventListener('DOMContentLoaded', () => {
         usernameInput.readOnly = true;
         form.querySelector('#user-form-username-hidden').value = user.username;
         form.querySelector('#user-form-password').placeholder = "留空则不修改";
-        renderUserFormRoles(user.roles);
-        renderUserFormCategories(user.permissions?.visibleCategories || [], user.roles.includes('admin'));
+ const isAdmin = user.roles.includes('admin');
+renderUserFormRoles(user.roles);
+    renderUserFormCategories(isAdmin ? allCategories.map(c => c.id) : (user.permissions?.visibleCategories || []), isAdmin);
+
+     
         document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
-        document.querySelector(`#user-list li[data-username="${user.username}"]`)?.classList.add('selected');
-    };
+    document.querySelector(`#user-list li[data-username="${user.username}"]`)?.classList.add('selected');
+};
+    
     const clearUserForm = () => {
-        const form = document.getElementById('user-form'); if (!form) return;
-        form.reset();
-        form.querySelector('#user-form-title').textContent = '添加新用户';
-        form.querySelector('#user-form-username').readOnly = false;
-        form.querySelector('#user-form-password').placeholder = "必填";
-        form.querySelector('#user-form-username-hidden').value = '';
+       const form = document.getElementById('user-form'); if (!form) return;
+    form.reset();
+    form.querySelector('#user-form-title').textContent = '添加新用户';
+    form.querySelector('#user-form-username').readOnly = false;
+    form.querySelector('#user-form-password').placeholder = "必填";
+    form.querySelector('#user-form-username-hidden').value = '';
+        
         renderUserFormRoles();
         renderUserFormCategories();
         document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
-    };
+};
     const renderUserFormRoles = (activeRoles = []) => {
         const container = document.getElementById('user-form-roles'); if(!container) return;
         container.innerHTML = '';
@@ -322,19 +349,26 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         if (password) userData.password = password;
         if (!isEditing) userData.username = username;
-        const endpoint = isEditing ? `users/${hiddenUsername}` : 'users';
-        const method = isEditing ? 'PUT' : 'POST';
+        const endpoint = isEditing ? `bookmarks/${id}` : 'bookmarks';
+    const method = isEditing ? 'PUT' : 'POST';
+        
         try {
-            await apiRequest(endpoint, method, userData);
-            alert('用户保存成功！');
-            await initializePage();
-        } catch(error) { errorEl.textContent = error.message; }
-    };
+        await apiRequest(endpoint, method, data);
+        hideAllModals();
+        // 【修正】刷新数据并重新渲染书签标签页
+        await initializePage();
+        document.querySelector('.admin-tab-link[data-tab="tab-bookmarks"]').click();
+    } catch (error) {
+        bookmarkEditForm.querySelector('.modal-error-message').textContent = error.message;
+    }
+});
     
     // --- Tab 3: Bookmark Management ---
     const renderBookmarkAdminTab = (container) => {
-        container.innerHTML = `<h2>书签管理</h2><p class="admin-panel-tip">通过“排序”数字（越小越靠前）来调整主界面的书签显示顺序。</p><div class="bookmark-admin-controls"><span>排序方式:</span><select id="bookmark-sort-select"><option value="name_asc">名称 (A-Z)</option><option value="name_desc">名称 (Z-A)</option><option value="category">按分类</option></select></div><div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div><div id="bookmark-admin-list-container"></div><div class="admin-panel-actions"><button id="save-bookmarks-btn"><i class="fas fa-save"></i> 保存书签顺序</button></div>`;
-        const listContainer = container.querySelector('#bookmark-admin-list-container');
+    container.innerHTML = `<h2>书签管理</h2><p class="admin-panel-tip">在这里管理所有的书签。点击“保存顺序”来应用排序变更。</p><div class="bookmark-admin-controls"><span>排序方式:</span><select id="bookmark-sort-select"><option value="name_asc">名称 (A-Z)</option><option value="name_desc">名称 (Z-A)</option><option value="category">按分类</option></select></div><div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div><div id="bookmark-admin-list-container"></div><div class="admin-panel-actions"><button id="save-bookmarks-btn"><i class="fas fa-save"></i> 保存书签顺序</button><button id="add-new-bookmark-btn" class="secondary"><i class="fas fa-plus"></i> 添加新书签</button></div>`;
+    const listContainer = container.querySelector('#bookmark-admin-list-container');
+ 
+       
         const ul = document.createElement('ul');
         listContainer.appendChild(ul);
         const sortBy = container.querySelector('#bookmark-sort-select').value;
@@ -358,7 +392,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         container.querySelector('#save-bookmarks-btn').onclick = handleSaveBookmarks;
         container.querySelector('#bookmark-sort-select').onchange = () => renderBookmarkAdminTab(container);
-    };
+        container.querySelector('#add-new-bookmark-btn').onclick = handleAddNewBookmark;
+};
+
+// 【新增】一个处理“添加新书签”的函数
+const handleAddNewBookmark = () => {
+    bookmarkEditForm.reset();
+    bookmarkEditForm.querySelector('#bookmark-modal-title').textContent = '添加新书签';
+    bookmarkEditForm.querySelector('#bm-edit-id').value = ''; // id为空表示是新增
+    populateCategoryDropdown(bookmarkEditForm.querySelector('#bm-edit-category'), allCategories);
+    showModal(bookmarkEditModal);
+};
     
     const handleSaveBookmarks = async () => {
         const listItems = document.querySelectorAll('#bookmark-admin-list-container li');
@@ -398,14 +442,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     bookmarkEditForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const id = bookmarkEditForm.querySelector('#bm-edit-id').value;
+const id = bookmarkEditForm.querySelector('#bm-edit-id').value;
+    const isEditing = !!id; // 如果id存在，则为编辑模式
+   
+
+        
+       
         const data = {
-            name: bookmarkEditForm.querySelector('#bm-edit-name').value,
-            url: bookmarkEditForm.querySelector('#bm-edit-url').value,
-            description: bookmarkEditForm.querySelector('#bm-edit-desc').value,
-            icon: bookmarkEditForm.querySelector('#bm-edit-icon').value,
-            categoryId: bookmarkEditForm.querySelector('#bm-edit-category').value,
-        };
+name: bookmarkEditForm.querySelector('#bm-edit-name').value,
+        url: bookmarkEditForm.querySelector('#bm-edit-url').value,
+        description: bookmarkEditForm.querySelector('#bm-edit-desc').value,
+        icon: bookmarkEditForm.querySelector('#bm-edit-icon').value,
+        categoryId: bookmarkEditForm.querySelector('#bm-edit-category').value,
+    };
+
+
         try {
             await apiRequest(`bookmarks/${id}`, 'PUT', data);
             hideAllModals();
