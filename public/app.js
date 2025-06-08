@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminPanel = document.getElementById('admin-panel');
     const adminPanelNav = document.querySelector('.admin-panel-nav');
     const adminTabContents = document.querySelectorAll('.admin-tab-content');
+    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn'); // Get the new button
 
     // --- State ---
     let allBookmarks = [], allCategories = [], allUsers = [], currentUser = null, isGuestView = false;
@@ -78,6 +79,11 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.className = theme;
         themeToggleButton.innerHTML = theme === 'dark-theme' ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
         localStorage.setItem('theme', theme);
+    };
+
+    const applySidebarState = (isCollapsed) => {
+        appLayout.classList.toggle('sidebar-collapsed', isCollapsed);
+        localStorage.setItem('sidebarCollapsed', isCollapsed);
     };
 
     const showLoginPage = () => {
@@ -232,6 +238,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Event Listeners ---
     themeToggleButton.addEventListener('click', () => applyTheme(document.body.classList.contains('light-theme') ? 'dark-theme' : 'light-theme'));
     
+    sidebarToggleBtn.addEventListener('click', () => {
+        applySidebarState(!appLayout.classList.contains('sidebar-collapsed'));
+    });
+
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         loginError.textContent = '';
@@ -270,10 +280,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- ADMIN PANEL LOGIC ---
     adminPanelBtn.addEventListener('click', () => {
-        renderCategoryAdminTab();
-        renderUserAdminTab();
-        renderBookmarkAdminTab();
-        adminPanelNav.querySelector('.admin-tab-link').click(); // Activate first tab
+        const firstTabLink = adminPanelNav.querySelector('.admin-tab-link');
+        adminPanelNav.querySelectorAll('.admin-tab-link').forEach(l => l.classList.remove('active'));
+        firstTabLink.classList.add('active');
+        
+        const firstTabId = firstTabLink.dataset.tab;
+        adminTabContents.forEach(content => {
+            content.classList.toggle('active', content.id === firstTabId);
+        });
+        
+        renderAdminTab(firstTabId);
         showModal(adminPanel);
     });
     
@@ -282,14 +298,32 @@ document.addEventListener('DOMContentLoaded', () => {
     adminPanelNav.addEventListener('click', (e) => {
         e.preventDefault();
         const link = e.target.closest('.admin-tab-link');
-        if (!link) return;
+        if (!link || link.classList.contains('active')) return;
+
         adminPanelNav.querySelectorAll('.admin-tab-link').forEach(l => l.classList.remove('active'));
         link.classList.add('active');
+        
         const tabId = link.dataset.tab;
         adminTabContents.forEach(content => {
             content.classList.toggle('active', content.id === tabId);
         });
+        renderAdminTab(tabId);
     });
+    
+    const renderAdminTab = (tabId) => {
+        switch (tabId) {
+            case 'tab-categories':
+                renderCategoryAdminTab();
+                break;
+            case 'tab-users':
+                renderUserAdminTab();
+                break;
+            case 'tab-bookmarks':
+                renderBookmarkAdminTab();
+                break;
+        }
+    };
+
 
     // --- Tab 1: Category Management ---
     const renderCategoryAdminTab = () => {
@@ -475,8 +509,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const renderUserFormCategories = (visibleIds = [], isDisabled = false) => {
         const container = document.getElementById('user-form-categories');
+        if(!container) return;
         container.innerHTML = '';
-        allCategories.forEach(cat => {
+        allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
             container.innerHTML += `
                 <div>
                     <input type="checkbox" id="cat-perm-${cat.id}" value="${cat.id}" ${visibleIds.includes(cat.id) ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}>
@@ -535,7 +570,6 @@ document.addEventListener('DOMContentLoaded', () => {
         container.innerHTML = '';
         container.appendChild(ul);
     };
-
 
     // --- Tab 4: System Settings ---
     document.getElementById('import-bookmarks-btn-admin').addEventListener('click', () => {
@@ -613,5 +647,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Initial Load ---
     applyTheme(localStorage.getItem('theme') || 'dark-theme');
+    applySidebarState(localStorage.getItem('sidebarCollapsed') === 'true');
     checkLoginStatus();
 });
