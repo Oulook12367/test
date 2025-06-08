@@ -411,7 +411,9 @@ input:focus, textarea:focus, select:focus {
 
 /* --- MODALS --- */
 #modal-backdrop {
-    display: none; /* 默认隐藏 (这条规则现在会生效了) */
+    /* 默认状态必须是隐藏，由 JavaScript 在需要时动态修改 */
+    display: none; 
+    
     position: fixed;
     top: 0;
     left: 0;
@@ -419,7 +421,9 @@ input:focus, textarea:focus, select:focus {
     height: 100%;
     background-color: rgba(0, 0, 0, 0.6);
     z-index: 1000;
-    display: flex;
+    
+    /* flex 布局相关的属性在这里定义，
+       当 JS 把 display 改为 'flex' 时，它们就会生效来居中弹窗 */
     justify-content: center;
     align-items: center;
     animation: fadeIn 0.3s ease;
