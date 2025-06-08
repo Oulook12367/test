@@ -13,7 +13,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- State ---
     let allBookmarks = [], allCategories = [], allUsers = [];
-    let tempCategories = [];
 
     // --- UI Flow & Modals ---
     const showModal = (modal) => { 
@@ -29,8 +28,12 @@ document.addEventListener('DOMContentLoaded', () => {
         confirmText.textContent = text;
         showModal(confirmModal);
         confirmBtnYes.onclick = () => { 
-            hideAllModals();
-            showModal(adminPanel);
+            confirmModal.style.display = 'none';
+            if (document.querySelector('#admin-page-container')) {
+                // Keep backdrop if admin panel is open
+            } else {
+                modalBackdrop.style.display = 'none';
+            }
             onConfirm(); 
         };
     };
@@ -128,13 +131,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Tab 1: Category Management ---
     const renderCategoryAdminTab = (container) => {
-        tempCategories = JSON.parse(JSON.stringify(allCategories));
-        container.innerHTML = `<h2>分类管理</h2><p class="admin-panel-tip">通过“排序”数字（越小越靠前）和“父级分类”来调整结构。修改后请点击下方“保存全部分类”按钮。</p><div class="category-admin-header"><span>排序</span><span>分类名称</span><span>父级分类</span><span>操作</span></div><ul id="category-admin-list"></ul><div class="admin-panel-actions"><button id="save-categories-btn"><i class="fas fa-save"></i> 保存全部分类</button><button id="add-new-category-btn" class="secondary"><i class="fas fa-plus"></i> 添加新分类</button></div>`;
+        container.innerHTML = `<h2>分类管理</h2><p class="admin-panel-tip">通过“排序”数字（越小越靠前）和“父级分类”来调整结构。修改后请点击下方“保存全部分类”按钮。</p><div class="category-admin-header"><span>排序</span><span style="grid-column: span 2;">分类名称</span><span>操作</span></div><ul id="category-admin-list"></ul><div class="admin-panel-actions"><button id="save-categories-btn"><i class="fas fa-save"></i> 保存全部分类</button><button id="add-new-category-btn" class="secondary"><i class="fas fa-plus"></i> 添加新分类</button></div>`;
         
         const listEl = container.querySelector('#category-admin-list');
-        const categoryMap = new Map(tempCategories.map(cat => [cat.id, { ...cat, children: [] }]));
+        const categoryMap = new Map(allCategories.map(cat => [cat.id, { ...cat, children: [] }]));
         const tree = [];
-        tempCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
+        [...allCategories].sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
             if (cat.parentId && categoryMap.has(cat.parentId)) {
                 categoryMap.get(cat.parentId).children.push(categoryMap.get(cat.id));
             } else {
@@ -143,12 +145,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         const buildList = (nodes, level) => {
-            nodes.forEach(cat => {
+            nodes.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
                 const li = document.createElement('li');
                 li.dataset.id = cat.id;
-                li.innerHTML = `<input type="number" class="cat-order-input" value="${cat.sortOrder || 0}"><div class="cat-name-cell" style="padding-left: ${level * 20}px;"><input type="text" class="cat-name-input" value="${escapeHTML(cat.name)}"></div><select class="cat-parent-select"></select><button class="delete-cat-btn secondary danger" title="删除"><i class="fas fa-trash-alt"></i></button>`;
+                li.innerHTML = `<input type="number" class="cat-order-input" value="${cat.sortOrder || 0}"><div class="cat-name-cell" style="padding-left: ${level * 25}px;"><input type="text" class="cat-name-input" value="${escapeHTML(cat.name)}"></div><select class="cat-parent-select"></select><button class="delete-cat-btn secondary danger" title="删除"><i class="fas fa-trash-alt"></i></button>`;
                 const parentSelect = li.querySelector('.cat-parent-select');
-                populateCategoryDropdown(parentSelect, tempCategories, cat.parentId, cat.id);
+                populateCategoryDropdown(parentSelect, allCategories, cat.parentId, cat.id);
                 li.querySelector('.delete-cat-btn').onclick = () => handleDeleteCategory(cat.id, cat.name);
                 listEl.appendChild(li);
                 if (cat.children.length > 0) buildList(cat.children, level + 1);
@@ -161,14 +163,17 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const handleAddNewCategory = () => {
-        const newCat = {
-            id: `new-${Date.now()}`, name: '新分类', parentId: null,
-            sortOrder: (allCategories.length > 0) ? Math.max(...allCategories.map(c => c.sortOrder || 0)) + 10 : 0
-        };
-        allCategories.push(newCat);
-        renderCategoryAdminTab(document.getElementById('tab-categories'));
-        const newLi = document.querySelector(`#category-admin-list li[data-id="${newCat.id}"]`);
-        if (newLi) { newLi.querySelector('.cat-name-input').focus(); newLi.querySelector('.cat-name-input').select(); }
+        const listEl = document.getElementById('category-admin-list');
+        const newCatId = `new-${Date.now()}`;
+        const newSortOrder = (allCategories.length > 0) ? Math.max(...allCategories.map(c => c.sortOrder || 0)) + 10 : 0;
+        const li = document.createElement('li');
+        li.dataset.id = newCatId;
+        li.innerHTML = `<input type="number" class="cat-order-input" value="${newSortOrder}"><div class="cat-name-cell"><input type="text" class="cat-name-input" value="新分类"></div><select class="cat-parent-select"></select><button class="delete-cat-btn secondary danger" title="删除"><i class="fas fa-trash-alt"></i></button>`;
+        const parentSelect = li.querySelector('.cat-parent-select');
+        populateCategoryDropdown(parentSelect, allCategories, null, newCatId);
+        li.querySelector('.delete-cat-btn').onclick = () => li.remove();
+        listEl.prepend(li);
+        li.querySelector('.cat-name-input').focus();
     };
 
     const handleDeleteCategory = (catIdToDelete, catName) => {
@@ -186,7 +191,6 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 await apiRequest('data', 'PUT', { categories: finalCategories, bookmarks: finalBookmarks });
                 await initializePage();
-                renderCategoryAdminTab(document.getElementById('tab-categories'));
             } catch (error) { alert('删除失败: ' + error.message); }
         });
     };
@@ -202,16 +206,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const name = li.querySelector('.cat-name-input').value.trim();
             const parentId = li.querySelector('.cat-parent-select').value || 'root';
             const sortOrder = parseInt(li.querySelector('.cat-order-input').value) || 0;
-
             if (!name) { alert('分类名称不能为空！'); hasError = true; }
-            
             if (!parentChildOrders.has(parentId)) parentChildOrders.set(parentId, new Set());
             if (parentChildOrders.get(parentId).has(sortOrder)) {
                 alert(`在同一个父分类下存在重复的排序号: ${sortOrder}`);
                 hasError = true;
             }
             parentChildOrders.get(parentId).add(sortOrder);
-
             finalCategories.push({
                 id: id.startsWith('new-') ? `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` : id,
                 sortOrder, name, parentId: parentId === 'root' ? null : parentId,
@@ -222,7 +223,6 @@ document.addEventListener('DOMContentLoaded', () => {
             await apiRequest('data', 'PUT', { categories: finalCategories });
             alert('分类保存成功！');
             await initializePage();
-            renderCategoryAdminTab(document.getElementById('tab-categories'));
         } catch (error) { alert('保存失败: ' + error.message); }
     };
 
@@ -257,8 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearUserForm();
     };
     const populateUserForm = (user) => {
-        const form = document.getElementById('user-form');
-        if (!form) return;
+        const form = document.getElementById('user-form'); if (!form) return;
         form.reset();
         form.querySelector('#user-form-title').textContent = `编辑用户: ${user.username}`;
         const usernameInput = form.querySelector('#user-form-username');
@@ -277,6 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
         form.querySelector('#user-form-title').textContent = '添加新用户';
         form.querySelector('#user-form-username').readOnly = false;
         form.querySelector('#user-form-password').placeholder = "必填";
+        form.querySelector('#user-form-username-hidden').value = '';
         renderUserFormRoles();
         renderUserFormCategories();
         document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
@@ -336,11 +336,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Tab 3: Bookmark Management ---
     const renderBookmarkAdminTab = (container) => {
         container.innerHTML = `<h2>书签管理</h2><p class="admin-panel-tip">通过“排序”数字（越小越靠前）来调整主界面的书签显示顺序。</p><div class="bookmark-admin-controls"><span>排序方式:</span><select id="bookmark-sort-select"><option value="name_asc">名称 (A-Z)</option><option value="name_desc">名称 (Z-A)</option><option value="category">按分类</option></select></div><div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div><div id="bookmark-admin-list-container"></div><div class="admin-panel-actions"><button id="save-bookmarks-btn"><i class="fas fa-save"></i> 保存书签顺序</button></div>`;
-        
         const listContainer = container.querySelector('#bookmark-admin-list-container');
         const ul = document.createElement('ul');
         listContainer.appendChild(ul);
-        
         const sortBy = container.querySelector('#bookmark-sort-select').value;
         let sortedBookmarks = [...allBookmarks];
         const categoryNameMap = new Map(allCategories.map(c => [c.id, c.name]));
@@ -360,7 +358,6 @@ document.addEventListener('DOMContentLoaded', () => {
             li.querySelector('.delete-bm-btn').onclick = () => handleDeleteBookmark(bm);
             ul.appendChild(li);
         });
-
         container.querySelector('#save-bookmarks-btn').onclick = handleSaveBookmarks;
         container.querySelector('#bookmark-sort-select').onchange = () => renderBookmarkAdminTab(container);
     };
@@ -440,7 +437,61 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const parseAndImport = async (htmlContent) => {
-        // ... (parseAndImport logic is unchanged and correct)
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlContent, 'text/html');
+        let importedCategories = [];
+        let importedBookmarks = [];
+        const generateId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const highestCatSortOrder = allCategories.length > 0 ? Math.max(...allCategories.map(c => c.sortOrder || 0)) : -1;
+        const highestBmSortOrder = allBookmarks.length > 0 ? Math.max(...allBookmarks.map(bm => bm.sortOrder || 0)) : -1;
+        let currentCatSort = highestCatSortOrder + 10;
+        let currentBmSort = highestBmSortOrder + 10;
+
+        const parseNode = (node, parentId) => {
+            if (!node || !node.children) return;
+            for (const child of node.children) {
+                if (child.tagName !== 'DT') continue;
+                const folderHeader = child.querySelector('h3');
+                const link = child.querySelector('a');
+                if (folderHeader) {
+                    const newCategoryId = generateId('cat');
+                    importedCategories.push({
+                        id: newCategoryId, name: folderHeader.textContent.trim(), parentId: parentId, sortOrder: currentCatSort++
+                    });
+                    const subList = child.nextElementSibling;
+                    if (subList && subList.tagName === 'DL') parseNode(subList, newCategoryId);
+                } else if (link) {
+                    importedBookmarks.push({
+                        id: generateId('bm'), name: link.textContent.trim(), url: link.href, categoryId: parentId,
+                        description: '', icon: link.getAttribute('icon') || '', sortOrder: currentBmSort++
+                    });
+                }
+            }
+        };
+        const rootDl = doc.querySelector('dl');
+        if (!rootDl) throw new Error('无效的书签文件格式。');
+        let uncategorizedCatId = null;
+        const rootItems = Array.from(rootDl.children);
+        const hasRootLinks = rootItems.some(child => child.tagName === 'DT' && child.querySelector('A'));
+        if (hasRootLinks) {
+            let uncategorizedCat = allCategories.find(c => c.name === '导入的未分类书签');
+            if (!uncategorizedCat) {
+                uncategorizedCatId = generateId('cat');
+                importedCategories.push({ id: uncategorizedCatId, name: '导入的未分类书签', parentId: null, sortOrder: currentCatSort++ });
+            } else {
+                uncategorizedCatId = uncategorizedCat.id;
+            }
+        }
+        parseNode(rootDl, null);
+        importedBookmarks.forEach(bm => {
+            if (bm.categoryId === null && uncategorizedCatId) bm.categoryId = uncategorizedCatId;
+        });
+
+        if (importedCategories.length === 0 && importedBookmarks.length === 0) throw new Error('未在文件中找到可导入的书签或文件夹。');
+        const finalCategories = [...allCategories, ...importedCategories];
+        const finalBookmarks = [...allBookmarks, ...importedBookmarks];
+        await apiRequest('data', 'PUT', { categories: finalCategories, bookmarks: finalBookmarks });
+        await initializePage();
     };
 
     // --- Initial Load ---
