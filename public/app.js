@@ -367,6 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Tab 1: Category Management ---
     const renderCategoryAdminTab = () => {
+        // 【修正】总是从 allCategories 创建一个新的深拷贝
         tempCategories = JSON.parse(JSON.stringify(allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0))));
         const listEl = document.getElementById('category-admin-list');
         listEl.innerHTML = '';
@@ -384,20 +385,22 @@ document.addEventListener('DOMContentLoaded', () => {
             populateCategoryDropdown(parentSelect, tempCategories, cat.parentId, cat.id);
             
             li.querySelector('.delete-cat-btn').onclick = () => {
-                const catIdToDelete = cat.id;
-                let idsToDelete = new Set([catIdToDelete]);
-                let queue = [catIdToDelete];
-                while(queue.length > 0){
-                    const parentId = queue.shift();
-                    tempCategories.forEach(c => {
-                        if(c.parentId === parentId) {
-                            idsToDelete.add(c.id);
-                            queue.push(c.id);
-                        }
-                    });
-                }
-                tempCategories = tempCategories.filter(c => !idsToDelete.has(c.id));
-                renderCategoryAdminTab();
+                showConfirm('确认删除', `您确定要删除分类 "${cat.name}" 吗？这也会删除其下所有的子分类。`, () => {
+                    const catIdToDelete = cat.id;
+                    let idsToDelete = new Set([catIdToDelete]);
+                    let queue = [catIdToDelete];
+                    while(queue.length > 0){
+                        const parentId = queue.shift();
+                        tempCategories.forEach(c => {
+                            if(c.parentId === parentId) {
+                                idsToDelete.add(c.id);
+                                queue.push(c.id);
+                            }
+                        });
+                    }
+                    tempCategories = tempCategories.filter(c => !idsToDelete.has(c.id));
+                    renderCategoryAdminTab(); // Re-render from the modified temp array
+                });
             };
             listEl.appendChild(li);
         });
@@ -427,16 +430,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 hasError = true;
             }
             updatedCategories.push({
-                id: id, // Keep original ID, backend will handle 'new-' if needed
+                id: id,
                 sortOrder: parseInt(li.querySelector('.cat-order-input').value) || 0,
                 name: name,
                 parentId: li.querySelector('.cat-parent-select').value || null,
             });
         });
 
-        const finalCategories = updatedCategories.map(cat => cat.id.startsWith('new-') ? {...cat, id: `cat-${Date.now()}-${Math.random()}`.slice(-10)} : cat);
-
         if (hasError) return;
+        
+        const finalCategories = updatedCategories.map(cat => cat.id.startsWith('new-') ? {...cat, id: `cat-${Date.now()}-${Math.random()}`.toString(36).substr(2, 9)} : cat);
 
         try {
             await apiRequest('data', 'PUT', { categories: finalCategories });
@@ -561,13 +564,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('user-form-categories');
         if(!container) return;
         container.innerHTML = '';
-        allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
-            container.innerHTML += `
-                <div>
-                    <input type="checkbox" id="cat-perm-${cat.id}" value="${cat.id}" ${visibleIds.includes(cat.id) ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}>
-                    <label for="cat-perm-${cat.id}">${escapeHTML(cat.name)}</label>
-                </div>`;
-        });
+        const sortedCategories = [...allCategories].sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        populateCategoryDropdown(container, sortedCategories, visibleIds, null, true); // Use dropdown helper
     };
 
     const handleUserFormSubmit = async (e) => {
@@ -595,7 +593,9 @@ document.addEventListener('DOMContentLoaded', () => {
             await apiRequest(endpoint, method, userData);
             alert('用户保存成功！');
             await loadData();
+            const updatedUser = allUsers.find(u => u.username === (isEditing ? hiddenUsername : username));
             renderUserAdminTab();
+            if(updatedUser) populateUserForm(updatedUser);
         } catch(error) {
             errorEl.textContent = error.message;
         }
@@ -649,7 +649,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     document.getElementById('save-bookmarks-btn').addEventListener('click', async () => {
         const listItems = document.querySelectorAll('#bookmark-admin-list-container li');
-        let updatedBookmarks = [...allBookmarks];
+        let updatedBookmarks = JSON.parse(JSON.stringify(allBookmarks));
         
         listItems.forEach(li => {
             const id = li.dataset.id;
@@ -708,9 +708,13 @@ document.addEventListener('DOMContentLoaded', () => {
             categoryId: bookmarkEditForm.querySelector('#bm-edit-category').value,
         };
         try {
-            await apiRequest(`bookmarks/${id}`, 'PUT', data);
+            const updatedBookmark = await apiRequest(`bookmarks/${id}`, 'PUT', data);
+            const index = allBookmarks.findIndex(bm => bm.id === id);
+            if(index > -1) {
+                allBookmarks[index] = {...allBookmarks[index], ...updatedBookmark};
+            }
             hideAllModals();
-            await loadData();
+            await loadData(); // Full reload to ensure consistency
             renderBookmarkAdminTab(document.getElementById('bookmark-sort-select').value);
         } catch (error) {
             bookmarkEditForm.querySelector('.modal-error-message').textContent = error.message;
