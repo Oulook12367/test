@@ -127,7 +127,9 @@ const jsonResponse = (data, status = 200, headers = {}) => {
     return new Response(JSON.stringify(data), { status, headers: { ...defaultHeaders, ...headers } });
 };
 
-
+/* ===================================================================== */
+/* _middleware.js 【最终修正版 v2】 - 请完整替换                     */
+/* ===================================================================== */
 
 // --- Main onRequest Entrypoint ---
 export async function onRequest(context) {
@@ -135,18 +137,19 @@ export async function onRequest(context) {
     const url = new URL(request.url);
     const path = url.pathname;
     
-    // 如果不是API请求，直接跳过
     if (!path.startsWith('/api/')) {
         return next();
     }
     
-    // --- API 路由逻辑开始 ---
     globalThis.JWT_SECRET_STRING = env.JWT_SECRET;
+    
+    // 【修正】将 const 改为 let，并处理末尾斜杠
     let apiPath = path.substring(5);
-if (apiPath.endsWith('/')) {
-    apiPath = apiPath.slice(0, -1);
-}
-    // 路由 1: 登录 (公开访问)
+    if (apiPath.endsWith('/')) {
+        apiPath = apiPath.slice(0, -1);
+    }
+
+    // --- 公开路由 (无需Token) ---
     if (apiPath === 'login' && request.method === 'POST') {
         const { username, password } = await request.json();
         if (username.toLowerCase() === 'public') return jsonResponse({ error: '此为保留账户，禁止登录。' }, 403);
@@ -160,7 +163,6 @@ if (apiPath.endsWith('/')) {
         return jsonResponse({ token, user: safeUser });
     }
 
-    // 路由 2: 获取全站数据 (部分公开)
     if (apiPath === 'data' && request.method === 'GET') {
         const authHeader = request.headers.get('Authorization');
         const data = await getSiteData(env);
@@ -172,9 +174,19 @@ if (apiPath.endsWith('/')) {
             const publicBookmarks = data.bookmarks.filter(bm => publicCategoryIds.includes(bm.categoryId));
             return jsonResponse({ isPublic: true, categories: publicCategories, bookmarks: publicBookmarks, users: [], publicModeEnabled: true });
         }
-        const authResult = await authenticateRequest(request, env, data);
-        if (authResult.error) return jsonResponse(authResult, authResult.status);
-        const currentUser = authResult.user;
+        // 如果不是公开模式访问，则需要验证，走下面的逻辑
+    }
+    
+    // --- 保护路由 (需要Token) ---
+    const data = await getSiteData(env);
+    const authResult = await authenticateRequest(request, env, data);
+    if (authResult.error) return jsonResponse(authResult, authResult.status);
+    const currentUser = authResult.user;
+
+    // --- 受保护的路由逻辑 ---
+
+    // 获取全站数据 (已登录用户)
+    if (apiPath === 'data' && request.method === 'GET') {
         if (currentUser.roles.includes('admin')) {
             const usersForAdmin = Object.values(data.users).map(({ passwordHash, salt, ...u }) => u);
             return jsonResponse({...data, users: usersForAdmin});
@@ -185,14 +197,8 @@ if (apiPath.endsWith('/')) {
         const { passwordHash, salt, ...safeUser } = currentUser;
         return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks, users: [safeUser], publicModeEnabled: data.publicModeEnabled });
     }
-    
-    // --- 从这里开始，所有路由都需要身份验证 ---
-    const data = await getSiteData(env);
-    const authResult = await authenticateRequest(request, env, data);
-    if (authResult.error) return jsonResponse(authResult, authResult.status);
-    const currentUser = authResult.user;
 
-    // 路由 3: 更新分类和书签的批量接口
+    // 更新分类和书签的批量接口
     if (apiPath === 'data' && request.method === 'PUT') {
         if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
         const dataToUpdate = await request.json();
@@ -202,7 +208,7 @@ if (apiPath.endsWith('/')) {
         return jsonResponse({ success: true });
     }
     
-    // 路由 4: 新增书签
+    // 新增书签
     if (apiPath === 'bookmarks' && request.method === 'POST') {
         if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
         const bookmark = await request.json();
@@ -217,10 +223,9 @@ if (apiPath.endsWith('/')) {
         return jsonResponse(bookmark, 201);
     }
 
-    // 路由 5: 修改或删除单个书签
+    // 修改或删除单个书签
     if (apiPath.startsWith('bookmarks/')) {
         const id = apiPath.split('/')[1];
-        if (!id) return jsonResponse({ error: '无效的书签ID' }, 400);
         const bookmarkIndex = data.bookmarks.findIndex(bm => bm.id === id);
         if (bookmarkIndex === -1) return jsonResponse({ error: '书签未找到' }, 404);
         const bookmarkToAccess = data.bookmarks[bookmarkIndex];
@@ -241,13 +246,12 @@ if (apiPath.endsWith('/')) {
         }
     }
 
-    // 路由 6: 用户管理
+    // 用户管理
     if (apiPath.startsWith('users')) {
         if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
         const username = apiPath.split('/').pop();
 
-        // 新增用户
-        if (request.method === 'POST') {
+        if (request.method === 'POST' && apiPath === 'users') {
             const { username: newUsername, password, roles, permissions } = await request.json();
             if (!newUsername || !password || data.users[newUsername]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
             const salt = generateSalt();
@@ -261,7 +265,6 @@ if (apiPath.endsWith('/')) {
         const userToManage = data.users[username];
         if (!userToManage) return jsonResponse({ error: '用户未找到' }, 404);
 
-        // 修改用户
         if (request.method === 'PUT') {
             const { roles, permissions, password } = await request.json();
             if (username === 'public') {
@@ -282,7 +285,6 @@ if (apiPath.endsWith('/')) {
             return jsonResponse(updatedUser);
         }
 
-        // 删除用户
         if (request.method === 'DELETE') {
             if (username === 'public') return jsonResponse({ error: '公共账户为系统保留账户，禁止删除。' }, 403);
             if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
