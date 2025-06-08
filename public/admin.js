@@ -225,8 +225,13 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Tab 2: User Management ---
- // 在 admin.js 中找到并完全替换这个函数
-// 在 admin.js 中找到并完全替换这个函数
+
+
+  // =======================================================================
+// --- 请将这个代码块完整地粘贴到 admin.js 中 ---
+// =======================================================================
+
+// --- Tab 2: User Management ---
 const renderUserAdminTab = (container) => {
     container.innerHTML = `<h2>用户管理</h2><div id="user-management-container"><div class="user-list-container"><h3>用户列表</h3><ul id="user-list"></ul></div><div class="user-form-container"><form id="user-form"><h3 id="user-form-title">添加新用户</h3><input type="hidden" id="user-form-username-hidden"><div class="form-group"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required></div><div class="form-group"><label for="user-form-password">密码:</label><input type="password" id="user-form-password"></div><div class="form-group"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div><div class="form-group flex-grow"><label>可见分类:</label><div id="user-form-categories" class="checkbox-group"></div></div><div class="user-form-buttons"><button type="submit" class="button-primary">保存用户</button><button type="button" id="user-form-clear-btn" class="secondary">新增/清空</button></div><p class="modal-error-message"></p></form></div></div>`;
     
@@ -244,13 +249,12 @@ const renderUserAdminTab = (container) => {
             delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
             delBtn.title = '删除用户';
             
-            // 删除按钮的点击事件
             delBtn.onclick = (e) => {
                 e.stopPropagation();
                 showConfirm('删除用户', `确定删除用户 "${user.username}"?`, async () => {
                     try {
                         await apiRequest(`users/${user.username}`, 'DELETE');
-                        await initializePage('tab-users'); // 刷新并切换到用户标签页
+                        await initializePage('tab-users');
                     } catch (error) { 
                         alert(error.message); 
                     }
@@ -261,10 +265,9 @@ const renderUserAdminTab = (container) => {
         userList.appendChild(li);
     });
 
-    // 使用事件委托处理用户列表点击
     userList.addEventListener('click', (e) => {
         const li = e.target.closest('li[data-username]');
-        if (li && !e.target.closest('button')) { // 确保不是点击删除按钮
+        if (li && !e.target.closest('button')) {
             const user = allUsers.find(u => u.username === li.dataset.username);
             if (user) {
                 populateUserForm(user);
@@ -278,93 +281,93 @@ const renderUserAdminTab = (container) => {
     clearUserForm(); 
 };
 
+const populateUserForm = (user) => {
+    const form = document.getElementById('user-form'); if (!form) return;
+    form.reset();
+    form.querySelector('#user-form-title').textContent = `编辑用户: ${user.username}`;
+    const usernameInput = form.querySelector('#user-form-username');
+    usernameInput.value = user.username;
+    usernameInput.readOnly = true;
+    form.querySelector('#user-form-username-hidden').value = user.username;
+    form.querySelector('#user-form-password').placeholder = "留空则不修改";
     
-    const populateUserForm = (user) => {
-        const form = document.getElementById('user-form'); if (!form) return;
-        form.reset();
-        form.querySelector('#user-form-title').textContent = `编辑用户: ${user.username}`;
-        const usernameInput = form.querySelector('#user-form-username');
-        usernameInput.value = user.username;
-        usernameInput.readOnly = true;
-        form.querySelector('#user-form-username-hidden').value = user.username;
-        form.querySelector('#user-form-password').placeholder = "留空则不修改";
- const isAdmin = user.roles.includes('admin');
-renderUserFormRoles(user.roles);
+    const isAdmin = user.roles.includes('admin');
+    renderUserFormRoles(user.roles);
     renderUserFormCategories(isAdmin ? allCategories.map(c => c.id) : (user.permissions?.visibleCategories || []), isAdmin);
-
-     
-        document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
+    
+    document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
     document.querySelector(`#user-list li[data-username="${user.username}"]`)?.classList.add('selected');
 };
-    
-    const clearUserForm = () => {
-       const form = document.getElementById('user-form'); if (!form) return;
+
+const clearUserForm = () => {
+    const form = document.getElementById('user-form'); if (!form) return;
     form.reset();
     form.querySelector('#user-form-title').textContent = '添加新用户';
     form.querySelector('#user-form-username').readOnly = false;
     form.querySelector('#user-form-password').placeholder = "必填";
     form.querySelector('#user-form-username-hidden').value = '';
-        
-        renderUserFormRoles();
-        renderUserFormCategories();
-        document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
+    renderUserFormRoles();
+    renderUserFormCategories();
+    document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
 };
-    const renderUserFormRoles = (activeRoles = []) => {
-        const container = document.getElementById('user-form-roles'); if(!container) return;
-        container.innerHTML = '';
-        ['admin', 'editor', 'viewer'].forEach(role => {
-            container.innerHTML += `<div><input type="checkbox" id="role-${role}" value="${role}" ${activeRoles.includes(role) ? 'checked' : ''}><label for="role-${role}">${role}</label></div>`;
-        });
-    };
-    const renderUserFormCategories = (visibleIds = [], isDisabled = false) => {
-        const container = document.getElementById('user-form-categories'); if(!container) return;
-        container.innerHTML = '';
-        const sortedCategories = [...allCategories].sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-        const categoryMap = new Map(sortedCategories.map(cat => [cat.id, { ...cat, children: [] }]));
-        const tree = [];
-        for (const cat of sortedCategories) {
-            if (cat.parentId && categoryMap.has(cat.parentId)) categoryMap.get(cat.parentId).children.push(categoryMap.get(cat.id));
-            else tree.push(categoryMap.get(cat.id));
-        }
-        const buildCheckboxes = (nodes, level) => {
-            if (level >= 4) return;
-            for (const node of nodes) {
-                 container.innerHTML += `<div><input type="checkbox" id="cat-perm-${node.id}" value="${node.id}" ${visibleIds.includes(node.id) ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}><label for="cat-perm-${node.id}" style="padding-left: ${level * 20}px">${escapeHTML(node.name)}</label></div>`;
-                if(node.children && node.children.length > 0) buildCheckboxes(node.children, level + 1);
-            }
-        };
-        buildCheckboxes(tree, 0);
-    };
-    const handleUserFormSubmit = async (e) => {
-        e.preventDefault();
-        const form = e.target;
-        const hiddenUsername = form.querySelector('#user-form-username-hidden').value;
-        const isEditing = !!hiddenUsername;
-        const username = form.querySelector('#user-form-username').value.trim();
-        const password = form.querySelector('#user-form-password').value;
-        const errorEl = form.querySelector('.modal-error-message');
-        errorEl.textContent = '';
-        if (!username) { errorEl.textContent = '用户名不能为空'; return; }
-        if (!isEditing && !password) { errorEl.textContent = '新用户必须设置密码'; return; }
-        const userData = {
-            roles: Array.from(form.querySelectorAll('#user-form-roles input:checked')).map(cb => cb.value),
-            permissions: { visibleCategories: Array.from(form.querySelectorAll('#user-form-categories input:checked')).map(cb => cb.value) }
-        };
-        if (password) userData.password = password;
-        if (!isEditing) userData.username = username;
-        const endpoint = isEditing ? `bookmarks/${id}` : 'bookmarks';
-    const method = isEditing ? 'PUT' : 'POST';
-        
-        try {
-        await apiRequest(endpoint, method, data);
-        hideAllModals();
-        // 【修正】刷新数据并重新渲染书签标签页
-        await initializePage();
-        document.querySelector('.admin-tab-link[data-tab="tab-bookmarks"]').click();
-    } catch (error) {
-        bookmarkEditForm.querySelector('.modal-error-message').textContent = error.message;
+
+const renderUserFormRoles = (activeRoles = []) => {
+    const container = document.getElementById('user-form-roles'); if(!container) return;
+    container.innerHTML = '';
+    ['admin', 'editor', 'viewer'].forEach(role => {
+        container.innerHTML += `<div><input type="checkbox" id="role-${role}" value="${role}" ${activeRoles.includes(role) ? 'checked' : ''}><label for="role-${role}">${role}</label></div>`;
+    });
+};
+
+const renderUserFormCategories = (visibleIds = [], isDisabled = false) => {
+    const container = document.getElementById('user-form-categories'); if(!container) return;
+    container.innerHTML = '';
+    const sortedCategories = [...allCategories].sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    const categoryMap = new Map(sortedCategories.map(cat => [cat.id, { ...cat, children: [] }]));
+    const tree = [];
+    for (const cat of sortedCategories) {
+        if (cat.parentId && categoryMap.has(cat.parentId)) categoryMap.get(cat.parentId).children.push(categoryMap.get(cat.id));
+        else tree.push(categoryMap.get(cat.id));
     }
-});
+    const buildCheckboxes = (nodes, level) => {
+        if (level >= 4) return;
+        for (const node of nodes) {
+            container.innerHTML += `<div><input type="checkbox" id="cat-perm-${node.id}" value="${node.id}" ${visibleIds.includes(node.id) ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}><label for="cat-perm-${node.id}" style="padding-left: ${level * 20}px">${escapeHTML(node.name)}</label></div>`;
+            if(node.children && node.children.length > 0) buildCheckboxes(node.children, level + 1);
+        }
+    };
+    buildCheckboxes(tree, 0);
+};
+
+const handleUserFormSubmit = async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const hiddenUsername = form.querySelector('#user-form-username-hidden').value;
+    const isEditing = !!hiddenUsername;
+    const username = form.querySelector('#user-form-username').value.trim();
+    const password = form.querySelector('#user-form-password').value;
+    const errorEl = form.querySelector('.modal-error-message');
+    errorEl.textContent = '';
+    if (!username) { errorEl.textContent = '用户名不能为空'; return; }
+    if (!isEditing && !password) { errorEl.textContent = '新用户必须设置密码'; return; }
+    const userData = {
+        roles: Array.from(form.querySelectorAll('#user-form-roles input:checked')).map(cb => cb.value),
+        permissions: { visibleCategories: Array.from(form.querySelectorAll('#user-form-categories input:checked')).map(cb => cb.value) }
+    };
+    if (password) userData.password = password;
+    if (!isEditing) userData.username = username;
+    const endpoint = isEditing ? `users/${hiddenUsername}` : 'users';
+    const method = isEditing ? 'PUT' : 'POST';
+    try {
+        await apiRequest(endpoint, method, userData);
+        alert('用户保存成功！');
+        await initializePage('tab-users');
+    } catch(error) { errorEl.textContent = error.message; }
+};
+
+// =======================================================================
+// --- 替换块结束 ---
+// =======================================================================
     
     // --- Tab 3: Bookmark Management ---
     const renderBookmarkAdminTab = (container) => {
