@@ -207,7 +207,7 @@ button.danger:hover { background-color: rgba(239, 68, 68, 0.1); }
 .modal-content.small { max-width: 450px; text-align: center; }
 .admin-panel-container { display: flex; height: 100%; }
 .admin-panel-nav {
-    flex-shrink: 0; width: 300px; border-right: 1px solid var(--border-light);
+    flex-shrink: 0; width: 200px; border-right: 1px solid var(--border-light);
     padding-right: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem;
 }
 .dark-theme .admin-panel-nav { border-right-color: var(--border-dark); }
@@ -253,16 +253,42 @@ button.danger:hover { background-color: rgba(239, 68, 68, 0.1); }
 #bookmark-admin-list-container .bm-admin-cat { color: var(--text-secondary-light); font-size: 0.9em; }
 .dark-theme #bookmark-admin-list-container .bm-admin-cat { color: var(--text-secondary-dark); }
 #bookmark-admin-list-container .bm-admin-actions button { margin: 0; padding: 5px; width: 32px; height: 32px; }
-#user-management-container { display: grid; grid-template-columns: 1fr 2fr; gap: 2.5rem; height: 100%; overflow: hidden; }
-.user-list-container, .user-form-container { display: flex; flex-direction: column; overflow: hidden; }
-#user-list { list-style-type: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; border: 1px solid var(--border-light); border-radius: 8px; }
+
+/* --- 请替换为下面的新代码 --- */
+#user-management-container {
+    display: flex;            /* 从 grid 改为 flex */
+    flex-direction: column;   /* 新增此行，使其垂直排列 */
+    gap: 2.5rem;
+    /* height: 100%; */       /* 删除或注释掉此行，让高度自适应内容 */
+    /* overflow: hidden; */   /* 删除或注释掉此行 */
+}
+
+
+.user-list-container, .user-form-container { display: flex; flex-direction: column; }
+
+#user-list {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+    /* overflow-y: auto; */   /* 删除或注释掉此行 */
+    /* flex-grow: 1; */       /* 删除或注释掉此行 */
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+}
+
 .dark-theme #user-list { border-color: var(--border-dark); }
 #user-list li { padding: 10px; border-bottom: 1px solid var(--border-light); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
 .dark-theme #user-list li { border-bottom-color: var(--border-dark); }
 #user-list li:last-child { border-bottom: none; }
 #user-list li:hover, #user-list li.selected { background-color: rgba(0,0,0,0.05); }
 .dark-theme #user-list li:hover, .dark-theme #user-list li.selected { background-color: rgba(255,255,255,0.05); }
-.user-form-container form { flex-grow: 1; overflow-y: auto; padding-right: 1rem; }
+
+.user-form-container form {
+    /* flex-grow: 1; */       /* 删除或注释掉此行 */
+    /* overflow-y: auto; */   /* 删除或注释掉此行 */
+    padding-right: 1rem;
+}
+
 .checkbox-group {
     display: flex; flex-direction: column; gap: 0.75rem;
     height: 250px; /* 增加高度 */
