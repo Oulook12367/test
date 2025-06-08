@@ -26,15 +26,16 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); 
     };
     const showConfirm = (title, text, onConfirm) => {
-        confirmTitle.textContent = title;
-        confirmText.textContent = text;
-        showModal(confirmModal);
-        confirmBtnYes.onclick = () => { 
-            // 只隐藏确认框，保留背景和其他模态框
-            confirmModal.style.display = 'none';
-            onConfirm(); 
-        };
-    };
+        confirmTitle.textContent = title;
+        confirmText.textContent = text;
+        showModal(confirmModal);
+
+        confirmBtnYes.onclick = () => {
+            // 【重要修正】在执行回调函数之前，先调用 hideAllModals 关闭蒙版和所有弹窗
+            hideAllModals(); 
+            onConfirm(); 
+        };
+    };
 
     // --- Auth Check & Initial Data Load ---
     async function initializePage() {
