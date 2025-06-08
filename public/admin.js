@@ -242,6 +242,15 @@ const renderUserAdminTab = (container) => {
         const li = document.createElement('li');
         li.dataset.username = user.username;
         li.innerHTML = `<span>${user.username} (${user.roles.join(', ')})</span>`;
+
+
+ // 【修改】针对 public 用户进行特殊处理
+    if (user.username === 'public') {
+        li.innerHTML = `<span><i class="fas fa-lock fa-fw"></i> ${user.username} (公共模式)</span>`;
+        li.classList.add('disabled'); // 添加一个禁用的样式类
+    } else {
+        li.innerHTML = `<span>${user.username} (${user.roles.join(', ')})</span>`;
+    }
         
         if (user.username !== 'admin' && user.username !== 'public') {
             const delBtn = document.createElement('button');
@@ -265,15 +274,16 @@ const renderUserAdminTab = (container) => {
         userList.appendChild(li);
     });
 
-    userList.addEventListener('click', (e) => {
-        const li = e.target.closest('li[data-username]');
-        if (li && !e.target.closest('button')) {
-            const user = allUsers.find(u => u.username === li.dataset.username);
-            if (user) {
-                populateUserForm(user);
-            }
+   userList.addEventListener('click', (e) => {
+    const li = e.target.closest('li[data-username]');
+    // 【修改】增加对 .disabled 类的判断
+    if (li && !li.classList.contains('disabled') && !e.target.closest('button')) {
+        const user = allUsers.find(u => u.username === li.dataset.username);
+        if (user) {
+            populateUserForm(user);
         }
-    });
+    }
+});
 
     container.querySelector('#user-form-clear-btn').onclick = clearUserForm;
     form.onsubmit = handleUserFormSubmit;
