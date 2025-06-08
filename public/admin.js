@@ -294,20 +294,31 @@ const renderUserAdminTab = (container) => {
     clearUserForm(); 
 };
 
+// 在 admin.js 中, 找到并完全替换 populateUserForm 函数
+
 const populateUserForm = (user) => {
     const form = document.getElementById('user-form'); if (!form) return;
     form.reset();
     form.querySelector('#user-form-title').textContent = `编辑用户: ${user.username}`;
+    
+    // 【新增】判断是否为 public 用户
+    const isPublicUser = user.username === 'public';
+
     const usernameInput = form.querySelector('#user-form-username');
     usernameInput.value = user.username;
     usernameInput.readOnly = true;
+
+    const passwordInput = form.querySelector('#user-form-password');
+    passwordInput.placeholder = isPublicUser ? "公共账户无需密码" : "留空则不修改";
+    passwordInput.disabled = isPublicUser; // 【新增】禁用密码输入
+
     form.querySelector('#user-form-username-hidden').value = user.username;
-    form.querySelector('#user-form-password').placeholder = "留空则不修改";
     
+    // 渲染角色和分类
     const isAdmin = user.roles.includes('admin');
     renderUserFormRoles(user.roles);
-    renderUserFormCategories(isAdmin ? allCategories.map(c => c.id) : (user.permissions?.visibleCategories || []), isAdmin);
-    
+    renderUserFormCategories(isAdmin ? allCategories.map(c => c.id) : (user.permissions?.visibleCategories || []), isPublicUser ? false : isAdmin); // 【修改】public 用户分类可选
+
     document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
     document.querySelector(`#user-list li[data-username="${user.username}"]`)?.classList.add('selected');
 };
@@ -324,11 +335,31 @@ const clearUserForm = () => {
     document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
 };
 
-const renderUserFormRoles = (activeRoles = []) => {
+// 在 admin.js 中, 找到并完全替换 renderUserFormRoles 函数
+
+const renderUserFormRoles = (activeRoles = ['viewer']) => {
     const container = document.getElementById('user-form-roles'); if(!container) return;
     container.innerHTML = '';
+    
+    // 【修改】同时获取用户名以判断是否为特殊用户
+    const username = document.getElementById('user-form-username').value;
+    const isPublicUser = username === 'public';
+    const isAdminUser = username === 'admin';
+
     ['admin', 'editor', 'viewer'].forEach(role => {
-        container.innerHTML += `<div><input type="checkbox" id="role-${role}" value="${role}" ${activeRoles.includes(role) ? 'checked' : ''}><label for="role-${role}">${role}</label></div>`;
+        const currentRole = activeRoles[0] || 'viewer';
+        const isChecked = currentRole === role;
+
+        // 【修改】锁定 admin 和 public 用户的角色
+        const isDisabled = (isAdminUser && role !== 'admin') || (isPublicUser && role !== 'viewer');
+        
+        container.innerHTML += `
+            <div>
+                <input type="radio" id="role-${role}" name="role-selection" value="${role}" 
+                       ${isChecked ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}>
+                <label for="role-${role}">${role}</label>
+            </div>
+        `;
     });
 };
 
