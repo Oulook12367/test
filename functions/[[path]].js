@@ -208,20 +208,34 @@ export async function onRequest(context) {
         return jsonResponse({ success: true });
     }
     
-    // 新增书签
-    if (apiPath === 'bookmarks' && request.method === 'POST') {
-        if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
-        const bookmark = await request.json();
-        if (!currentUser.roles.includes('admin') && !currentUser.permissions.visibleCategories.includes(bookmark.categoryId)) return jsonResponse({ error: '无权在此分类下添加书签' }, 403);
-        bookmark.id = `bm-${Date.now()}`;
-        if(typeof bookmark.sortOrder === 'undefined') {
-            const maxOrder = data.bookmarks.length > 0 ? Math.max(...data.bookmarks.map(b => b.sortOrder || 0)) : -1;
-            bookmark.sortOrder = maxOrder + 10;
-        }
-        data.bookmarks.push(bookmark);
-        await saveSiteData(env, data);
-        return jsonResponse(bookmark, 201);
+
+// 路由 4: 新增书签
+if (apiPath === 'bookmarks' && request.method === 'POST') {
+    if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
+    
+    const bookmark = await request.json();
+    
+    if (!currentUser.roles.includes('admin') && !currentUser.permissions.visibleCategories.includes(bookmark.categoryId)) {
+        return jsonResponse({ error: '无权在此分类下添加书签' }, 403);
     }
+    
+    bookmark.id = `bm-${Date.now()}`;
+    
+    // 【重要修改】自动计算排序号的逻辑
+    // 检查前端是否传递了排序号，如果没有，则在后端智能计算
+    if (typeof bookmark.sortOrder === 'undefined' || bookmark.sortOrder === null) {
+        // 1. 筛选出与新书签同属一个分类的所有书签
+        const bookmarksInCategory = data.bookmarks.filter(b => b.categoryId === bookmark.categoryId);
+        // 2. 在这个分类内部找到最大的排序号
+        const maxOrder = bookmarksInCategory.length > 0 ? Math.max(...bookmarksInCategory.map(b => b.sortOrder || 0)) : -1;
+        // 3. 新的排序号为最大号+10
+        bookmark.sortOrder = maxOrder + 10;
+    }
+    
+    data.bookmarks.push(bookmark);
+    await saveSiteData(env, data);
+    return jsonResponse(bookmark, 201);
+}
 
     // 修改或删除单个书签
     if (apiPath.startsWith('bookmarks/')) {
