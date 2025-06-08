@@ -16,6 +16,7 @@
     --text-secondary-light: #6c757d;
     --accent-light: #0d6efd;
     --accent-hover-light: #0b5ed7;
+    --star-color-light: #fcc419;
 
     /* Dark Theme */
     --bg-dark: #1a1a1a;
@@ -25,6 +26,7 @@
     --text-secondary-dark: #adb5bd;
     --accent-dark: #4dabf7;
     --accent-hover-dark: #74c0fc;
+    --star-color-dark: #fcc419;
 }
 
 /* 2. GLOBAL & BODY */
@@ -79,10 +81,11 @@ body.is-loading { visibility: hidden; }
 #app-layout.sidebar-collapsed #sidebar-toggle-btn {
     left: 1rem;
 }
-.main-header-left { display: none; }
 
 .main-content {
     flex-grow: 1;
+    display: flex;
+    flex-direction: column;
     overflow-y: auto;
     padding: 1.5rem 2rem;
     transition: padding-left var(--transition-speed) ease;
@@ -93,6 +96,12 @@ header {
     align-items: center;
     gap: 1rem;
     margin-bottom: 2rem;
+    flex-shrink: 0;
+}
+
+/* 【新增】解决侧边栏隐藏按钮与搜索框重叠问题 */
+#app-layout.sidebar-collapsed .main-content > header {
+    padding-left: 45px;
 }
 
 /* 4. COMPONENTS */
@@ -102,6 +111,8 @@ header {
     border: 1px solid transparent; border-radius: 6px; cursor: pointer;
     text-decoration: none; transition: all 0.2s;
 }
+
+
 .button-primary {
     background-color: var(--accent-light); color: white;
 }
@@ -136,13 +147,13 @@ header {
 /* --- Forms & Inputs --- */
 .form-group { margin-bottom: 1rem; }
 label { display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; }
-input[type="text"], input[type="password"], input[type="url"], input[type="search"], input[type="number"], textarea, select {
+input, textarea, select {
     width: 100%; padding: 0.6rem 0.8rem; font-size: 1rem;
     background-color: var(--bg-light); border: 1px solid var(--border-light);
     border-radius: 6px; color: var(--text-primary-light);
     transition: border-color 0.2s, box-shadow 0.2s;
 }
-.dark-theme input[type="text"], .dark-theme input[type="password"], .dark-theme input[type="url"], .dark-theme input[type="search"], .dark-theme input[type="number"], .dark-theme textarea, .dark-theme select {
+.dark-theme input, .dark-theme textarea, .dark-theme select {
     background-color: var(--surface-dark); border-color: var(--border-dark);
     color: var(--text-primary-dark);
 }
@@ -154,9 +165,6 @@ input:focus, textarea:focus, select:focus {
     border-color: var(--accent-dark);
     box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.25);
 }
-.dark-theme select, .dark-theme option, .dark-theme select:focus {
-    background-color: var(--surface-dark) !important;
-}
 
 /* --- Search Bar --- */
 .search-bar {
@@ -166,9 +174,27 @@ input:focus, textarea:focus, select:focus {
 .dark-theme .search-bar { background-color: var(--surface-dark); border-color: var(--border-dark); }
 .search-bar:focus-within { border-color: var(--accent-light); box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25); }
 .dark-theme .search-bar:focus-within { border-color: var(--accent-dark); box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.25); }
-.search-bar select { border: none; border-right: 1px solid var(--border-light); border-radius: 0; }
-.dark-theme .search-bar select { border-right-color: var(--border-dark); }
-.search-bar input { border: none; }
+
+/* 【修改】调整搜索引擎选择框和输入框的比例 */
+.search-bar select { 
+    flex-shrink: 0;
+    width: 120px; /* 为选择框设置一个合适的固定宽度 */
+    border: none; 
+    border-right: 1px solid var(--border-light); 
+    border-radius: 0; 
+    background-color: var(--bg-light);
+}
+.dark-theme .search-bar select {
+    border-right-color: var(--border-dark);
+    background-color: var(--surface-dark);
+}
+.search-bar input {
+    flex-grow: 1; /* 让输入框填充剩余空间 */
+    border: none;
+}
+.dark-theme .search-bar input {
+    background-color: var(--surface-dark);
+}
 
 /* --- Sidebar --- */
 .sidebar-header {
@@ -180,7 +206,20 @@ input:focus, textarea:focus, select:focus {
 .sidebar-header h2 { margin: 0; }
 
 .category-nav { list-style: none; padding: 0; margin: 0; }
-.category-nav.dynamic { margin-top: 1rem; }
+.category-nav.dynamic { flex-grow: 1; overflow-y: auto; }
+
+/* 【新增】侧边栏页脚样式 */
+#sidebar-footer-nav {
+    flex-shrink: 0;
+    margin-top: auto; /* 关键：将此部分推至底部 */
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-light);
+}
+.dark-theme #sidebar-footer-nav {
+    border-top-color: var(--border-dark);
+}
+
+
 .category-nav li {
     display: flex; align-items: center; gap: 0.75rem;
     padding: 0.6rem 0.8rem; margin-bottom: 0.25rem;
@@ -196,6 +235,29 @@ input:focus, textarea:focus, select:focus {
 }
 .dark-theme .category-nav li.active {
     background-color: var(--accent-dark); color: #000;
+}
+
+/* 【新增】默认分类小星星图标样式 */
+.category-nav li .star-icon {
+    margin-left: auto;
+    color: var(--text-secondary-light);
+    opacity: 0.4;
+    transition: all 0.2s;
+    padding: 5px; /* 增加点击区域 */
+}
+.dark-theme .category-nav li .star-icon {
+    color: var(--text-secondary-dark);
+}
+.category-nav li:hover .star-icon,
+.category-nav li .star-icon.is-default {
+    opacity: 1;
+    transform: scale(1.2);
+}
+.category-nav li .star-icon.is-default {
+    color: var(--star-color-light);
+}
+.dark-theme .category-nav li .star-icon.is-default {
+    color: var(--star-color-dark);
 }
 
 /* --- Bookmark Grid --- */
