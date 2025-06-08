@@ -142,7 +142,7 @@ export async function onRequest(context) {
     
     // --- API 路由逻辑开始 ---
     globalThis.JWT_SECRET_STRING = env.JWT_SECRET;
-    const apiPath = path.substring(5);
+    let apiPath = path.substring(5);
 if (apiPath.endsWith('/')) {
     apiPath = apiPath.slice(0, -1);
 }
