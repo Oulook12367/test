@@ -142,7 +142,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Tab 1: Category Management ---
     const renderCategoryAdminTab = (container) => {
-        // 【修改】移除h2标题
         container.innerHTML = `<p class="admin-panel-tip">通过修改表单来调整分类，完成后请点击下方的“保存”按钮。</p>
             <div class="category-admin-header"><span>排序</span><span>分类名称</span><span>上级分类</span><span>操作</span></div>
             <ul id="category-admin-list"></ul>
@@ -251,7 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Tab 2: User Management ---
     const renderUserAdminTab = (container) => {
-        // 【重要修改】重构HTML以支持新的行内布局和滚动行为
+        // 【重要修改】重构HTML以支持新的三段式布局
         container.innerHTML = `<div id="user-management-container">
             <div class="user-list-container">
                 <h3>用户列表</h3>
@@ -260,7 +259,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="user-form-container">
                 <form id="user-form">
                     <h3 id="user-form-title">添加新用户</h3>
-                    <div id="user-form-scrollable-content">
+                    <div class="user-form-static-fields">
                         <input type="hidden" id="user-form-username-hidden">
                         <div class="form-group-inline">
                             <label for="user-form-username">用户名:</label>
@@ -278,10 +277,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             <label for="user-form-default-cat">默认显示分类:</label>
                             <select id="user-form-default-cat"></select>
                         </div>
-                        <div class="form-group flex-grow">
-                            <label>可见分类:</label>
-                            <div id="user-form-categories" class="checkbox-group"></div>
-                        </div>
+                    </div>
+                    <div class="form-group flex-grow">
+                        <label>可见分类:</label>
+                        <div id="user-form-categories" class="checkbox-group"></div>
                     </div>
                     <div class="user-form-buttons">
                         <button type="submit" class="button-primary">保存用户</button>
@@ -332,10 +331,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (user) populateUserForm(user);
             }
         });
+        
         const visibleCategoriesContainer = form.querySelector('#user-form-categories');
         visibleCategoriesContainer.addEventListener('change', () => {
             updateDefaultCategoryDropdown(form);
         });
+
         container.querySelector('#user-form-clear-btn').onclick = clearUserForm;
         form.onsubmit = handleUserFormSubmit;
         clearUserForm();
@@ -353,9 +354,11 @@ document.addEventListener('DOMContentLoaded', () => {
         passwordInput.disabled = isPublicUser;
         form.querySelector('#user-form-username-hidden').value = user.username;
         const isAdmin = user.roles.includes('admin');
+        
         renderUserFormRoles(user.roles);
         renderUserFormCategories(isAdmin ? allCategories.map(c => c.id) : (user.permissions?.visibleCategories || []), isPublicUser ? false : isAdmin);
         updateDefaultCategoryDropdown(form, user.defaultCategoryId);
+
         document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
         document.querySelector(`#user-list li[data-username="${user.username}"]`)?.classList.add('selected');
     };
@@ -465,26 +468,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Tab 3: Bookmark Management ---
     const renderBookmarkAdminTab = (container) => {
-        // 【修改】移除h2标题
-        container.innerHTML = `<p class="admin-panel-tip">通过下拉菜单筛选分类。修改排序数字后将自动保存。</p>
+        container.innerHTML = `<p class="admin-panel-tip">通过下拉菜单筛选分类。修改排序数字后，点击下方的“保存”按钮来应用更改。</p>
             <div class="bookmark-admin-controls"><span>筛选分类:</span><select id="bookmark-category-filter"><option value="all">-- 显示全部分类 --</option></select></div>
             <div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div>
             <div id="bookmark-admin-list-container"><ul></ul></div>
-            <div class="admin-panel-actions"><button id="add-new-bookmark-btn" class="secondary"><i class="fas fa-plus"></i> 添加新书签</button></div>`;
+            <div class="admin-panel-actions">
+                <button id="save-bookmarks-btn" class="button-primary"><i class="fas fa-save"></i> 保存书签顺序</button>
+                <button id="add-new-bookmark-btn" class="secondary"><i class="fas fa-plus"></i> 添加新书签</button>
+            </div>`;
 
         const listEl = container.querySelector('#bookmark-admin-list-container ul');
         const categoryFilter = container.querySelector('#bookmark-category-filter');
-        
-        listEl.addEventListener('change', debounce(async (e) => {
-            if (e.target.matches('.bm-sort-order')) {
-                const bmId = e.target.closest('li').dataset.id;
-                const bmInState = allBookmarks.find(b => b.id === bmId);
-                if (bmInState) {
-                    bmInState.sortOrder = parseInt(e.target.value) || 0;
-                    await apiRequest('data', 'PUT', { bookmarks: allBookmarks });
-                }
-            }
-        }, 500));
         
         allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name)).forEach(cat => {
             const option = document.createElement('option');
@@ -521,6 +515,31 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         container.querySelector('#add-new-bookmark-btn').onclick = handleAddNewBookmark;
+        container.querySelector('#save-bookmarks-btn').onclick = handleSaveBookmarks;
+    };
+    const handleSaveBookmarks = async () => {
+        const listItems = document.querySelectorAll('#bookmark-admin-list-container li');
+        let hasChanges = false;
+        listItems.forEach(li => {
+            const id = li.dataset.id;
+            const newSortOrder = parseInt(li.querySelector('.bm-sort-order').value) || 0;
+            const bookmark = allBookmarks.find(bm => bm.id === id);
+            if (bookmark && bookmark.sortOrder !== newSortOrder) {
+                bookmark.sortOrder = newSortOrder;
+                hasChanges = true;
+            }
+        });
+
+        if (!hasChanges) {
+            alert('没有检测到排序变更。');
+            return;
+        }
+        
+        try {
+            await apiRequest('data', 'PUT', { bookmarks: allBookmarks });
+            alert('书签顺序保存成功！');
+            await initializePage('tab-bookmarks');
+        } catch (error) { alert(`保存失败: ${error.message}`); }
     };
     const handleAddNewBookmark = () => {
         if (!bookmarkEditForm || !bookmarkEditModal) { return; }
@@ -578,7 +597,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Tab 4: System Settings ---
     const renderSystemSettingsTab = (container) => {
-        // 【修改】移除h2标题
         container.innerHTML = `<div class="system-setting-item"><h3><i class="fas fa-file-import"></i> 导入书签</h3><p>从浏览器导出的HTML文件导入书签。导入操作会合并现有书签，不会清空原有数据。</p><button id="import-bookmarks-btn-admin" class="secondary">选择HTML文件</button><input type="file" id="import-file-input-admin" accept=".html,.htm" style="display: none;"></div>`;
         container.querySelector('#import-bookmarks-btn-admin').onclick = () => container.querySelector('#import-file-input-admin').click();
         container.querySelector('#import-file-input-admin').onchange = (e) => {
