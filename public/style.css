@@ -7,7 +7,6 @@
 :root {
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --sidebar-width: 260px;
-    --sidebar-width-collapsed: 0px;
     --transition-speed: 0.3s;
     
     /* --- Light Theme --- */
@@ -53,7 +52,7 @@ body.is-loading #login-container,
 body.is-loading #app-layout { visibility: hidden; opacity: 0; }
 
 /* 4. CORE GLASSMORPHISM EFFECT */
-#login-container, .sidebar, .bookmark-card, .modal-content, .search-bar, .header-buttons button {
+#login-container, .sidebar, .bookmark-card, .modal-content, .search-bar, .header-buttons button, #sidebar-toggle-btn {
     backdrop-filter: blur(18px) saturate(150%);
     -webkit-backdrop-filter: blur(18px) saturate(150%);
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
@@ -81,36 +80,28 @@ body.is-loading #app-layout { visibility: hidden; opacity: 0; }
 }
 
 .sidebar-header { 
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem; 
-    padding: 0 0.5rem;
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 2rem; padding: 0 0.5rem; 
 }
 .sidebar-header h2 { margin: 0; font-size: 1.6rem; font-weight: 700; white-space: nowrap; }
 
+/* 【修正】侧边栏按钮样式 */
 #sidebar-toggle-btn {
-    background: transparent; border: 1px solid var(--border-light);
-    color: var(--text-secondary-light); width: 36px; height: 36px; border-radius: 50%;
+    background: var(--bg-surface-secondary-light); border: 1px solid var(--border-light);
+    color: var(--text-secondary-light); width: 40px; height: 40px; border-radius: 50%;
     font-size: 1rem; display: flex; align-items: center; justify-content: center;
-    cursor: pointer; transition: all 0.2s ease; flex-shrink: 0;
-    backdrop-filter: none; box-shadow: none;
-}
-.dark-theme #sidebar-toggle-btn { border-color: var(--border-dark); color: var(--text-secondary-dark); }
-#sidebar-toggle-btn:hover { background-color: var(--accent-light); color: white; transform: scale(1.1); }
-#app-layout.sidebar-collapsed #sidebar-toggle-btn {
+    cursor: pointer; transition: all 0.2s ease;
     position: fixed;
     top: 2rem;
-    left: 2rem;
-    z-index: 1001;
-    background: var(--bg-surface-secondary-light);
-    backdrop-filter: blur(18px) saturate(150%);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+    left: calc(var(--sidebar-width) - 2rem - 20px); /* Position inside sidebar */
+    z-index: 1001; /* Above sidebar content */
 }
-.dark-theme #app-layout.sidebar-collapsed #sidebar-toggle-btn {
-    background: var(--bg-surface-secondary-dark);
-}
+.dark-theme #sidebar-toggle-btn { background: var(--bg-surface-secondary-dark); border-color: var(--border-dark); color: var(--text-secondary-dark); }
+#sidebar-toggle-btn:hover { background-color: var(--accent-light); color: white; transform: scale(1.1); }
 
+#app-layout.sidebar-collapsed #sidebar-toggle-btn {
+    left: 2rem; /* Position when collapsed */
+}
 
 .category-nav { list-style-type: none; padding: 0; margin: 0; }
 #category-nav { flex-grow: 1; overflow-y: auto; }
@@ -144,8 +135,7 @@ header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; }
 .search-bar select, .search-bar input { border: none; background: transparent; padding: 12px 15px; font-size: 1rem; color: inherit; }
 .search-bar select { border-right: 1px solid var(--border-light); }
 .dark-theme .search-bar select { border-right-color: var(--border-dark); color: var(--text-primary-dark); }
-/* 【修正】暗色模式下下拉菜单背景色 */
-.dark-theme select, .dark-theme option { background-color: #374151; color: var(--text-primary-dark); }
+.dark-theme select, .dark-theme option, .dark-theme select:focus { background-color: #374151 !important; color: var(--text-primary-dark) !important; }
 .search-bar input { width: 100%; }
 input:focus, select:focus { outline: none; }
 .header-buttons { display: flex; align-items: center; gap: 0.75rem; }
@@ -225,9 +215,8 @@ button.danger:hover { background-color: rgba(239, 68, 68, 0.1); }
 .dark-theme .admin-panel-nav a:hover { background-color: rgba(255,255,255,0.05); }
 .admin-panel-nav a.active { background-color: var(--accent-light); color: white; }
 .dark-theme .admin-panel-nav a.active { background-color: var(--accent-dark); color: var(--text-primary-light); }
-/* 【修正】保持管理后台窗口大小一致 */
 .admin-panel-content { flex-grow: 1; padding-left: 1.5rem; display: flex; flex-direction: column; }
-.admin-tab-content { display: none; flex-grow: 1; display: flex; flex-direction: column; }
+.admin-tab-content { display: none; flex-grow: 1; flex-direction: column; }
 .admin-tab-content.active { display: flex; animation: fadeIn 0.3s ease; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 .admin-panel-tip {
