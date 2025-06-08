@@ -210,6 +210,12 @@ export async function onRequest(context) {
         const bookmarkToAccess = data.bookmarks[bookmarkIndex];
         if (!currentUser.roles.includes('admin') && !currentUser.permissions.visibleCategories.includes(bookmarkToAccess.categoryId)) return jsonResponse({ error: '权限不足' }, 403);
         if (request.method === 'PUT') {
+             // 【新增】在这里增加对 public 用户的强校验
+            if (username === 'public') {
+                return jsonResponse({ error: '公共账户为系统保留账户，禁止修改。' }, 403);
+            }
+            const { roles, permissions, password } = await request.json();
+
             if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
             const updatedBookmark = await request.json();
             data.bookmarks[bookmarkIndex] = { ...bookmarkToAccess, ...updatedBookmark };
