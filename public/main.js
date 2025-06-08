@@ -9,19 +9,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const staticNav = document.getElementById('static-nav');
     const logoutButton = document.getElementById('logout-btn');
     const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
-    const mobileSidebarToggleBtn = document.getElementById('mobile-sidebar-toggle-btn');
+    const mobileSidebarToggleBtn = document.getElementById('mobile-sidebar-toggle-btn'); // For smaller screens
     const actionBtn = document.getElementById('action-btn');
 
     // --- State ---
     let allBookmarks = [], allCategories = [];
 
     // --- Helpers ---
-    const getRecursiveCategoryIds = (initialIds) => {
+    const getRecursiveCategoryIds = (initialIds, categories) => {
         const fullIdSet = new Set(initialIds);
         const queue = [...initialIds];
         while (queue.length > 0) {
             const parentId = queue.shift();
-            const children = allCategories.filter(c => c.parentId === parentId);
+            const children = categories.filter(c => c.parentId === parentId);
             for (const child of children) {
                 if (!fullIdSet.has(child.id)) {
                     fullIdSet.add(child.id);
@@ -42,8 +42,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const applySidebarState = (isCollapsed) => {
         appLayout.classList.toggle('sidebar-collapsed', isCollapsed);
         const iconClass = isCollapsed ? 'fa-angle-double-right' : 'fa-angle-double-left';
-        sidebarToggleBtn.innerHTML = `<i class="fas ${iconClass}"></i>`;
-        mobileSidebarToggleBtn.innerHTML = `<i class="fas ${isCollapsed ? 'fa-bars' : 'fa-times'}"></i>`;
+        if (sidebarToggleBtn) sidebarToggleBtn.innerHTML = `<i class="fas ${iconClass}"></i>`;
+        if (mobileSidebarToggleBtn) mobileSidebarToggleBtn.innerHTML = `<i class="fas ${isCollapsed ? 'fa-bars' : 'fa-times'}"></i>`;
         localStorage.setItem('sidebarCollapsed', isCollapsed);
     };
 
@@ -52,27 +52,33 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const data = await apiRequest('data');
             
-            if (!data.isPublic && data.publicModeEnabled === false) {
-                // Private mode, no token, redirect to login
-                window.location.href = 'login.html';
+            // If in private mode and user is not authenticated (API call will fail), redirect to login
+            // The catch block will handle this.
+            
+            // If public mode is enabled and there's no token, show public view
+            if (data.publicModeEnabled && data.isPublic) {
+                allCategories = data.categories || [];
+                allBookmarks = (data.bookmarks || []).map((bm, index) => ({...bm, sortOrder: bm.sortOrder ?? index}));
+                updateHeader(true); // Show login button
+                renderUI();
+                appLayout.style.display = 'flex';
                 return;
             }
 
-            allCategories = data.categories || [];
-            allBookmarks = (data.bookmarks || []).map((bm, index) => ({...bm, sortOrder: bm.sortOrder ?? index}));
-            
-            updateHeader(data.isPublic);
-            renderUI();
-
-            appLayout.style.display = 'flex';
-        } catch (error) {
-            // Token is invalid or expired
-            if (error.message.includes('401') || error.message.includes('Token')) {
-                localStorage.removeItem('jwt_token');
-                window.location.href = 'login.html';
-            } else {
-                document.body.innerHTML = `<div class="error-fullpage">加载失败: ${error.message}</div>`;
+            // If we have a token, data.isPublic will be undefined.
+            if (!data.isPublic) {
+                allCategories = data.categories || [];
+                allBookmarks = (data.bookmarks || []).map((bm, index) => ({...bm, sortOrder: bm.sortOrder ?? index}));
+                updateHeader(false); // Show admin/logout buttons
+                renderUI();
+                appLayout.style.display = 'flex';
+                return;
             }
+
+        } catch (error) {
+            // If token is invalid/expired (401) or any other auth error, redirect to login.
+            localStorage.removeItem('jwt_token');
+            window.location.href = 'login.html';
         } finally {
             document.body.classList.remove('is-loading');
         }
@@ -87,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isPublic) {
             actionBtn.innerHTML = '<i class="fas fa-key"></i> 登录';
             actionBtn.onclick = () => window.location.href = 'login.html';
-            actionBtn.style.display = 'flex';
+            actionBtn.style.display = 'inline-flex';
             logoutButton.style.display = 'none';
         } else {
             const token = localStorage.getItem('jwt_token');
@@ -96,11 +102,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if(payload.roles && payload.roles.includes('admin')) {
                     actionBtn.innerHTML = '<i class="fas fa-cogs"></i> 管理后台';
                     actionBtn.onclick = () => window.location.href = 'admin.html';
-                    actionBtn.style.display = 'flex';
+                    actionBtn.style.display = 'inline-flex';
                 } else {
                     actionBtn.style.display = 'none';
                 }
-                logoutButton.style.display = 'flex';
+                logoutButton.style.display = 'inline-flex';
             }
         }
     }
@@ -147,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (categoryId === 'all') {
             categoryIdsToDisplay = new Set(allCategories.map(c => c.id));
         } else {
-            categoryIdsToDisplay = getRecursiveCategoryIds([categoryId]);
+            categoryIdsToDisplay = getRecursiveCategoryIds( [categoryId], allCategories);
         }
         let filteredBookmarks = allBookmarks.filter(bm => categoryIdsToDisplay.has(bm.categoryId));
         if (searchTerm) {
@@ -177,8 +183,8 @@ document.addEventListener('DOMContentLoaded', () => {
     themeToggleButton.addEventListener('click', () => applyTheme(document.body.classList.contains('light-theme') ? 'dark-theme' : 'light-theme'));
     
     const toggleSidebar = () => applySidebarState(!appLayout.classList.contains('sidebar-collapsed'));
-    sidebarToggleBtn.addEventListener('click', toggleSidebar);
-    mobileSidebarToggleBtn.addEventListener('click', toggleSidebar);
+    if (sidebarToggleBtn) sidebarToggleBtn.addEventListener('click', toggleSidebar);
+    if (mobileSidebarToggleBtn) mobileSidebarToggleBtn.addEventListener('click', toggleSidebar);
 
     logoutButton.addEventListener('click', () => {
         localStorage.removeItem('jwt_token');
