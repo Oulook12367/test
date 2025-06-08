@@ -129,51 +129,105 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Tab 1: Category Management ---
-    const renderCategoryAdminTab = (container) => {
-        container.innerHTML = `<h2>分类管理</h2><p class="admin-panel-tip">通过“排序”数字（越小越靠前）和“父级分类”来调整结构。修改后请点击下方“保存全部分类”按钮。</p><div class="category-admin-header"><span>排序</span><span style="grid-column: span 2;">分类名称</span><span>操作</span></div><ul id="category-admin-list"></ul><div class="admin-panel-actions"><button id="save-categories-btn"><i class="fas fa-save"></i> 保存全部分类</button><button id="add-new-category-btn" class="secondary"><i class="fas fa-plus"></i> 添加新分类</button></div>`;
-        
-        const listEl = container.querySelector('#category-admin-list');
-        const categoryMap = new Map(allCategories.map(cat => [cat.id, { ...cat, children: [] }]));
-        const tree = [];
-        [...allCategories].sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
-            if (cat.parentId && categoryMap.has(cat.parentId)) {
-                categoryMap.get(cat.parentId).children.push(categoryMap.get(cat.id));
-            } else {
-                tree.push(categoryMap.get(cat.id));
+   // 在 admin.js 中找到并【完全替换】此函数
+const renderCategoryAdminTab = (container) => {
+    // 【修改】移除了底部的“保存”按钮，并修改了提示文字
+    container.innerHTML = `<h2>分类管理</h2><p class="admin-panel-tip">任何修改（名称、排序、父级）都会<b>即时自动保存</b>。</p><div class="category-admin-header"><span>排序</span><span style="grid-column: span 2;">分类名称</span><span>操作</span></div><ul id="category-admin-list"></ul><div class="admin-panel-actions"><button id="add-new-category-btn" class="secondary"><i class="fas fa-plus"></i> 添加新分类</button></div>`;
+    
+    const listEl = container.querySelector('#category-admin-list');
+    
+    // 【新增】一个统一的保存函数，用于即时保存
+    const saveAllCategoriesNow = debounce(async () => {
+        const listItems = document.querySelectorAll('#category-admin-list li');
+        let finalCategories = [];
+        let hasError = false;
+
+        listItems.forEach(li => {
+            const id = li.dataset.id;
+            const name = li.querySelector('.cat-name-input').value.trim();
+            const parentId = li.querySelector('.cat-parent-select').value || null; // 确保空值为 null
+            const sortOrder = parseInt(li.querySelector('.cat-order-input').value) || 0;
+            
+            if (!name) {
+                if (!hasError) alert('分类名称不能为空！');
+                hasError = true;
             }
-        });
-        
-        const buildList = (nodes, level) => {
-            nodes.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
-                const li = document.createElement('li');
-                li.dataset.id = cat.id;
-                li.innerHTML = `<input type="number" class="cat-order-input" value="${cat.sortOrder || 0}"><div class="cat-name-cell" style="padding-left: ${level * 25}px;"><input type="text" class="cat-name-input" value="${escapeHTML(cat.name)}"></div><select class="cat-parent-select"></select><button class="delete-cat-btn secondary danger" title="删除"><i class="fas fa-trash-alt"></i></button>`;
-                const parentSelect = li.querySelector('.cat-parent-select');
-                populateCategoryDropdown(parentSelect, allCategories, cat.parentId, cat.id);
-                li.querySelector('.delete-cat-btn').onclick = () => handleDeleteCategory(cat.id, cat.name);
-                listEl.appendChild(li);
-                if (cat.children.length > 0) buildList(cat.children, level + 1);
+
+            finalCategories.push({
+                id: id.startsWith('new-') ? `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` : id,
+                sortOrder, name, parentId,
             });
-        };
-        buildList(tree, 0);
+        });
 
-        container.querySelector('#add-new-category-btn').addEventListener('click', handleAddNewCategory);
-        container.querySelector('#save-categories-btn').addEventListener('click', handleSaveCategories);
-    };
+        if (hasError) return;
 
-    const handleAddNewCategory = () => {
-        const listEl = document.getElementById('category-admin-list');
-        const newCatId = `new-${Date.now()}`;
-        const newSortOrder = (allCategories.length > 0) ? Math.max(...allCategories.map(c => c.sortOrder || 0)) + 10 : 0;
-        const li = document.createElement('li');
-        li.dataset.id = newCatId;
-        li.innerHTML = `<input type="number" class="cat-order-input" value="${newSortOrder}"><div class="cat-name-cell"><input type="text" class="cat-name-input" value="新分类"></div><select class="cat-parent-select"></select><button class="delete-cat-btn secondary danger" title="删除"><i class="fas fa-trash-alt"></i></button>`;
-        const parentSelect = li.querySelector('.cat-parent-select');
-        populateCategoryDropdown(parentSelect, allCategories, null, newCatId);
-        li.querySelector('.delete-cat-btn').onclick = () => li.remove();
-        listEl.prepend(li);
-        li.querySelector('.cat-name-input').focus();
+        try {
+            await apiRequest('data', 'PUT', { categories: finalCategories });
+            // 成功后重新加载数据，但保持在当前标签页
+            await initializePage('tab-categories');
+        } catch (error) {
+            alert('保存失败: ' + error.message);
+        }
+    }, 1000); // 使用 debounce 防止过于频繁的保存，延迟1秒
+
+    // 【新增】使用事件委托来监听所有修改，并触发自动保存
+    listEl.addEventListener('change', (e) => {
+        if (e.target.matches('.cat-order-input, .cat-name-input, .cat-parent-select')) {
+            saveAllCategoriesNow();
+        }
+    });
+
+    // --- 以下是构建分类列表的逻辑，保持不变 ---
+    const categoryMap = new Map(allCategories.map(cat => [cat.id, { ...cat, children: [] }]));
+    const tree = [];
+    [...allCategories].sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
+        if (cat.parentId && categoryMap.has(cat.parentId)) {
+            categoryMap.get(cat.parentId).children.push(categoryMap.get(cat.id));
+        } else {
+            tree.push(categoryMap.get(cat.id));
+        }
+    });
+    
+    const buildList = (nodes, level) => {
+        nodes.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
+            const li = document.createElement('li');
+            li.dataset.id = cat.id;
+            li.innerHTML = `<input type="number" class="cat-order-input" value="${cat.sortOrder || 0}"><div class="cat-name-cell" style="padding-left: ${level * 25}px;"><input type="text" class="cat-name-input" value="${escapeHTML(cat.name)}"></div><select class="cat-parent-select"></select><button class="delete-cat-btn secondary danger" title="删除"><i class="fas fa-trash-alt"></i></button>`;
+            const parentSelect = li.querySelector('.cat-parent-select');
+            populateCategoryDropdown(parentSelect, allCategories, cat.parentId, cat.id);
+            li.querySelector('.delete-cat-btn').onclick = () => handleDeleteCategory(cat.id, cat.name);
+            listEl.appendChild(li);
+            if (cat.children.length > 0) buildList(cat.children, level + 1);
+        });
     };
+    buildList(tree, 0);
+
+    container.querySelector('#add-new-category-btn').addEventListener('click', handleAddNewCategory);
+};
+
+// 在 admin.js 中找到并【完全替换】此函数
+const handleAddNewCategory = () => {
+    const listEl = document.getElementById('category-admin-list');
+    const newCatId = `new-${Date.now()}`;
+    
+    // 【重要修改】从当前页面的输入框中动态计算最大排序号，更准确
+    const allOrderInputs = listEl.querySelectorAll('.cat-order-input');
+    const existingOrders = Array.from(allOrderInputs).map(input => parseInt(input.value) || 0);
+    const maxOrder = existingOrders.length > 0 ? Math.max(...existingOrders) : -1;
+    const newSortOrder = maxOrder + 10;
+
+    const li = document.createElement('li');
+    li.dataset.id = newCatId;
+    li.innerHTML = `<input type="number" class="cat-order-input" value="${newSortOrder}"><div class="cat-name-cell"><input type="text" class="cat-name-input" value="新分类" placeholder="请输入名称后回车或失焦保存"></div><select class="cat-parent-select"></select><button class="delete-cat-btn secondary danger" title="删除"><i class="fas fa-trash-alt"></i></button>`;
+    const parentSelect = li.querySelector('.cat-parent-select');
+    populateCategoryDropdown(parentSelect, allCategories, null, newCatId);
+    li.querySelector('.delete-cat-btn').onclick = () => li.remove();
+    listEl.prepend(li); // 将新分类添加到列表顶部
+    li.querySelector('.cat-name-input').focus();
+};
+
+
+
 
     const handleDeleteCategory = (catIdToDelete, catName) => {
         showConfirm('确认删除', `您确定要删除分类 "${catName}" 吗？这也会删除其下所有的子分类和书签。`, async () => {
@@ -194,36 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    const handleSaveCategories = async () => {
-        const listItems = document.querySelectorAll('#category-admin-list li');
-        let finalCategories = [];
-        let hasError = false;
-        const parentChildOrders = new Map();
-
-        listItems.forEach(li => {
-            const id = li.dataset.id;
-            const name = li.querySelector('.cat-name-input').value.trim();
-            const parentId = li.querySelector('.cat-parent-select').value || 'root';
-            const sortOrder = parseInt(li.querySelector('.cat-order-input').value) || 0;
-            if (!name) { alert('分类名称不能为空！'); hasError = true; }
-            if (!parentChildOrders.has(parentId)) parentChildOrders.set(parentId, new Set());
-            if (parentChildOrders.get(parentId).has(sortOrder)) {
-                alert(`在同一个父分类下存在重复的排序号: ${sortOrder}`);
-                hasError = true;
-            }
-            parentChildOrders.get(parentId).add(sortOrder);
-            finalCategories.push({
-                id: id.startsWith('new-') ? `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` : id,
-                sortOrder, name, parentId: parentId === 'root' ? null : parentId,
-            });
-        });
-        if (hasError) return;
-        try {
-            await apiRequest('data', 'PUT', { categories: finalCategories });
-            alert('分类保存成功！');
-            await initializePage();
-        } catch (error) { alert('保存失败: ' + error.message); }
-    };
+ 
 
     // --- Tab 2: User Management ---
 
