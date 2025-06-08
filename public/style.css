@@ -207,7 +207,7 @@ button.danger:hover { background-color: rgba(239, 68, 68, 0.1); }
 .modal-content.small { max-width: 450px; text-align: center; }
 .admin-panel-container { display: flex; height: 100%; }
 .admin-panel-nav {
-    flex-shrink: 0; width: 200px; border-right: 1px solid var(--border-light);
+    flex-shrink: 0; width: 300px; border-right: 1px solid var(--border-light);
     padding-right: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem;
 }
 .dark-theme .admin-panel-nav { border-right-color: var(--border-dark); }
