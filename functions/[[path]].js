@@ -252,8 +252,11 @@ export async function onRequest(context) {
             return jsonResponse(updatedUser);
         }
         if (request.method === 'DELETE') {
-            if (username === 'admin') return jsonResponse({ error: '无法删除默认管理员' }, 403);
-            if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
+
+ if (username === 'admin') return jsonResponse({ error: '无法删除默认管理员' }, 403);
+            // 【新增】禁止删除 public 账户
+            if (username === 'public') return jsonResponse({ error: '无法删除公共账户' }, 403);
+            if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);       
             if (userToManage.roles.includes('admin')) {
                 const adminCount = Object.values(data.users).filter(u => u.roles.includes('admin')).length;
                 if (adminCount <= 1) return jsonResponse({ error: '无法删除最后一个管理员账户' }, 403);
