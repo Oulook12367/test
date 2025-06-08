@@ -321,10 +321,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const isAdmin = user.roles.includes('admin');
         renderUserFormRoles(user.roles);
         renderUserFormCategories(isAdmin ? allCategories.map(c => c.id) : (user.permissions?.visibleCategories || []), isPublicUser ? false : isAdmin);
-        
         const defaultCatSelect = form.querySelector('#user-form-default-cat');
         populateDefaultCategoryDropdown(defaultCatSelect, allCategories, user.defaultCategoryId);
-
         document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
         document.querySelector(`#user-list li[data-username="${user.username}"]`)?.classList.add('selected');
     };
