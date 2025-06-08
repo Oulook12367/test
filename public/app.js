@@ -566,36 +566,51 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const renderUserManagementPanel = () => {
-        userList.innerHTML = '';
-        allUsers.forEach(user => {
-            const li = document.createElement('li');
-            li.dataset.username = user.username;
-            const span = document.createElement('span');
-            span.textContent = `${user.username} (${user.roles.join(', ')})`;
-            li.appendChild(span);
-            if (user.username !== currentUser?.username) {
-                const actions = document.createElement('div');
-                actions.className = 'user-list-actions';
-                const deleteBtn = document.createElement('button');
-                deleteBtn.title = '删除用户';
-                deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
-                deleteBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    showConfirm('确认删除用户', `确定删除用户 "${escapeHTML(user.username)}"?`, async () => {
-                        try {
-                            await apiRequest(`users/${user.username}`, 'DELETE');
-                            await loadData();
-                        } catch (error) { alert(error.message); }
-                    });
-                };
-                actions.appendChild(deleteBtn);
-                li.appendChild(actions);
-            }
-            li.onclick = () => populateUserForm(user);
-            userList.appendChild(li);
-        });
-        clearUserForm();
-    };
+    userList.innerHTML = '';
+    allUsers.forEach(user => {
+        const li = document.createElement('li');
+        li.dataset.username = user.username;
+        li.classList.add('user-list-item'); // 添加一个类便于设置样式
+
+        // 创建用户名列
+        const usernameCol = document.createElement('span');
+        usernameCol.className = 'user-col-username';
+        usernameCol.textContent = user.username;
+
+        // 创建角色列
+        const rolesCol = document.createElement('span');
+        rolesCol.className = 'user-col-roles';
+        rolesCol.textContent = user.roles.join(', ') || 'N/A'; // N/A for users with no roles
+
+        // 创建操作列
+        const actionsCol = document.createElement('div');
+        actionsCol.className = 'user-col-actions';
+
+        // 只有非当前用户才显示删除按钮
+        if (user.username !== currentUser?.username) {
+            const deleteBtn = document.createElement('button');
+            deleteBtn.title = '删除用户';
+            deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                showConfirm('确认删除用户', `确定删除用户 "${escapeHTML(user.username)}"?`, async () => {
+                    try {
+                        await apiRequest(`users/${user.username}`, 'DELETE');
+                        await loadData(); // 重新加载数据以刷新列表
+                    } catch (error) { alert(error.message); }
+                });
+            };
+            actionsCol.appendChild(deleteBtn);
+        }
+
+        // 将所有列添加到 li 中
+        li.append(usernameCol, rolesCol, actionsCol);
+
+        li.onclick = () => populateUserForm(user);
+        userList.appendChild(li);
+    });
+    clearUserForm();
+};
 
     const clearUserForm = () => {
         userList.querySelector('.selected')?.classList.remove('selected');
