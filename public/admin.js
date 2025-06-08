@@ -142,9 +142,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Tab 1: Category Management ---
     const renderCategoryAdminTab = (container) => {
-        // 【修改】恢复“保存”按钮，并更新提示文字
-        container.innerHTML = `<h2>分类管理</h2>
-            <p class="admin-panel-tip">通过拖拽或修改表单来调整分类，完成后请点击下方的“保存”按钮。</p>
+        // 【修改】移除h2标题
+        container.innerHTML = `<p class="admin-panel-tip">通过修改表单来调整分类，完成后请点击下方的“保存”按钮。</p>
             <div class="category-admin-header"><span>排序</span><span>分类名称</span><span>上级分类</span><span>操作</span></div>
             <ul id="category-admin-list"></ul>
             <div class="admin-panel-actions">
@@ -154,7 +153,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const listEl = container.querySelector('#category-admin-list');
         
-        // 构建分类列表
         const categoryMap = new Map(allCategories.map(cat => [cat.id, { ...cat, children: [] }]));
         const tree = [];
         [...allCategories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name)).forEach(cat => {
@@ -179,7 +177,6 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         buildList(tree, 0);
 
-        // 绑定按钮事件
         container.querySelector('#add-new-category-btn').addEventListener('click', handleAddNewCategory);
         container.querySelector('#save-categories-btn').addEventListener('click', handleSaveCategories);
     };
@@ -201,7 +198,6 @@ document.addEventListener('DOMContentLoaded', () => {
         li.querySelector('.cat-name-input').focus();
     };
 
-    // 【新增】恢复独立的保存函数
     const handleSaveCategories = async () => {
         const listItems = document.querySelectorAll('#category-admin-list li');
         let finalCategories = [];
@@ -255,7 +251,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Tab 2: User Management ---
     const renderUserAdminTab = (container) => {
-        container.innerHTML = `<h2>用户管理</h2><div id="user-management-container"><div class="user-list-container"><h3>用户列表</h3><ul id="user-list"></ul></div><div class="user-form-container"><form id="user-form"><h3 id="user-form-title">添加新用户</h3><div id="user-form-fields-wrapper"><input type="hidden" id="user-form-username-hidden"><div class="form-group"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required></div><div class="form-group"><label for="user-form-password">密码:</label><input type="password" id="user-form-password"></div><div class="form-group"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div><div class="form-group"><label for="user-form-default-cat">默认显示分类:</label><select id="user-form-default-cat"></select></div><div class="form-group flex-grow"><label>可见分类:</label><div id="user-form-categories" class="checkbox-group"></div></div></div><div class="user-form-buttons"><button type="submit" class="button-primary">保存用户</button><button type="button" id="user-form-clear-btn" class="secondary">新增/清空</button></div><p class="modal-error-message"></p></form></div></div>`;
+        // 【重要修改】重构HTML以支持新的行内布局和滚动行为
+        container.innerHTML = `<div id="user-management-container">
+            <div class="user-list-container">
+                <h3>用户列表</h3>
+                <ul id="user-list"></ul>
+            </div>
+            <div class="user-form-container">
+                <form id="user-form">
+                    <h3 id="user-form-title">添加新用户</h3>
+                    <div id="user-form-scrollable-content">
+                        <input type="hidden" id="user-form-username-hidden">
+                        <div class="form-group-inline">
+                            <label for="user-form-username">用户名:</label>
+                            <input type="text" id="user-form-username" required>
+                        </div>
+                        <div class="form-group-inline">
+                            <label for="user-form-password">密码:</label>
+                            <input type="password" id="user-form-password">
+                        </div>
+                        <div class="form-group-inline">
+                            <label>角色:</label>
+                            <div id="user-form-roles" class="checkbox-group horizontal"></div>
+                        </div>
+                        <div class="form-group-inline">
+                            <label for="user-form-default-cat">默认显示分类:</label>
+                            <select id="user-form-default-cat"></select>
+                        </div>
+                        <div class="form-group flex-grow">
+                            <label>可见分类:</label>
+                            <div id="user-form-categories" class="checkbox-group"></div>
+                        </div>
+                    </div>
+                    <div class="user-form-buttons">
+                        <button type="submit" class="button-primary">保存用户</button>
+                        <button type="button" id="user-form-clear-btn" class="secondary">新增/清空</button>
+                    </div>
+                    <p class="modal-error-message"></p>
+                </form>
+            </div>
+        </div>`;
+        
         const userList = container.querySelector('#user-list');
         const form = container.querySelector('#user-form');
         const token = localStorage.getItem('jwt_token');
@@ -429,8 +465,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Tab 3: Bookmark Management ---
     const renderBookmarkAdminTab = (container) => {
-        container.innerHTML = `<h2>书签管理</h2>
-            <p class="admin-panel-tip">通过下拉菜单筛选分类。修改排序数字后将自动保存。</p>
+        // 【修改】移除h2标题
+        container.innerHTML = `<p class="admin-panel-tip">通过下拉菜单筛选分类。修改排序数字后将自动保存。</p>
             <div class="bookmark-admin-controls"><span>筛选分类:</span><select id="bookmark-category-filter"><option value="all">-- 显示全部分类 --</option></select></div>
             <div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div>
             <div id="bookmark-admin-list-container"><ul></ul></div>
@@ -542,7 +578,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Tab 4: System Settings ---
     const renderSystemSettingsTab = (container) => {
-        container.innerHTML = `<h2>系统设置</h2><div class="system-setting-item"><h3><i class="fas fa-file-import"></i> 导入书签</h3><p>从浏览器导出的HTML文件导入书签。导入操作会合并现有书签，不会清空原有数据。</p><button id="import-bookmarks-btn-admin" class="secondary">选择HTML文件</button><input type="file" id="import-file-input-admin" accept=".html,.htm" style="display: none;"></div>`;
+        // 【修改】移除h2标题
+        container.innerHTML = `<div class="system-setting-item"><h3><i class="fas fa-file-import"></i> 导入书签</h3><p>从浏览器导出的HTML文件导入书签。导入操作会合并现有书签，不会清空原有数据。</p><button id="import-bookmarks-btn-admin" class="secondary">选择HTML文件</button><input type="file" id="import-file-input-admin" accept=".html,.htm" style="display: none;"></div>`;
         container.querySelector('#import-bookmarks-btn-admin').onclick = () => container.querySelector('#import-file-input-admin').click();
         container.querySelector('#import-file-input-admin').onchange = (e) => {
             const file = e.target.files[0];
