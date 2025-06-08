@@ -127,17 +127,24 @@ const jsonResponse = (data, status = 200, headers = {}) => {
     return new Response(JSON.stringify(data), { status, headers: { ...defaultHeaders, ...headers } });
 };
 
+
+
 // --- Main onRequest Entrypoint ---
 export async function onRequest(context) {
     const { request, env, next } = context;
     const url = new URL(request.url);
     const path = url.pathname;
     
-    if (!path.startsWith('/api/')) return next();
+    // 如果不是API请求，直接跳过
+    if (!path.startsWith('/api/')) {
+        return next();
+    }
     
+    // --- API 路由逻辑开始 ---
     globalThis.JWT_SECRET_STRING = env.JWT_SECRET;
     const apiPath = path.substring(5);
 
+    // 路由 1: 登录 (公开访问)
     if (apiPath === 'login' && request.method === 'POST') {
         const { username, password } = await request.json();
         if (username.toLowerCase() === 'public') return jsonResponse({ error: '此为保留账户，禁止登录。' }, 403);
@@ -151,6 +158,7 @@ export async function onRequest(context) {
         return jsonResponse({ token, user: safeUser });
     }
 
+    // 路由 2: 获取全站数据 (部分公开)
     if (apiPath === 'data' && request.method === 'GET') {
         const authHeader = request.headers.get('Authorization');
         const data = await getSiteData(env);
@@ -166,8 +174,8 @@ export async function onRequest(context) {
         if (authResult.error) return jsonResponse(authResult, authResult.status);
         const currentUser = authResult.user;
         if (currentUser.roles.includes('admin')) {
-             const usersForAdmin = Object.values(data.users).map(({ passwordHash, salt, ...u }) => u);
-             return jsonResponse({...data, users: usersForAdmin});
+            const usersForAdmin = Object.values(data.users).map(({ passwordHash, salt, ...u }) => u);
+            return jsonResponse({...data, users: usersForAdmin});
         }
         const visibleCategories = data.categories.filter(cat => currentUser.permissions.visibleCategories.includes(cat.id));
         const visibleCategoryIds = visibleCategories.map(cat => cat.id);
@@ -176,11 +184,13 @@ export async function onRequest(context) {
         return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks, users: [safeUser], publicModeEnabled: data.publicModeEnabled });
     }
     
+    // --- 从这里开始，所有路由都需要身份验证 ---
     const data = await getSiteData(env);
     const authResult = await authenticateRequest(request, env, data);
     if (authResult.error) return jsonResponse(authResult, authResult.status);
     const currentUser = authResult.user;
 
+    // 路由 3: 更新分类和书签的批量接口
     if (apiPath === 'data' && request.method === 'PUT') {
         if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
         const dataToUpdate = await request.json();
@@ -190,54 +200,37 @@ export async function onRequest(context) {
         return jsonResponse({ success: true });
     }
     
-    if (apiPath.startsWith('bookmarks')) {
-        const id = apiPath.split('/').pop();
-        if (request.method === 'POST') {
-            if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
-            const bookmark = await request.json();
-            if (!currentUser.roles.includes('admin') && !currentUser.permissions.visibleCategories.includes(bookmark.categoryId)) return jsonResponse({ error: '无权在此分类下添加书签' }, 403);
-            bookmark.id = `bm-${Date.now()}`;
-            if(typeof bookmark.sortOrder === 'undefined') {
-                 const maxOrder = data.bookmarks.length > 0 ? Math.max(...data.bookmarks.map(b => b.sortOrder || 0)) : -1;
-                 bookmark.sortOrder = maxOrder + 10;
-            }
-            data.bookmarks.push(bookmark);
-            await saveSiteData(env, data);
-            return jsonResponse(bookmark, 201);
+    // 路由 4: 新增书签
+    if (apiPath === 'bookmarks' && request.method === 'POST') {
+        if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
+        const bookmark = await request.json();
+        if (!currentUser.roles.includes('admin') && !currentUser.permissions.visibleCategories.includes(bookmark.categoryId)) return jsonResponse({ error: '无权在此分类下添加书签' }, 403);
+        bookmark.id = `bm-${Date.now()}`;
+        if(typeof bookmark.sortOrder === 'undefined') {
+            const maxOrder = data.bookmarks.length > 0 ? Math.max(...data.bookmarks.map(b => b.sortOrder || 0)) : -1;
+            bookmark.sortOrder = maxOrder + 10;
         }
+        data.bookmarks.push(bookmark);
+        await saveSiteData(env, data);
+        return jsonResponse(bookmark, 201);
+    }
+
+    // 路由 5: 修改或删除单个书签
+    if (apiPath.startsWith('bookmarks/')) {
+        const id = apiPath.split('/')[1];
+        if (!id) return jsonResponse({ error: '无效的书签ID' }, 400);
         const bookmarkIndex = data.bookmarks.findIndex(bm => bm.id === id);
         if (bookmarkIndex === -1) return jsonResponse({ error: '书签未找到' }, 404);
         const bookmarkToAccess = data.bookmarks[bookmarkIndex];
         if (!currentUser.roles.includes('admin') && !currentUser.permissions.visibleCategories.includes(bookmarkToAccess.categoryId)) return jsonResponse({ error: '权限不足' }, 403);
 
-
-
-        if (request.method === 'PUT') {
-            const { roles, permissions, password } = await request.json();
-
-            // 【重要修改】针对不同用户类型，应用不同更新规则
-            if (username === 'public') {
-                // 对于 public 用户，我们只允许更新其可见分类
-                if (permissions && typeof permissions.visibleCategories !== 'undefined') {
-                    userToManage.permissions.visibleCategories = permissions.visibleCategories;
-                }
-                // 强制重置/锁定其角色为'viewer'，忽略任何传入的角色修改
-                userToManage.roles = ['viewer'];
-            } else {
-                // 对于其他所有普通用户，按正常逻辑更新
-                if (roles) userToManage.roles = roles;
-                if (permissions) userToManage.permissions.visibleCategories = permissions.visibleCategories;
-                if (password) {
-                    userToManage.salt = generateSalt();
-                    userToManage.passwordHash = await hashPassword(password, userToManage.salt);
-                }
-            }
-            
-            await saveSiteData(env, data);
-            const { passwordHash, salt, ...updatedUser } = userToManage;
-            return jsonResponse(updatedUser);
-        }
-        
+        if (request.method === 'PUT') {
+            if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
+            const updatedBookmarkData = await request.json();
+            data.bookmarks[bookmarkIndex] = { ...bookmarkToAccess, ...updatedBookmarkData };
+            await saveSiteData(env, data);
+            return jsonResponse(data.bookmarks[bookmarkIndex]);
+        }
         if (request.method === 'DELETE') {
             if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
             data.bookmarks.splice(bookmarkIndex, 1);
@@ -245,39 +238,52 @@ export async function onRequest(context) {
             return jsonResponse(null);
         }
     }
-    
+
+    // 路由 6: 用户管理
     if (apiPath.startsWith('users')) {
         if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
         const username = apiPath.split('/').pop();
+
+        // 新增用户
         if (request.method === 'POST') {
-            const { username, password, roles, permissions } = await request.json();
-            if (!username || !password || data.users[username]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
+            const { username: newUsername, password, roles, permissions } = await request.json();
+            if (!newUsername || !password || data.users[newUsername]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
             const salt = generateSalt();
             const passwordHash = await hashPassword(password, salt);
-            data.users[username] = { username, passwordHash, salt, roles, permissions };
+            data.users[newUsername] = { username: newUsername, passwordHash, salt, roles, permissions };
             await saveSiteData(env, data);
-            const { passwordHash: p, salt: s, ...newUser } = data.users[username];
+            const { passwordHash: p, salt: s, ...newUser } = data.users[newUsername];
             return jsonResponse(newUser, 201);
         }
+
         const userToManage = data.users[username];
         if (!userToManage) return jsonResponse({ error: '用户未找到' }, 404);
+
+        // 修改用户
         if (request.method === 'PUT') {
             const { roles, permissions, password } = await request.json();
-            if (roles) userToManage.roles = roles;
-            if (permissions) userToManage.permissions.visibleCategories = permissions.visibleCategories;
-            if (password) {
-                userToManage.salt = generateSalt();
-                userToManage.passwordHash = await hashPassword(password, userToManage.salt);
+            if (username === 'public') {
+                if (permissions && typeof permissions.visibleCategories !== 'undefined') {
+                    userToManage.permissions.visibleCategories = permissions.visibleCategories;
+                }
+                userToManage.roles = ['viewer'];
+            } else {
+                if (roles) userToManage.roles = roles;
+                if (permissions) userToManage.permissions.visibleCategories = permissions.visibleCategories;
+                if (password) {
+                    userToManage.salt = generateSalt();
+                    userToManage.passwordHash = await hashPassword(password, userToManage.salt);
+                }
             }
             await saveSiteData(env, data);
             const { passwordHash, salt, ...updatedUser } = userToManage;
             return jsonResponse(updatedUser);
         }
-        if (request.method === 'DELETE') {
 
-      
-          if (username === 'public') return jsonResponse({ error: '无法删除公共账户' }, 403);
-            if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);       
+        // 删除用户
+        if (request.method === 'DELETE') {
+            if (username === 'public') return jsonResponse({ error: '公共账户为系统保留账户，禁止删除。' }, 403);
+            if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
             if (userToManage.roles.includes('admin')) {
                 const adminCount = Object.values(data.users).filter(u => u.roles.includes('admin')).length;
                 if (adminCount <= 1) return jsonResponse({ error: '无法删除最后一个管理员账户' }, 403);
@@ -288,5 +294,6 @@ export async function onRequest(context) {
         }
     }
 
+    // 如果所有路由都未匹配
     return jsonResponse({ error: 'API endpoint not found' }, 404);
 }
