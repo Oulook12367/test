@@ -324,3 +324,63 @@ button.secondary:hover { background-color: rgba(108, 117, 125, 0.3); box-shadow:
 .dark-theme .dropdown-divider {
     background-color: var(--border-dark);
 }
+/* 在 style.css 底部添加 */
+.user-list-container {
+    display: flex;
+    flex-direction: column;
+}
+
+/* 添加一个列表头（可选，但推荐） */
+.user-list-header {
+    display: flex;
+    padding: 0 1rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary-light);
+    font-weight: 600;
+    font-size: 0.9em;
+    border-bottom: 1px solid var(--border-light);
+    padding-bottom: 0.5rem;
+}
+.dark-theme .user-list-header {
+    color: var(--text-secondary-dark);
+    border-bottom-color: var(--border-dark);
+}
+
+.user-list-item {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.user-list-item:hover, .user-list-item.selected {
+    background-color: rgba(0,0,0,0.05);
+}
+.dark-theme .user-list-item:hover, .dark-theme .user-list-item.selected {
+    background-color: rgba(255,255,255,0.08);
+}
+
+.user-col-username { flex: 1; font-weight: 500; }
+.user-col-roles { flex: 1; color: var(--text-secondary-light); }
+.dark-theme .user-col-roles { color: var(--text-secondary-dark); }
+.user-col-actions { flex-shrink: 0; }
+
+/* 操作按钮样式 */
+.user-col-actions button {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary-light);
+    padding: 4px 8px;
+    margin: 0;
+    border-radius: 4px;
+}
+.dark-theme .user-col-actions button {
+    color: var(--text-secondary-dark);
+}
+.user-col-actions button:hover {
+    background: rgba(255, 0, 0, 0.1);
+    color: #f87171;
+    transform: none;
+    box-shadow: none;
+}
