@@ -296,13 +296,17 @@ const renderUserAdminTab = (container) => {
 
 // 在 admin.js 中, 找到并完全替换 populateUserForm 函数
 
+/* ===================================================================== */
+/* 请使用下面这个【简化版】的 populateUserForm 函数进行整体替换         */
+/* ===================================================================== */
+
 const populateUserForm = (user) => {
     const form = document.getElementById('user-form'); if (!form) return;
     form.reset();
     form.querySelector('#user-form-title').textContent = `编辑用户: ${user.username}`;
     
-    // 【新增】判断是否为 public 用户
     const isPublicUser = user.username === 'public';
+    const isAdmin = user.roles.includes('admin');
 
     const usernameInput = form.querySelector('#user-form-username');
     usernameInput.value = user.username;
@@ -310,15 +314,38 @@ const populateUserForm = (user) => {
 
     const passwordInput = form.querySelector('#user-form-password');
     passwordInput.placeholder = isPublicUser ? "公共账户无需密码" : "留空则不修改";
-    passwordInput.disabled = isPublicUser; // 【新增】禁用密码输入
+    passwordInput.disabled = isPublicUser;
 
     form.querySelector('#user-form-username-hidden').value = user.username;
     
-    // 渲染角色和分类
-    const isAdmin = user.roles.includes('admin');
+    // 调用角色渲染函数
     renderUserFormRoles(user.roles);
-    renderUserFormCategories(isAdmin ? allCategories.map(c => c.id) : (user.permissions?.visibleCategories || []), isPublicUser ? false : isAdmin); // 【修改】public 用户分类可选
 
+    // 【重要】以下是原先复杂代码的简化、清晰版本
+    let visibleCategoriesForForm;
+    let areCategoriesDisabled;
+
+    if (isAdmin) {
+        // 如果是 admin，默认拥有所有分类的权限
+        visibleCategoriesForForm = allCategories.map(c => c.id);
+        // 同时，分类列表为禁用状态（因为默认全选）
+        areCategoriesDisabled = true;
+    } else {
+        // 如果是其他用户，则使用其自身的权限
+        visibleCategoriesForForm = user.permissions?.visibleCategories || [];
+        // 分类列表不是禁用状态
+        areCategoriesDisabled = false;
+    }
+
+    // 特殊情况：如果是 public 用户，分类列表必须是可编辑的
+    if (isPublicUser) {
+        areCategoriesDisabled = false;
+    }
+
+    // 使用清晰的变量来调用分类渲染函数
+    renderUserFormCategories(visibleCategoriesForForm, areCategoriesDisabled);
+
+    // 更新用户列表的选中状态
     document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
     document.querySelector(`#user-list li[data-username="${user.username}"]`)?.classList.add('selected');
 };
