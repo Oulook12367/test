@@ -232,7 +232,9 @@ export async function onRequest(context) {
         if (request.method === 'POST') {
             if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
             const bookmark = await request.json();
-            if (!currentUser.permissions.visibleCategories.includes(bookmark.categoryId)) return jsonResponse({ error: '无权在此分类下添加书签' }, 403);
+            if (!currentUser.roles.includes('admin') && !currentUser.permissions.visibleCategories.includes(bookmark.categoryId)) {
+                return jsonResponse({ error: '无权在此分类下添加书签' }, 403);
+            }
             bookmark.id = `bm-${Date.now()}`;
             data.bookmarks.push(bookmark);
             await saveSiteData(env, data);
@@ -259,14 +261,6 @@ export async function onRequest(context) {
         }
     }
     
-    // --- Categories CRUD (Simplified as most logic is now in bulk update) ---
-    // This part is kept for potential future use or non-admin edits.
-    if (apiPath.startsWith('categories')) {
-        // ... You can keep the old detailed POST/PUT/DELETE for categories if you want non-admins with 'editor' role to manage them piece by piece.
-        // For this refactor, we assume all category management is done via the bulk 'PUT /api/data' endpoint.
-        return jsonResponse({ error: '分类管理请使用后台批量保存功能' }, 405);
-    }
-
     // --- Users CRUD ---
     if (apiPath.startsWith('users')) {
         if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
