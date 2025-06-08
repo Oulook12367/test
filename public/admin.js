@@ -261,7 +261,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Tab 2: User Management ---
     const renderUserAdminTab = (container) => {
-        container.innerHTML = `<h2>用户管理</h2><div id="user-management-container"><div class="user-list-container"><h3>用户列表</h3><ul id="user-list"></ul></div><div class="user-form-container"><form id="user-form"><h3 id="user-form-title">添加新用户</h3><input type="hidden" id="user-form-username-hidden"><div class="form-group"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required></div><div class="form-group"><label for="user-form-password">密码:</label><input type="password" id="user-form-password"></div><div class="form-group"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div><div class="form-group"><label for="user-form-default-cat">默认显示分类:</label><select id="user-form-default-cat"></select></div><div class="form-group flex-grow"><label>可见分类:</label><div id="user-form-categories" class="checkbox-group"></div></div><div class="user-form-buttons"><button type="submit" class="button-primary">保存用户</button><button type="button" id="user-form-clear-btn" class="secondary">新增/清空</button></div><p class="modal-error-message"></p></form></div></div>`;
+        // 【重要修改】为表单字段增加一个包装器，用于独立滚动
+        container.innerHTML = `<h2>用户管理</h2><div id="user-management-container"><div class="user-list-container"><h3>用户列表</h3><ul id="user-list"></ul></div><div class="user-form-container"><form id="user-form"><h3 id="user-form-title">添加新用户</h3><div id="user-form-fields-wrapper"><input type="hidden" id="user-form-username-hidden"><div class="form-group"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required></div><div class="form-group"><label for="user-form-password">密码:</label><input type="password" id="user-form-password"></div><div class="form-group"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div><div class="form-group"><label for="user-form-default-cat">默认显示分类:</label><select id="user-form-default-cat"></select></div><div class="form-group flex-grow"><label>可见分类:</label><div id="user-form-categories" class="checkbox-group"></div></div></div><div class="user-form-buttons"><button type="submit" class="button-primary">保存用户</button><button type="button" id="user-form-clear-btn" class="secondary">新增/清空</button></div><p class="modal-error-message"></p></form></div></div>`;
         const userList = container.querySelector('#user-list');
         const form = container.querySelector('#user-form');
         const token = localStorage.getItem('jwt_token');
@@ -302,6 +303,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (user) populateUserForm(user);
             }
         });
+        
+        // 【新增】监听可见分类的变化，动态更新默认分类下拉菜单
+        const visibleCategoriesContainer = form.querySelector('#user-form-categories');
+        visibleCategoriesContainer.addEventListener('change', () => {
+            updateDefaultCategoryDropdown(form);
+        });
+
         container.querySelector('#user-form-clear-btn').onclick = clearUserForm;
         form.onsubmit = handleUserFormSubmit;
         clearUserForm();
@@ -319,10 +327,11 @@ document.addEventListener('DOMContentLoaded', () => {
         passwordInput.disabled = isPublicUser;
         form.querySelector('#user-form-username-hidden').value = user.username;
         const isAdmin = user.roles.includes('admin');
+        
         renderUserFormRoles(user.roles);
         renderUserFormCategories(isAdmin ? allCategories.map(c => c.id) : (user.permissions?.visibleCategories || []), isPublicUser ? false : isAdmin);
-        const defaultCatSelect = form.querySelector('#user-form-default-cat');
-        populateDefaultCategoryDropdown(defaultCatSelect, allCategories, user.defaultCategoryId);
+        updateDefaultCategoryDropdown(form, user.defaultCategoryId);
+
         document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
         document.querySelector(`#user-list li[data-username="${user.username}"]`)?.classList.add('selected');
     };
@@ -335,7 +344,7 @@ document.addEventListener('DOMContentLoaded', () => {
         form.querySelector('#user-form-username-hidden').value = '';
         renderUserFormRoles();
         renderUserFormCategories();
-        populateDefaultCategoryDropdown(form.querySelector('#user-form-default-cat'), allCategories, 'all');
+        updateDefaultCategoryDropdown(form, 'all');
         document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
     };
     const renderUserFormRoles = (activeRoles = ['viewer']) => {
@@ -370,13 +379,30 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         buildCheckboxes(tree, 0);
     };
-    const populateDefaultCategoryDropdown = (selectEl, categories, selectedId) => {
-        selectEl.innerHTML = `<option value="all">全部书签</option>`;
-        const sortedCategories = [...categories].sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
-        sortedCategories.forEach(cat => {
-            selectEl.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
+    // 【重要新增】一个统一的函数来更新默认分类下拉菜单
+    const updateDefaultCategoryDropdown = (form, selectedId) => {
+        const defaultCatSelect = form.querySelector('#user-form-default-cat');
+        const visibleCatCheckboxes = form.querySelectorAll('#user-form-categories input:checked');
+        const visibleCatIds = Array.from(visibleCatCheckboxes).map(cb => cb.value);
+        
+        const currentSelectedValue = defaultCatSelect.value;
+        defaultCatSelect.innerHTML = `<option value="all">全部书签</option>`;
+        
+        const categoriesToShow = allCategories.filter(cat => visibleCatIds.includes(cat.id));
+        categoriesToShow.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
+        
+        categoriesToShow.forEach(cat => {
+            defaultCatSelect.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
         });
-        selectEl.value = selectedId || 'all';
+        
+        // 尝试恢复之前的选择，如果该选项依然存在
+        if (selectedId) {
+            defaultCatSelect.value = selectedId;
+        } else if (categoriesToShow.some(c => c.id === currentSelectedValue)) {
+            defaultCatSelect.value = currentSelectedValue;
+        } else {
+            defaultCatSelect.value = 'all'; // 否则重置
+        }
     };
     const handleUserFormSubmit = async (e) => {
         e.preventDefault();
