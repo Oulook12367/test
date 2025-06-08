@@ -94,6 +94,7 @@
                         <!-- Bookmarks Tab -->
                         <div id="tab-bookmarks" class="admin-tab-content">
                             <h2>书签管理</h2>
+                            <p class="admin-panel-tip">通过“排序”数字（越小越靠前）来调整主界面的书签显示顺序。</p>
                             <div class="bookmark-admin-controls">
                                 <span>排序方式:</span>
                                 <select id="bookmark-sort-select">
@@ -103,11 +104,15 @@
                                 </select>
                             </div>
                             <div class="bookmark-admin-header">
+                                <span class="sort-col">排序</span>
                                 <span>书签名称</span>
                                 <span>所属分类</span>
                                 <span>操作</span>
                             </div>
                             <div id="bookmark-admin-list-container"></div>
+                             <div class="admin-panel-actions">
+                                <button id="save-bookmarks-btn"><i class="fas fa-save"></i> 保存书签顺序</button>
+                            </div>
                         </div>
 
                         <!-- System Settings Tab -->
