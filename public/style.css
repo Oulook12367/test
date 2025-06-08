@@ -410,19 +410,19 @@ input:focus, textarea:focus, select:focus {
 /* 在 style.css 文件末尾添加 */
 
 /* --- MODALS --- */
-.modal-backdrop {
-    display: none; /* 初始隐藏 */
+#modal-backdrop {
+    display: none; /* 默认隐藏 (这条规则现在会生效了) */
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.6); /* 半透明背景 */
-    z-index: 1000; /* 置于顶层 */
-    display: flex; /* 使用 flex 布局来居中模态框 */
+    background-color: rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+    display: flex;
     justify-content: center;
     align-items: center;
-    animation: fadeIn 0.3s ease; /* 添加淡入动画 */
+    animation: fadeIn 0.3s ease;
 }
 
 .modal { 
