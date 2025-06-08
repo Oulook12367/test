@@ -232,11 +232,23 @@ document.addEventListener('DOMContentLoaded', () => {
 // =======================================================================
 
 // --- Tab 2: User Management ---
+// 在 admin.js 中, 找到并完全替换此函数
 const renderUserAdminTab = (container) => {
     container.innerHTML = `<h2>用户管理</h2><div id="user-management-container"><div class="user-list-container"><h3>用户列表</h3><ul id="user-list"></ul></div><div class="user-form-container"><form id="user-form"><h3 id="user-form-title">添加新用户</h3><input type="hidden" id="user-form-username-hidden"><div class="form-group"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required></div><div class="form-group"><label for="user-form-password">密码:</label><input type="password" id="user-form-password"></div><div class="form-group"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div><div class="form-group flex-grow"><label>可见分类:</label><div id="user-form-categories" class="checkbox-group"></div></div><div class="user-form-buttons"><button type="submit" class="button-primary">保存用户</button><button type="button" id="user-form-clear-btn" class="secondary">新增/清空</button></div><p class="modal-error-message"></p></form></div></div>`;
     
     const userList = container.querySelector('#user-list');
     const form = container.querySelector('#user-form');
+
+    // 【新增】获取当前登录的用户名
+    const token = localStorage.getItem('jwt_token');
+    let currentUsername = '';
+    if (token) {
+        try {
+            currentUsername = JSON.parse(atob(token.split('.')[1])).sub;
+        } catch (e) {
+            console.error("无法解析Token:", e);
+        }
+    }
     
     allUsers.forEach(user => {
         const li = document.createElement('li');
@@ -248,7 +260,9 @@ const renderUserAdminTab = (container) => {
             li.innerHTML = `<span>${user.username} (${user.roles.join(', ')})</span>`;
         }
 
-        if (user.username !== 'admin' && user.username !== 'public') {
+        // 【重要修改】判断逻辑变更
+        // 只要列表中的用户不是 public，并且不是当前登录的用户自己，就显示删除按钮
+        if (user.username !== 'public' && user.username !== currentUsername) {
             const delBtn = document.createElement('button');
             delBtn.className = 'button-icon danger';
             delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
@@ -259,6 +273,11 @@ const renderUserAdminTab = (container) => {
                 showConfirm('删除用户', `确定删除用户 "${user.username}"?`, async () => {
                     try {
                         await apiRequest(`users/${user.username}`, 'DELETE');
+                        // 检查是否删除了最后一个管理员（虽然后端有校验，前端也可以提醒）
+                        const adminCount = allUsers.filter(u => u.roles.includes('admin')).length;
+                        if(user.roles.includes('admin') && adminCount <= 1) {
+                           alert("注意：您已删除最后一个管理员账户！");
+                        }
                         await initializePage('tab-users');
                     } catch (error) { 
                         alert(error.message); 
