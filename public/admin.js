@@ -477,11 +477,38 @@ const handleUserFormSubmit = async (e) => {
 };
 
 // 【新增】一个处理“添加新书签”的函数
+// 在 admin.js 中, 找到并完全替换此函数
 const handleAddNewBookmark = () => {
+    // 这两个检查仍然保留，以防万一
+    if (!bookmarkEditForm) {
+        console.error('错误：JS无法找到书签编辑的表单元素 #bookmark-edit-form。');
+        alert('发生致命错误：无法加载书签编辑表单。');
+        return;
+    }
+    if (!bookmarkEditModal) {
+        console.error('错误：JS无法找到书签编辑的模态框元素 #bookmark-edit-modal。');
+        alert('发生致命错误：无法加载书签编辑模态框。');
+        return;
+    }
+
     bookmarkEditForm.reset();
-    bookmarkEditForm.querySelector('#bookmark-modal-title').textContent = '添加新书签';
-    bookmarkEditForm.querySelector('#bm-edit-id').value = ''; // id为空表示是新增
-    populateCategoryDropdown(bookmarkEditForm.querySelector('#bm-edit-category'), allCategories);
+    
+    // 【重要修正】不再从 form 内部查找，而是从整个 document 中通过 ID 直接查找标题元素
+    const modalTitle = document.getElementById('bookmark-modal-title');
+    if (modalTitle) {
+        modalTitle.textContent = '添加新书签';
+    }
+    
+    // 清空隐藏的ID字段
+    bookmarkEditForm.querySelector('#bm-edit-id').value = ''; 
+    
+    // 填充分类下拉菜单
+    const categorySelect = bookmarkEditForm.querySelector('#bm-edit-category');
+    if (categorySelect) {
+        populateCategoryDropdown(categorySelect, allCategories);
+    }
+
+    // 显示模态框
     showModal(bookmarkEditModal);
 };
     
