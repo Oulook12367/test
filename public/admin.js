@@ -115,7 +115,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const categoryMap = new Map(categories.map(cat => [cat.id, { ...cat, children: [] }]));
         const tree = [];
-        // 【稳定排序】如果排序号相同，则按名称排序
         const sortedCategories = [...categories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
         for (const cat of sortedCategories) {
             if (cat.id === ignoreId) continue;
@@ -200,7 +199,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const categoryMap = new Map(allCategories.map(cat => [cat.id, { ...cat, children: [] }]));
         const tree = [];
-        // 【稳定排序】
         [...allCategories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name)).forEach(cat => {
             if (cat.parentId && categoryMap.has(cat.parentId)) {
                 categoryMap.get(cat.parentId).children.push(categoryMap.get(cat.id));
@@ -210,7 +208,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         const buildList = (nodes, level) => {
-            // 【稳定排序】
             nodes.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name)).forEach(cat => {
                 const li = document.createElement('li');
                 li.dataset.id = cat.id;
@@ -264,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Tab 2: User Management ---
     const renderUserAdminTab = (container) => {
-        container.innerHTML = `<h2>用户管理</h2><div id="user-management-container"><div class="user-list-container"><h3>用户列表</h3><ul id="user-list"></ul></div><div class="user-form-container"><form id="user-form"><h3 id="user-form-title">添加新用户</h3><input type="hidden" id="user-form-username-hidden"><div class="form-group"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required></div><div class="form-group"><label for="user-form-password">密码:</label><input type="password" id="user-form-password"></div><div class="form-group"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div><div class="form-group flex-grow"><label>可见分类:</label><div id="user-form-categories" class="checkbox-group"></div></div><div class="user-form-buttons"><button type="submit" class="button-primary">保存用户</button><button type="button" id="user-form-clear-btn" class="secondary">新增/清空</button></div><p class="modal-error-message"></p></form></div></div>`;
+        container.innerHTML = `<h2>用户管理</h2><div id="user-management-container"><div class="user-list-container"><h3>用户列表</h3><ul id="user-list"></ul></div><div class="user-form-container"><form id="user-form"><h3 id="user-form-title">添加新用户</h3><input type="hidden" id="user-form-username-hidden"><div class="form-group"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required></div><div class="form-group"><label for="user-form-password">密码:</label><input type="password" id="user-form-password"></div><div class="form-group"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div><div class="form-group"><label for="user-form-default-cat">默认显示分类:</label><select id="user-form-default-cat"></select></div><div class="form-group flex-grow"><label>可见分类:</label><div id="user-form-categories" class="checkbox-group"></div></div><div class="user-form-buttons"><button type="submit" class="button-primary">保存用户</button><button type="button" id="user-form-clear-btn" class="secondary">新增/清空</button></div><p class="modal-error-message"></p></form></div></div>`;
         const userList = container.querySelector('#user-list');
         const form = container.querySelector('#user-form');
         const token = localStorage.getItem('jwt_token');
@@ -324,6 +321,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const isAdmin = user.roles.includes('admin');
         renderUserFormRoles(user.roles);
         renderUserFormCategories(isAdmin ? allCategories.map(c => c.id) : (user.permissions?.visibleCategories || []), isPublicUser ? false : isAdmin);
+        
+        const defaultCatSelect = form.querySelector('#user-form-default-cat');
+        populateDefaultCategoryDropdown(defaultCatSelect, allCategories, user.defaultCategoryId);
+
         document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
         document.querySelector(`#user-list li[data-username="${user.username}"]`)?.classList.add('selected');
     };
@@ -336,6 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
         form.querySelector('#user-form-username-hidden').value = '';
         renderUserFormRoles();
         renderUserFormCategories();
+        populateDefaultCategoryDropdown(form.querySelector('#user-form-default-cat'), allCategories, 'all');
         document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
     };
     const renderUserFormRoles = (activeRoles = ['viewer']) => {
@@ -354,7 +356,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderUserFormCategories = (visibleIds = [], isDisabled = false) => {
         const container = document.getElementById('user-form-categories'); if (!container) return;
         container.innerHTML = '';
-        // 【稳定排序】
         const sortedCategories = [...allCategories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
         const categoryMap = new Map(sortedCategories.map(cat => [cat.id, { ...cat, children: [] }]));
         const tree = [];
@@ -371,6 +372,14 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         buildCheckboxes(tree, 0);
     };
+    const populateDefaultCategoryDropdown = (selectEl, categories, selectedId) => {
+        selectEl.innerHTML = `<option value="all">全部书签</option>`;
+        const sortedCategories = [...categories].sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
+        sortedCategories.forEach(cat => {
+            selectEl.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
+        });
+        selectEl.value = selectedId || 'all';
+    };
     const handleUserFormSubmit = async (e) => {
         e.preventDefault();
         const form = e.target;
@@ -385,7 +394,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedRole = form.querySelector('input[name="role-selection"]:checked').value;
         const userData = {
             roles: [selectedRole],
-            permissions: { visibleCategories: Array.from(form.querySelectorAll('#user-form-categories input:checked')).map(cb => cb.value) }
+            permissions: { visibleCategories: Array.from(form.querySelectorAll('#user-form-categories input:checked')).map(cb => cb.value) },
+            defaultCategoryId: form.querySelector('#user-form-default-cat').value
         };
         if (password) userData.password = password;
         if (!isEditing) userData.username = username;
@@ -434,7 +444,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 500));
         
-        // 【稳定排序】
         allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name)).forEach(cat => {
             const option = document.createElement('option');
             option.value = cat.id;
@@ -456,7 +465,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (selectedCategoryId !== 'all') {
             bookmarksToDisplay = bookmarksToDisplay.filter(bm => bm.categoryId === selectedCategoryId);
         }
-        // 【稳定排序】
         bookmarksToDisplay.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
         
         const categoryNameMap = new Map(allCategories.map(c => [c.id, c.name]));
