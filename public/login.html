@@ -3,18 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录</title>
+    <title>登录 - 导航页</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="is-loading">
-    <div id="login-container">
-        <h2>登录</h2>
-        <form id="login-form">
-            <input type="text" id="username" placeholder="用户名" required autocomplete="username">
-            <input type="password" id="password" placeholder="密码" required autocomplete="current-password">
-            <button type="submit">登录</button>
-            <p id="login-error" class="error-message"></p>
-        </form>
+    <div class="auth-container">
+        <div class="auth-box">
+            <h1>登录</h1>
+            <p class="auth-subtitle">欢迎回来，请登录您的账户</p>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="username">用户名</label>
+                    <input type="text" id="username" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">密码</label>
+                    <input type="password" id="password" required autocomplete="current-password">
+                </div>
+                <p id="login-error" class="error-message"></p>
+                <button type="submit" class="button-primary full-width">登录</button>
+            </form>
+        </div>
     </div>
 
     <script src="shared.js"></script>
