@@ -629,28 +629,40 @@ name: bookmarkEditForm.querySelector('#bm-edit-name').value,
         const highestBmSortOrder = allBookmarks.length > 0 ? Math.max(...allBookmarks.map(bm => bm.sortOrder || 0)) : -1;
         let currentCatSort = highestCatSortOrder + 10;
         let currentBmSort = highestBmSortOrder + 10;
+// 在 admin.js 中，找到 parseAndImport 函数，并将其中的 parseNode 子函数替换为下面的版本
 
-        const parseNode = (node, parentId) => {
-            if (!node || !node.children) return;
-            for (const child of node.children) {
-                if (child.tagName !== 'DT') continue;
-                const folderHeader = child.querySelector('h3');
-                const link = child.querySelector('a');
-                if (folderHeader) {
-                    const newCategoryId = generateId('cat');
-                    importedCategories.push({
-                        id: newCategoryId, name: folderHeader.textContent.trim(), parentId: parentId, sortOrder: currentCatSort++
-                    });
-                    const subList = child.nextElementSibling;
-                    if (subList && subList.tagName === 'DL') parseNode(subList, newCategoryId);
-                } else if (link) {
-                    importedBookmarks.push({
-                        id: generateId('bm'), name: link.textContent.trim(), url: link.href, categoryId: parentId,
-                        description: '', icon: link.getAttribute('icon') || '', sortOrder: currentBmSort++
-                    });
-                }
+const parseNode = (node, parentId) => {
+    if (!node || !node.children) return;
+    for (const child of node.children) {
+        if (child.tagName !== 'DT') continue;
+        const folderHeader = child.querySelector('h3');
+        const link = child.querySelector('a');
+        if (folderHeader) {
+            const newCategoryId = generateId('cat');
+            importedCategories.push({
+                id: newCategoryId, name: folderHeader.textContent.trim(), parentId: parentId, sortOrder: currentCatSort++
+            });
+
+            // 【重要修改】使用循环来查找下一个<DL>，而不是假定它紧邻其后
+            let nextSibling = child.nextElementSibling;
+            while(nextSibling && nextSibling.tagName !== 'DL') {
+                nextSibling = nextSibling.nextElementSibling;
             }
-        };
+            const subList = nextSibling; // subList 现在是正确的 <DL> 或者 null
+            
+            if (subList) { // 只有在找到 <DL> 的情况下才进行递归解析
+                parseNode(subList, newCategoryId);
+            }
+
+        } else if (link) {
+            importedBookmarks.push({
+                id: generateId('bm'), name: link.textContent.trim(), url: link.href, categoryId: parentId,
+                description: '', icon: link.getAttribute('icon') || '', sortOrder: currentBmSort++
+            });
+        }
+    }
+};
+        
         const rootDl = doc.querySelector('dl');
         if (!rootDl) throw new Error('无效的书签文件格式。');
         let uncategorizedCatId = null;
