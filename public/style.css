@@ -351,7 +351,7 @@ input:focus, textarea:focus, select:focus {
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 .admin-panel-tip {
     font-size: 0.9em; color: var(--text-secondary-light); background-color: #e9ecef;
-    border-left: 3px solid var(--accent-light); padding: 10px 15px; margin-bottom: 1rem; /* 【修改】调整了margin */
+    border-left: 3px solid var(--accent-light); padding: 10px 15px; margin-bottom: 1rem;
     border-radius: 4px;
 }
 .dark-theme .admin-panel-tip { color: var(--text-secondary-dark); background-color: #3a3a3a; border-left-color: var(--accent-dark); }
@@ -395,6 +395,7 @@ input:focus, textarea:focus, select:focus {
 .dark-theme #bookmark-admin-list-container .bm-admin-cat { color: var(--text-secondary-dark); }
 #bookmark-admin-list-container .bm-admin-actions button { margin: 0; padding: 5px; width: 32px; height: 32px; }
 
+/* 【重要修改】修正用户管理界面的布局 */
 #user-management-container {
     display: grid; grid-template-columns: 1fr 2fr; gap: 2.5rem;
     height: 100%; overflow: hidden;
@@ -426,10 +427,9 @@ input:focus, textarea:focus, select:focus {
     flex-grow: 1; display: flex;
     flex-direction: column; overflow: hidden;
 }
-/* 【新增】新的行内表单组样式 */
 .form-group-inline {
     display: grid;
-    grid-template-columns: 140px 1fr; /* 标签固定宽度，输入框自适应 */
+    grid-template-columns: 140px 1fr;
     align-items: center;
     gap: 1rem;
     margin-bottom: 1rem;
@@ -439,17 +439,36 @@ input:focus, textarea:focus, select:focus {
     text-align: right;
     font-weight: 500;
 }
-.form-group-inline .checkbox-group { /* 行内布局中的复选框组 */
+.form-group-inline .checkbox-group {
     padding: 0;
     border: none;
     min-height: auto;
 }
 
-/* 【新增】用于包裹可滚动内容的容器 */
-#user-form-scrollable-content {
+/* 【重要新增】实现“固定-滚动-固定”布局 */
+.user-form-static-fields {
+    flex-shrink: 0; /* 顶部固定区域不收缩 */
+    padding-bottom: 1rem;
+}
+.form-group.flex-grow {
+    flex-grow: 1; /* 中间滚动区域填充剩余空间 */
+    min-height: 100px; /* 保证在内容少时也有最小高度 */
+    display: flex;
+    flex-direction: column;
+}
+.form-group.flex-grow .checkbox-group {
     flex-grow: 1;
-    overflow-y: auto;
-    padding-right: 1rem; /* 为滚动条留出空间 */
+    overflow-y: auto; /* 关键：只让这个区域滚动 */
+}
+.user-form-buttons {
+    display: flex; gap: 1rem;
+    margin-top: 1.5rem;
+    padding-top: 1.5rem; 
+    border-top: 1px solid var(--border-light);
+    flex-shrink: 0; /* 底部固定区域不收缩 */
+}
+.dark-theme .user-form-buttons {
+    border-top-color: var(--border-dark);
 }
 
 .checkbox-group {
@@ -463,17 +482,6 @@ input:focus, textarea:focus, select:focus {
 }
 .checkbox-group div { display: flex; align-items: center; }
 .checkbox-group input { width: auto; margin-right: 8px; }
-
-.user-form-buttons {
-    display: flex; gap: 1rem;
-    margin-top: 1.5rem;
-    padding-top: 1.5rem; 
-    border-top: 1px solid var(--border-light);
-    flex-shrink: 0;
-}
-.dark-theme .user-form-buttons {
-    border-top-color: var(--border-dark);
-}
 
 .system-setting-item { margin-top: 1rem; padding: 1.5rem; border: 1px solid var(--border-light); border-radius: 8px; }
 .dark-theme .system-setting-item { border-color: var(--border-dark); }
