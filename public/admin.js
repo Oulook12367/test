@@ -98,35 +98,42 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
     
-    const populateCategoryDropdown = (selectElement, categories, selectedId = null, ignoreId = null) => {
+   // 在 admin.js 中找到并【完全替换】此函数
+const populateCategoryDropdown = (selectElement, categories, selectedId = null, ignoreId = null, options = { allowNoParent: true }) => {
+    selectElement.innerHTML = ''; // 清空旧选项
+    
+    // 根据调用需要，决定是否显示“顶级分类”选项
+    if (options.allowNoParent) {
         selectElement.innerHTML = '<option value="">-- 顶级分类 --</option>';
-        const categoryMap = new Map(categories.map(cat => [cat.id, { ...cat, children: [] }]));
-        const tree = [];
-        const sortedCategories = [...categories].sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    }
 
-        for (const cat of sortedCategories) {
-            if (cat.id === ignoreId) continue;
-            if (cat.parentId && categoryMap.has(cat.parentId)) {
-                const parent = categoryMap.get(cat.parentId);
-                if (parent) parent.children.push(categoryMap.get(cat.id));
-            } else {
-                tree.push(categoryMap.get(cat.id));
-            }
+    const categoryMap = new Map(categories.map(cat => [cat.id, { ...cat, children: [] }]));
+    const tree = [];
+    const sortedCategories = [...categories].sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+    for (const cat of sortedCategories) {
+        if (cat.id === ignoreId) continue;
+        if (cat.parentId && categoryMap.has(cat.parentId)) {
+            const parent = categoryMap.get(cat.parentId);
+            if (parent) parent.children.push(categoryMap.get(cat.id));
+        } else {
+            tree.push(categoryMap.get(cat.id));
         }
-        const buildOptions = (nodes, level) => {
-            if (level >= 4) return;
-            for (const node of nodes) {
-                if (!node) continue;
-                const option = document.createElement('option');
-                option.value = node.id;
-                option.textContent = `${'— '.repeat(level)}${node.name}`;
-                if (node.id === selectedId) option.selected = true;
-                selectElement.appendChild(option);
-                if (node.children.length > 0) buildOptions(node.children, level + 1);
-            }
-        };
-        buildOptions(tree, 0);
+    }
+    const buildOptions = (nodes, level) => {
+        if (level >= 4) return;
+        for (const node of nodes) {
+            if (!node) continue;
+            const option = document.createElement('option');
+            option.value = node.id;
+            option.textContent = `${'— '.repeat(level)}${node.name}`;
+            if (node.id === selectedId) option.selected = true;
+            selectElement.appendChild(option);
+            if (node.children.length > 0) buildOptions(node.children, level + 1);
+        }
     };
+    buildOptions(tree, 0);
+};
 
     // --- Tab 1: Category Management ---
 // 在 admin.js 中找到并【再次确认/替换】此函数
@@ -444,60 +451,62 @@ const handleUserFormSubmit = async (e) => {
 // =======================================================================
     
     // --- Tab 3: Bookmark Management ---
-// 在 admin.js 中找到并完全替换此函数
-// 在 admin.js 中找到并【完全替换】此函数
-const renderBookmarkAdminTab = (container) => {
-    container.innerHTML = `<h2>书签管理</h2>
-        <p class="admin-panel-tip">通过下拉菜单筛选分类。修改排序数字后将自动保存。
-        <span id="bm-save-status" style="margin-left: 10px; opacity: 0; transition: opacity 0.3s;"></span></p>
-        <div class="bookmark-admin-controls">
-            <span>筛选分类:</span>
-            <select id="bookmark-category-filter">
-                <option value="all">-- 显示全部分类 --</option>
-            </select>
-        </div>
-        <div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div>
-        <div id="bookmark-admin-list-container"><ul></ul></div>
-        <div class="admin-panel-actions">
-            <button id="add-new-bookmark-btn" class="secondary"><i class="fas fa-plus"></i> 添加新书签</button>
-        </div>`;
 
-    const listEl = container.querySelector('#bookmark-admin-list-container ul');
-    const categoryFilter = container.querySelector('#bookmark-category-filter');
-    const saveStatusEl = container.querySelector('#bm-save-status');
+const renderCategoryAdminTab = (container) => {
+    // 【修改】增加了“上级分类”的表头
+    container.innerHTML = `<h2>分类管理</h2>
+        <p class="admin-panel-tip">任何修改（名称、排序、父级）都会在约半秒后自动保存。
+        <span id="cat-save-status" style="margin-left: 10px; opacity: 0; transition: opacity 0.3s;"></span></p>
+        <div class="category-admin-header"><span>排序</span><span>分类名称</span><span>上级分类</span><span>操作</span></div>
+        <ul id="category-admin-list"></ul>
+        <div class="admin-panel-actions"><button id="add-new-category-btn" class="secondary"><i class="fas fa-plus"></i> 添加新分类</button></div>`;
     
-    // 【新增】书签排序的自动保存逻辑
-    const saveAllBookmarksNow = debounce(async () => {
+    const listEl = container.querySelector('#category-admin-list');
+    const saveStatusEl = container.querySelector('#cat-save-status');
+
+    const saveAllCategoriesNow = debounce(async () => {
         saveStatusEl.textContent = '正在保存...';
         saveStatusEl.style.opacity = '1';
-
-        // 从 DOM 读取当前的排序值并更新到 allBookmarks 数组中
-        const allListItems = document.querySelectorAll('#bookmark-admin-list-container li');
-        allListItems.forEach(li => {
-            const bmId = li.dataset.id;
-            const bmInState = allBookmarks.find(b => b.id === bmId);
-            if (bmInState) {
-                bmInState.sortOrder = parseInt(li.querySelector('.bm-sort-order').value) || 0;
-            }
-        });
         
+        const listItems = document.querySelectorAll('#category-admin-list li');
+        let finalCategories = [];
+        let hasError = false;
+
+        listItems.forEach(li => {
+            const id = li.dataset.id;
+            const name = li.querySelector('.cat-name-input').value.trim();
+            const parentId = li.querySelector('.cat-parent-select').value || null;
+            const sortOrder = parseInt(li.querySelector('.cat-order-input').value) || 0;
+            if (!name) { hasError = true; }
+            finalCategories.push({ id, sortOrder, name, parentId });
+        });
+
+        if (hasError) {
+            alert('分类名称不能为空！');
+            saveStatusEl.textContent = '保存失败！';
+            setTimeout(() => { saveStatusEl.style.opacity = '0'; }, 2000);
+            return;
+        }
+
         try {
-            await apiRequest('data', 'PUT', { bookmarks: allBookmarks });
+            await apiRequest('data', 'PUT', { categories: finalCategories });
             saveStatusEl.textContent = '已保存！';
+            // 【重要修正】保存成功后，调用 initializePage 获取最新数据并重绘，确保排序生效
+            await initializePage('tab-categories');
         } catch (error) {
             saveStatusEl.textContent = '保存失败！';
             alert('保存失败: ' + error.message);
-        } finally {
             setTimeout(() => { saveStatusEl.style.opacity = '0'; }, 2000);
         }
     }, 500);
 
-    // 【新增】监听排序输入框的变化
     listEl.addEventListener('change', (e) => {
-        if (e.target.matches('.bm-sort-order')) {
-            saveAllBookmarksNow();
+        if (e.target.matches('.cat-order-input, .cat-name-input, .cat-parent-select')) {
+            saveAllCategoriesNow();
         }
     });
+
+
     
     // 动态填充分类选项
     allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
@@ -539,53 +548,40 @@ const renderBookmarkAdminTab = (container) => {
 
 
 // 【新增】一个处理“添加新书签”的函数
-// 在 admin.js 中, 找到并完全替换此函数
 const handleAddNewBookmark = () => {
-    // 这两个检查仍然保留，以防万一
-    if (!bookmarkEditForm) {
-        console.error('错误：JS无法找到书签编辑的表单元素 #bookmark-edit-form。');
-        alert('发生致命错误：无法加载书签编辑表单。');
+    if (!bookmarkEditForm || !bookmarkEditModal) {
+        console.error('错误：书签编辑相关的DOM元素未找到。');
         return;
     }
-    if (!bookmarkEditModal) {
-        console.error('错误：JS无法找到书签编辑的模态框元素 #bookmark-edit-modal。');
-        alert('发生致命错误：无法加载书签编辑模态框。');
-        return;
-    }
-
     bookmarkEditForm.reset();
+    document.getElementById('bookmark-modal-title').textContent = '添加新书签';
+    bookmarkEditForm.querySelector('#bm-edit-id').value = '';
     
-    // 【重要修正】不再从 form 内部查找，而是从整个 document 中通过 ID 直接查找标题元素
-    const modalTitle = document.getElementById('bookmark-modal-title');
-    if (modalTitle) {
-        modalTitle.textContent = '添加新书签';
-    }
-    
-    // 清空隐藏的ID字段
-    bookmarkEditForm.querySelector('#bm-edit-id').value = ''; 
-    
-    // 填充分类下拉菜单
     const categorySelect = bookmarkEditForm.querySelector('#bm-edit-category');
     if (categorySelect) {
-        populateCategoryDropdown(categorySelect, allCategories);
+        // 【修改】传入新参数，不允许没有父级
+        populateCategoryDropdown(categorySelect, allCategories, null, null, { allowNoParent: false });
     }
-
-    // 显示模态框
+    
     showModal(bookmarkEditModal);
 };
     
    
 
-    const handleEditBookmark = (bookmark) => {
-        bookmarkEditForm.reset();
-        bookmarkEditForm.querySelector('#bm-edit-id').value = bookmark.id;
-        bookmarkEditForm.querySelector('#bm-edit-name').value = bookmark.name;
-        bookmarkEditForm.querySelector('#bm-edit-url').value = bookmark.url;
-        bookmarkEditForm.querySelector('#bm-edit-desc').value = bookmark.description || '';
-        bookmarkEditForm.querySelector('#bm-edit-icon').value = bookmark.icon || '';
-        populateCategoryDropdown(bookmarkEditForm.querySelector('#bm-edit-category'), allCategories, bookmark.categoryId);
-        showModal(bookmarkEditModal);
-    };
+ const handleEditBookmark = (bookmark) => {
+    bookmarkEditForm.reset();
+    document.getElementById('bookmark-modal-title').textContent = '编辑书签';
+    bookmarkEditForm.querySelector('#bm-edit-id').value = bookmark.id;
+    bookmarkEditForm.querySelector('#bm-edit-name').value = bookmark.name;
+    bookmarkEditForm.querySelector('#bm-edit-url').value = bookmark.url;
+    bookmarkEditForm.querySelector('#bm-edit-desc').value = bookmark.description || '';
+    bookmarkEditForm.querySelector('#bm-edit-icon').value = bookmark.icon || '';
+    
+    // 【修改】传入新参数，不允许没有父级
+    populateCategoryDropdown(bookmarkEditForm.querySelector('#bm-edit-category'), allCategories, bookmark.categoryId, null, { allowNoParent: false });
+    
+    showModal(bookmarkEditModal);
+};
 
     const handleDeleteBookmark = (bookmark) => {
         showConfirm('删除书签', `确定删除书签 "${bookmark.name}"?`, async () => {
