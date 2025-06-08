@@ -107,7 +107,11 @@ document.addEventListener('DOMContentLoaded', () => {
         confirmTitle.textContent = title;
         confirmText.textContent = text;
         showModal(confirmModal);
-        confirmBtnYes.onclick = () => { hideAllModals(); onConfirm(); };
+        confirmBtnYes.onclick = () => { 
+            hideAllModals(); // Hide all initially
+            showModal(adminPanel); // Re-show the admin panel if it was open
+            onConfirm(); 
+        };
     };
 
     // --- Data Loading & Rendering ---
@@ -281,9 +285,20 @@ document.addEventListener('DOMContentLoaded', () => {
         renderBookmarks(clickedLi.dataset.id, localSearchInput.value);
     });
 
-    modalBackdrop.addEventListener('click', (e) => { if (e.target === modalBackdrop) hideAllModals(); });
+    modalBackdrop.addEventListener('click', (e) => { 
+        if (e.target === modalBackdrop) {
+            if(confirmModal.style.display !== 'flex') {
+                 hideAllModals();
+            }
+        }
+    });
     document.querySelectorAll('.close-btn').forEach(btn => btn.addEventListener('click', hideAllModals));
-    document.getElementById('confirm-btn-no').onclick = hideAllModals;
+    document.getElementById('confirm-btn-no').onclick = () => {
+        confirmModal.style.display = 'none';
+        if(adminPanel.style.display !== 'flex' && bookmarkEditModal.style.display !== 'flex') {
+             modalBackdrop.style.display = 'none';
+        }
+    };
 
 
     // --- ADMIN PANEL LOGIC ---
@@ -319,7 +334,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderAdminTab = (tabId) => {
         switch (tabId) {
             case 'tab-categories':
-                // 【修正】当切换到分类标签时，才初始化临时数据
                 tempCategories = JSON.parse(JSON.stringify(allCategories));
                 renderCategoryAdminTab();
                 break;
@@ -332,17 +346,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
     
-    const populateCategoryDropdown = (selectElement, categories, selectedId = null, ignoreId = null, isChecklist = false) => {
-        if (!isChecklist) {
-            selectElement.innerHTML = '<option value="">-- 顶级分类 --</option>';
-        } else {
-            selectElement.innerHTML = '';
-        }
+    const populateCategoryDropdown = (selectElement, categories, selectedId = null, ignoreId = null) => {
+        selectElement.innerHTML = '<option value="">-- 顶级分类 --</option>';
         
         const categoryMap = new Map(categories.map(cat => [cat.id, { ...cat, children: [] }]));
         const tree = [];
+        
+        const sortedCategories = [...categories].sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 
-        for (const cat of categories) {
+        for (const cat of sortedCategories) {
             if (cat.id === ignoreId) continue;
             if (cat.parentId && categoryMap.has(cat.parentId)) {
                 const parent = categoryMap.get(cat.parentId);
@@ -355,23 +367,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const buildOptions = (nodes, level) => {
-            if (level >= 4 && !isChecklist) return;
+            if (level >= 4) return;
             for (const node of nodes) {
                 if (!node) continue;
-                if(isChecklist) {
-                     selectElement.innerHTML += `
-                        <div>
-                            <input type="checkbox" id="cat-perm-${node.id}" value="${node.id}" ${Array.isArray(selectedId) && selectedId.includes(node.id) ? 'checked' : ''}>
-                            <label for="cat-perm-${node.id}" style="padding-left: ${level * 20}px">${escapeHTML(node.name)}</label>
-                        </div>`;
-                } else {
-                    const option = document.createElement('option');
-                    option.value = node.id;
-                    option.textContent = `${'— '.repeat(level)}${node.name}`;
-                    if (node.id === selectedId) option.selected = true;
-                    selectElement.appendChild(option);
-                }
-                
+                const option = document.createElement('option');
+                option.value = node.id;
+                option.textContent = `${'— '.repeat(level)}${node.name}`;
+                if (node.id === selectedId) option.selected = true;
+                selectElement.appendChild(option);
                 if (node.children.length > 0) {
                     buildOptions(node.children, level + 1);
                 }
@@ -412,7 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         });
                     }
                     tempCategories = tempCategories.filter(c => !idsToDelete.has(c.id));
-                    renderCategoryAdminTab();
+                    renderCategoryAdminTab(); // Re-render from the modified temp array
                 });
             };
             listEl.appendChild(li);
@@ -426,9 +429,8 @@ document.addEventListener('DOMContentLoaded', () => {
             parentId: null,
             sortOrder: (tempCategories.length > 0) ? Math.max(...tempCategories.map(c => c.sortOrder || 0)) + 10 : 0
         };
-        tempCategories.unshift(newCat); // Add to the top for visibility
+        tempCategories.unshift(newCat);
         renderCategoryAdminTab();
-        // Focus on the new input
         const newLi = document.querySelector(`#category-admin-list li[data-id="${newCat.id}"]`);
         if (newLi) {
             newLi.querySelector('.cat-name-input').focus();
@@ -462,7 +464,6 @@ document.addEventListener('DOMContentLoaded', () => {
             await apiRequest('data', 'PUT', { categories: finalCategories });
             alert('分类保存成功！');
             await loadData();
-            // Re-initialize tempCategories after successful save
             tempCategories = JSON.parse(JSON.stringify(allCategories));
             renderCategoryAdminTab();
         } catch (error) {
