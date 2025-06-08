@@ -26,7 +26,6 @@ const getSiteData = async (env) => {
         const adminSalt = generateSalt();
         const adminPasswordHash = await hashPassword('admin123', adminSalt);
         const parentCatId = `cat-${Date.now()}`;
-        const childCatId = `cat-${Date.now() + 1}`;
         const publicCatId = `cat-${Date.now() + 2}`;
         
         data = {
@@ -36,7 +35,7 @@ const getSiteData = async (env) => {
                     passwordHash: adminPasswordHash,
                     salt: adminSalt,
                     roles: ['admin'],
-                    permissions: { visibleCategories: [parentCatId, childCatId, publicCatId] }
+                    permissions: { visibleCategories: [parentCatId, publicCatId] }
                 },
                 'public': {
                     username: 'public',
@@ -45,9 +44,8 @@ const getSiteData = async (env) => {
                 }
             },
             categories: [
-                { id: parentCatId, name: '默认父分类', parentId: null, sortOrder: 0 },
-                { id: childCatId, name: '默认子分类', parentId: parentCatId, sortOrder: 1 },
-                { id: publicCatId, name: '公共分类', parentId: null, sortOrder: 2 }
+                { id: parentCatId, name: '默认分类', parentId: null, sortOrder: 0 },
+                { id: publicCatId, name: '公共分类', parentId: null, sortOrder: 1 }
             ],
             bookmarks: []
         };
