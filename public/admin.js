@@ -471,35 +471,68 @@ const handleUserFormSubmit = async (e) => {
 // =======================================================================
     
     // --- Tab 3: Bookmark Management ---
-    const renderBookmarkAdminTab = (container) => {
-    container.innerHTML = `<h2>书签管理</h2><p class="admin-panel-tip">在这里管理所有的书签。点击“保存顺序”来应用排序变更。</p><div class="bookmark-admin-controls"><span>排序方式:</span><select id="bookmark-sort-select"><option value="name_asc">名称 (A-Z)</option><option value="name_desc">名称 (Z-A)</option><option value="category">按分类</option></select></div><div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div><div id="bookmark-admin-list-container"></div><div class="admin-panel-actions"><button id="save-bookmarks-btn"><i class="fas fa-save"></i> 保存书签顺序</button><button id="add-new-bookmark-btn" class="secondary"><i class="fas fa-plus"></i> 添加新书签</button></div>`;
+// 在 admin.js 中找到并完全替换此函数
+const renderBookmarkAdminTab = (container) => {
+    // 【修改】将旧的排序控件替换为新的分类筛选控件
+    container.innerHTML = `<h2>书签管理</h2>
+        <p class="admin-panel-tip">请从下方选择一个分类来筛选书签。列表将根据“排序”数字（越小越靠前）进行排列。</p>
+        <div class="bookmark-admin-controls">
+            <span>筛选分类:</span>
+            <select id="bookmark-category-filter">
+                <option value="all">-- 显示全部分类 --</option>
+                </select>
+        </div>
+        <div class="bookmark-admin-header">
+            <span class="sort-col">排序</span>
+            <span>书签名称</span>
+            <span>所属分类</span>
+            <span>操作</span>
+        </div>
+        <div id="bookmark-admin-list-container"></div>
+        <div class="admin-panel-actions">
+            <button id="save-bookmarks-btn"><i class="fas fa-save"></i> 保存书签顺序</button>
+        </div>`;
+
     const listContainer = container.querySelector('#bookmark-admin-list-container');
- 
-       
-        const ul = document.createElement('ul');
-        listContainer.appendChild(ul);
-        const sortBy = container.querySelector('#bookmark-sort-select').value;
-        let sortedBookmarks = [...allBookmarks];
-        const categoryNameMap = new Map(allCategories.map(c => [c.id, c.name]));
+    const categoryFilter = container.querySelector('#bookmark-category-filter');
+    const ul = document.createElement('ul');
+    listContainer.appendChild(ul);
+    
+    // 动态填充分类筛选器的选项
+    allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat.id;
+        option.textContent = cat.name;
+        categoryFilter.appendChild(option);
+    });
 
-        switch (sortBy) {
-            case 'name_desc': sortedBookmarks.sort((a,b) => b.name.localeCompare(a.name)); break;
-            case 'category': sortedBookmarks.sort((a,b) => (categoryNameMap.get(a.categoryId) || '').localeCompare(categoryNameMap.get(b.categoryId) || '')); break;
-            default: sortedBookmarks.sort((a,b) => a.name.localeCompare(b.name)); break;
-        }
+    // 【重要修改】根据选择的分类来筛选和排序书签
+    const selectedCategoryId = categoryFilter.value;
+    let bookmarksToDisplay = [...allBookmarks];
 
-        sortedBookmarks.forEach(bm => {
-            const li = document.createElement('li');
-            li.dataset.id = bm.id;
-            const category = allCategories.find(c => c.id === bm.categoryId);
-            li.innerHTML = `<input type="number" class="bm-sort-order" value="${bm.sortOrder || 0}"><span class="bm-admin-name">${escapeHTML(bm.name)}</span><span class="bm-admin-cat">${category ? escapeHTML(category.name) : '无分类'}</span><div class="bm-admin-actions"><button class="edit-bm-btn secondary" title="编辑"><i class="fas fa-pencil-alt"></i></button><button class="delete-bm-btn danger secondary" title="删除"><i class="fas fa-trash-alt"></i></button></div>`;
-            li.querySelector('.edit-bm-btn').onclick = () => handleEditBookmark(bm);
-            li.querySelector('.delete-bm-btn').onclick = () => handleDeleteBookmark(bm);
-            ul.appendChild(li);
-        });
-        container.querySelector('#save-bookmarks-btn').onclick = handleSaveBookmarks;
-        container.querySelector('#bookmark-sort-select').onchange = () => renderBookmarkAdminTab(container);
-        container.querySelector('#add-new-bookmark-btn').onclick = handleAddNewBookmark;
+    // 1. 按分类筛选
+    if (selectedCategoryId !== 'all') {
+        bookmarksToDisplay = bookmarksToDisplay.filter(bm => bm.categoryId === selectedCategoryId);
+    }
+
+    // 2. 按排序数字排序
+    bookmarksToDisplay.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    
+    // 渲染列表
+    const categoryNameMap = new Map(allCategories.map(c => [c.id, c.name]));
+    bookmarksToDisplay.forEach(bm => {
+        const li = document.createElement('li');
+        li.dataset.id = bm.id;
+        li.innerHTML = `<input type="number" class="bm-sort-order" value="${bm.sortOrder || 0}"><span class="bm-admin-name">${escapeHTML(bm.name)}</span><span class="bm-admin-cat">${categoryNameMap.get(bm.categoryId) || '无分类'}</span><div class="bm-admin-actions"><button class="edit-bm-btn secondary" title="编辑"><i class="fas fa-pencil-alt"></i></button><button class="delete-bm-btn danger secondary" title="删除"><i class="fas fa-trash-alt"></i></button></div>`;
+        li.querySelector('.edit-bm-btn').onclick = () => handleEditBookmark(bm);
+        li.querySelector('.delete-bm-btn').onclick = () => handleDeleteBookmark(bm);
+        ul.appendChild(li);
+    });
+
+    // 绑定事件
+    container.querySelector('#save-bookmarks-btn').onclick = handleSaveBookmarks;
+    // 当筛选器变化时，重新渲染整个标签页
+    categoryFilter.onchange = () => renderBookmarkAdminTab(container);
 };
 
 // 【新增】一个处理“添加新书签”的函数
