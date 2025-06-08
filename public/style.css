@@ -38,6 +38,7 @@ body {
     background-color: var(--bg-light);
     color: var(--text-primary-light);
     transition: background-color var(--transition-speed), color var(--transition-speed);
+    overflow: hidden;
 }
 body.dark-theme {
     background-color: var(--bg-dark);
@@ -78,12 +79,15 @@ body.is-loading { visibility: hidden; }
 #app-layout.sidebar-collapsed #sidebar-toggle-btn {
     left: 1rem;
 }
+.main-header-left { display: none; }
 
 .main-content {
     flex-grow: 1;
     overflow-y: auto;
     padding: 1.5rem 2rem;
+    transition: padding-left var(--transition-speed) ease;
 }
+
 header {
     display: flex;
     align-items: center;
@@ -92,7 +96,6 @@ header {
 }
 
 /* 4. COMPONENTS */
-/* --- Buttons --- */
 .button, button {
     display: inline-flex; align-items: center; justify-content: center;
     gap: 0.5rem; padding: 0.5rem 1rem; font-size: 0.95rem; font-weight: 500;
@@ -169,10 +172,13 @@ input:focus, textarea:focus, select:focus {
 
 /* --- Sidebar --- */
 .sidebar-header {
+    display: flex; justify-content: space-between; align-items: center;
     padding-bottom: 1rem; margin-bottom: 1rem;
     border-bottom: 1px solid var(--border-light);
 }
 .dark-theme .sidebar-header { border-bottom-color: var(--border-dark); }
+.sidebar-header h2 { margin: 0; }
+
 .category-nav { list-style: none; padding: 0; margin: 0; }
 .category-nav.dynamic { margin-top: 1rem; }
 .category-nav li {
@@ -303,8 +309,14 @@ input:focus, textarea:focus, select:focus {
     overflow: hidden;
 }
 .admin-tab-content { display: none; flex-grow: 1; flex-direction: column; overflow: hidden; }
-.admin-tab-content.active { display: flex; }
-.admin-tab-content h2 { margin-top: 0; }
+.admin-tab-content.active { display: flex; animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.admin-panel-tip {
+    font-size: 0.9em; color: var(--text-secondary-light); background-color: #e9ecef;
+    border-left: 3px solid var(--accent-light); padding: 10px 15px; margin: 1rem 0;
+    border-radius: 4px;
+}
+.dark-theme .admin-panel-tip { color: var(--text-secondary-dark); background-color: #3a3a3a; border-left-color: var(--accent-dark); }
 .admin-panel-actions {
     margin-top: 1.5rem; padding-top: 1.5rem;
     border-top: 1px solid var(--border-light);
@@ -315,7 +327,7 @@ input:focus, textarea:focus, select:focus {
 /* --- Specific Admin Tabs --- */
 .category-admin-header, .bookmark-admin-header {
     display: grid; gap: 1rem; padding: 0 1rem; margin-bottom: 0.5rem;
-    font-weight: 600; color: var(--text-secondary-light);
+    font-weight: 600; color: var(--text-secondary-light); flex-shrink: 0;
 }
 .dark-theme .category-admin-header, .dark-theme .bookmark-admin-header { color: var(--text-secondary-dark); }
 .category-admin-header { grid-template-columns: 80px 1fr 1fr 80px; }
@@ -331,12 +343,19 @@ input:focus, textarea:focus, select:focus {
     padding: 0.5rem 1rem; border-radius: 6px;
 }
 #category-admin-list li { grid-template-columns: 80px 1fr 1fr 80px; }
+.cat-name-cell { display: flex; }
 #bookmark-admin-list-container li { grid-template-columns: 80px 1fr 200px 100px; }
 #category-admin-list li:nth-child(odd), #bookmark-admin-list-container li:nth-child(odd) { background-color: #f8f9fa; }
 .dark-theme #category-admin-list li:nth-child(odd), .dark-theme #bookmark-admin-list-container li:nth-child(odd) { background-color: #212529; }
 #category-admin-list input, #category-admin-list select, #bookmark-admin-list-container input {
     width: 100%; padding: 0.5rem; font-size: 0.9rem;
 }
+#category-admin-list .delete-cat-btn { width: auto; height: auto; text-align: center; }
+#bookmark-admin-list-container input[type="number"] { text-align: center; }
+#bookmark-admin-list-container .bm-admin-name { font-weight: 500; }
+#bookmark-admin-list-container .bm-admin-cat { color: var(--text-secondary-light); font-size: 0.9em; }
+.dark-theme #bookmark-admin-list-container .bm-admin-cat { color: var(--text-secondary-dark); }
+#bookmark-admin-list-container .bm-admin-actions button { margin: 0; padding: 5px; width: 32px; height: 32px; }
 
 #user-management-container {
     display: grid; grid-template-columns: 1fr 2fr; gap: 2.5rem;
@@ -359,21 +378,30 @@ input:focus, textarea:focus, select:focus {
 #user-list li:hover, #user-list li.selected { background-color: #e9ecef; }
 .dark-theme #user-list li:hover, .dark-theme #user-list li.selected { background-color: #3a3a3a; }
 .user-form-container form { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
-.user-form-container form > div:not(.checkbox-group):not(.user-form-buttons) { padding-right: 1rem; }
-.user-form-buttons { margin-top: auto; padding-top: 1rem; }
+.user-form-container form > .form-group { padding-right: 1rem; }
 .checkbox-group {
     display: flex; flex-direction: column; gap: 0.75rem; flex-grow: 1;
     overflow-y: auto; padding: 1rem; border: 1px solid var(--border-light); border-radius: 6px;
+    min-height: 200px;
 }
 .dark-theme .checkbox-group { border-color: var(--border-dark); }
 .checkbox-group.horizontal {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    flex-grow: 0;
+    flex-grow: 0; min-height: auto;
 }
 .checkbox-group div { display: flex; align-items: center; }
 .checkbox-group input { width: auto; margin-right: 8px; }
+.user-form-buttons { display: flex; gap: 1rem; margin-top: auto; padding-top: 1rem; }
+.system-setting-item { margin-top: 1rem; padding: 1.5rem; border: 1px solid var(--border-light); border-radius: 8px; }
+.dark-theme .system-setting-item { border-color: var(--border-dark); }
+.system-setting-item h3 { margin-top: 0; }
 
 /* MODALS */
 .modal { display: none; }
 .modal-content.small { max-width: 450px; text-align: center; }
 .confirm-buttons { display: flex; justify-content: center; gap: 1rem; }
+
+.error-message { color: #dc3545; font-size: 0.9em; text-align: center; min-height: 1.2em;}
+.empty-message { text-align: center; color: var(--text-secondary-light); padding: 4rem 0; font-style: italic; }
+.dark-theme .empty-message { color: var(--text-secondary-dark); }
+.error-fullpage { text-align: center; padding: 4rem; font-size: 1.2rem; }
