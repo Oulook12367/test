@@ -1,14 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- 辅助函数 ---
-    const escapeHTML = (str) => {
-        if (typeof str !== 'string') return '';
-        return str.replace(/[&<>"']/g, (match) => ({
-            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-        }[match]));
-    };
-    
     // --- Element Selectors ---
-    const staticNav = document.getElementById('static-nav');
     const loginContainer = document.getElementById('login-container');
     const appLayout = document.getElementById('app-layout');
     const loginForm = document.getElementById('login-form');
@@ -18,11 +9,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchEngineSelect = document.getElementById('search-engine');
     const bookmarksGrid = document.getElementById('bookmarks-grid');
     const categoryNav = document.getElementById('category-nav');
+    const staticNav = document.getElementById('static-nav');
     const logoutButton = document.getElementById('logout-btn');
     const modalBackdrop = document.getElementById('modal-backdrop');
     const addBookmarkBtn = document.getElementById('add-bookmark-btn');
     const userManagementBtn = document.getElementById('user-management-btn');
     const manageCategoriesBtn = document.getElementById('manage-categories-btn');
+    const importBookmarksBtn = document.getElementById('import-bookmarks-btn');
     const bookmarkModal = document.getElementById('bookmark-modal');
     const userManagementModal = document.getElementById('user-management-modal');
     const categoryManagementModal = document.getElementById('category-management-modal');
@@ -42,54 +35,51 @@ document.addEventListener('DOMContentLoaded', () => {
     const confirmBtnYes = document.getElementById('confirm-btn-yes');
     const bulkDeleteCatBtn = document.getElementById('bulk-delete-cat-btn');
     const manageMenu = document.getElementById('manage-menu');
-    const importBookmarksBtn = document.getElementById('import-bookmarks-btn');
     const importFileInput = document.getElementById('import-file-input');
+    const sidebarToggleBtn = document.getElementById('sidebar-toggle');
 
-   // --- State ---
+    // --- State ---
     let allBookmarks = [], allCategories = [], allUsers = [], currentUser = null, isGuestView = false;
-    let categorySortable, bookmarkSortable;
-// 【新增】用于存储折叠状态的 Set，并从 localStorage 初始化
-const savedCollapsedState = localStorage.getItem('collapsedCategories');
-let collapsedCategories = savedCollapsedState ? new Set(JSON.parse(savedCollapsedState)) : new Set();
+    let categorySortable;
+    const savedCollapsedState = localStorage.getItem('collapsedCategories');
+    let collapsedCategories = savedCollapsedState ? new Set(JSON.parse(savedCollapsedState)) : new Set();
+    
+    // --- Helpers ---
+    const escapeHTML = (str) => {
+        if (typeof str !== 'string') return '';
+        return str.replace(/[&<>"']/g, (match) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[match]));
+    };
 
-
-
-// 【新增】递归获取所有子分类ID的辅助函数
-const getRecursiveCategoryIds = (initialIds) => {
-    const fullIdSet = new Set(initialIds);
-    const queue = [...initialIds];
-
-    while (queue.length > 0) {
-        const parentId = queue.shift();
-        const children = allCategories.filter(c => c.parentId === parentId);
-        for (const child of children) {
-            if (!fullIdSet.has(child.id)) {
-                fullIdSet.add(child.id);
-                queue.push(child.id);
+    const getRecursiveCategoryIds = (initialIds) => {
+        const fullIdSet = new Set(initialIds);
+        const queue = [...initialIds];
+        while (queue.length > 0) {
+            const parentId = queue.shift();
+            const children = allCategories.filter(c => c.parentId === parentId);
+            for (const child of children) {
+                if (!fullIdSet.has(child.id)) {
+                    fullIdSet.add(child.id);
+                    queue.push(child.id);
+                }
             }
         }
-    }
-    return fullIdSet;
-};
+        return fullIdSet;
+    };
 
-
-
-    
-// --- API Helper ---
+    // --- API Helper ---
     const apiRequest = async (endpoint, method = 'GET', body = null) => {
         const headers = { 'Content-Type': 'application/json' };
         const token = localStorage.getItem('jwt_token');
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-        const options = { 
-        method, 
-        headers,
-        cache: 'no-cache', // 【重要】新增此行，禁止浏览器缓存API请求
-    };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        
+        const options = { method, headers, cache: 'no-cache' };
         if (body) options.body = JSON.stringify(body);
+        
         const response = await fetch(`/api/${endpoint}`, options);
         if (response.status === 204) return null;
+        
         let result;
         try {
             result = await response.json();
@@ -102,50 +92,37 @@ const getRecursiveCategoryIds = (initialIds) => {
         return result;
     };
 
-  
-const persistOrder = async () => {
-    try {
-        await apiRequest('data', 'PUT', {
-            categories: allCategories,
-            bookmarks: allBookmarks
-        });
-    } catch (error) {
-        alert('顺序保存失败: ' + error.message);
-        // 如果保存失败，重新加载服务器数据以恢复同步
-        await loadData();
-    }
-};
-    
-  // --- Theme Logic ---
-  const applyTheme = (theme) => {
-        const currentClass = document.body.className;
-        document.body.className = theme;
-        if(currentClass.includes('is-loading')) {
-            document.body.classList.add('is-loading');
+    const persistOrder = async () => {
+        try {
+            await apiRequest('data', 'PUT', { categories: allCategories, bookmarks: allBookmarks });
+        } catch (error) {
+            alert('顺序保存失败: ' + error.message);
+            await loadData();
         }
+    };
+
+    // --- Theme & UI Flow ---
+    const applyTheme = (theme) => {
+        document.body.className = theme;
         themeToggleButton.innerHTML = theme === 'dark-theme' ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
         localStorage.setItem('theme', theme);
     };
-    themeToggleButton.addEventListener('click', () => {
-        const newTheme = document.body.classList.contains('light-theme') ? 'dark-theme' : 'light-theme';
-        applyTheme(newTheme);
-    });
 
-    manageMenu.addEventListener('click', (e) => {
-        if(e.target.closest('.dropdown-toggle')) {
-            manageMenu.classList.toggle('open');
-        }
-    });
-    document.addEventListener('click', (e) => {
-        if (!manageMenu.contains(e.target)) {
-            manageMenu.classList.remove('open');
-        }
-    });
+    const applySidebarState = (isCollapsed) => {
+        appLayout.classList.toggle('sidebar-collapsed', isCollapsed);
+        localStorage.setItem('sidebarCollapsed', isCollapsed);
+        sidebarToggleBtn.innerHTML = isCollapsed ? '<i class="fas fa-angle-double-right"></i>' : '<i class="fas fa-angle-double-left"></i>';
+    };
 
-   // --- Authentication & UI Flow ---
- const showLoginPage = () => {
+    const showLoginPage = () => {
         appLayout.style.display = 'none';
-        loginContainer.style.display = 'block';
+        loginContainer.style.display = 'flex';
+    };
+    
+    const logoutAndReset = () => {
+        localStorage.removeItem('jwt_token');
+        allBookmarks = []; allCategories = []; allUsers = []; currentUser = null; isGuestView = false;
+        showLoginPage();
     };
 
     const checkLoginStatus = async () => {
@@ -154,61 +131,15 @@ const persistOrder = async () => {
             loginContainer.style.display = 'none';
             appLayout.style.display = 'flex';
         } catch (error) {
-            console.error("Data loading failed (might be expected for guests):", error.message);
+            console.error("Data loading failed:", error.message);
             showLoginPage();
         } finally {
             document.body.classList.remove('is-loading');
         }
     };
 
-    loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        loginError.textContent = '';
-        try {
-            const result = await apiRequest('login', 'POST', {
-                username: document.getElementById('username').value,
-                password: document.getElementById('password').value,
-            });
-            localStorage.setItem('jwt_token', result.token);
-            await checkLoginStatus();
-        } catch (error) {
-            loginError.textContent = error.message;
-        }
-    });
-    
-   
-/**
- * @description 登出并彻底重置应用状态
- */
-const logoutAndReset = () => {
-    // 1. 清除存储的凭证
-    localStorage.removeItem('jwt_token');
-
-    // 2. 清除所有内存中的状态变量
-    allBookmarks = [];
-    allCategories = [];
-    allUsers = [];
-    currentUser = null;
-    isGuestView = false;
-
-    // 3. 强制将UI重置到登录页面，而不是依赖 checkLoginStatus 去判断
-    //    这确保了用户登出后总能回到一个确定的、干净的起点。
-    showLoginPage(); 
-};
-
-logoutButton.addEventListener('click', () => {
-    // 当处于公共访客视图时，此按钮的功能是“去登录”
-    if (isGuestView) {
-        showLoginPage();
-    } else {
-        // 当处于登录状态时，此按钮的功能是“退出登录”
-        logoutAndReset();
-    }
-});
-
-
-     // --- Data Loading & UI Rendering ---
-  const loadData = async () => {
+    // --- Data Loading & Rendering ---
+    const loadData = async () => {
         const data = await apiRequest('data');
         const token = localStorage.getItem('jwt_token');
         if (data.isPublic) {
@@ -231,137 +162,94 @@ logoutButton.addEventListener('click', () => {
     const renderUI = () => {
         updateButtonVisibility();
         renderCategories();
-        renderBookmarks(categoryNav.querySelector('.active')?.dataset.id || 'all', localSearchInput.value);
+        renderBookmarks(document.querySelector('.sidebar .active')?.dataset.id || 'all', localSearchInput.value);
         initSortables();
         if (categoryManagementModal.style.display === 'flex') renderCategoryManagerList();
         if (userManagementModal.style.display === 'flex') renderUserManagementPanel();
     };
 
     const updateButtonVisibility = () => {
-        addBookmarkBtn.style.display = !isGuestView && currentUser?.permissions?.canEditBookmarks ? 'flex' : 'none';
-        manageMenu.style.display = !isGuestView && (currentUser?.permissions?.canEditCategories || currentUser?.permissions?.canEditUsers) ? 'inline-block' : 'none';
-        if (manageMenu.style.display !== 'none') {
-            document.getElementById('manage-categories-btn').style.display = currentUser.permissions.canEditCategories ? 'block' : 'none';
-            document.getElementById('user-management-btn').style.display = currentUser.permissions.canEditUsers ? 'block' : 'none';
-            document.getElementById('import-bookmarks-btn').style.display = currentUser.permissions.canEditBookmarks ? 'block' : 'none';
+        const canEdit = !isGuestView && currentUser?.permissions?.canEditBookmarks;
+        const canManage = !isGuestView && (currentUser?.permissions?.canEditCategories || currentUser?.permissions?.canEditUsers);
+        addBookmarkBtn.style.display = canEdit ? 'flex' : 'none';
+        manageMenu.style.display = canManage ? 'inline-block' : 'none';
+        if (canManage) {
+            manageCategoriesBtn.style.display = currentUser.permissions.canEditCategories ? 'block' : 'none';
+            userManagementBtn.style.display = currentUser.permissions.canEditUsers ? 'block' : 'none';
+            importBookmarksBtn.style.display = currentUser.permissions.canEditBookmarks ? 'block' : 'none';
         }
-        if (isGuestView) {
-            logoutButton.innerHTML = '<i class="fas fa-key"></i>';
-            logoutButton.title = '登录';
-        } else {
-            logoutButton.innerHTML = '<i class="fas fa-sign-out-alt"></i>';
-            logoutButton.title = '退出登录';
-        }
+        logoutButton.innerHTML = isGuestView ? '<i class="fas fa-key"></i>' : '<i class="fas fa-sign-out-alt"></i>';
+        logoutButton.title = isGuestView ? '登录' : '退出登录';
     };
 
+    const renderCategories = () => {
+        const activeId = document.querySelector('.sidebar .active')?.dataset.id || 'all';
+        categoryNav.innerHTML = '';
+        staticNav.innerHTML = '';
+        
+        const allLi = document.createElement('li');
+        allLi.dataset.id = 'all';
+        allLi.innerHTML = `<i class="fas fa-inbox fa-fw"></i><span>全部书签</span>`;
+        staticNav.appendChild(allLi);
 
-// 代码二 (app.js) 的修改
-
-const renderCategories = () => {
-    const activeId = document.querySelector('.sidebar .active')?.dataset.id || 'all';
-    
-    categoryNav.innerHTML = '';
-    staticNav.innerHTML = ''; // 假设您已采纳了上一轮“按钮置底”的修改
-
-    // --- “全部书签”按钮的逻辑 ---
-    const allLi = document.createElement('li');
-    allLi.dataset.id = 'all';
-    allLi.innerHTML = `<i class="fas fa-inbox"></i><span>全部书签</span>`;
-    staticNav.appendChild(allLi);
-
-    // --- 渲染可折叠的分类树 ---
-    // 1. 预先计算出哪些分类拥有子分类
-    const categoriesWithChildren = new Set(allCategories.map(cat => cat.parentId).filter(id => id !== null));
-
-    const buildTree = (parentId, level) => {
-        allCategories
-            .filter(cat => cat.parentId === parentId)
-            .forEach(cat => {
+        const categoriesWithChildren = new Set(allCategories.map(cat => cat.parentId).filter(id => id !== null));
+        
+        const buildTree = (parentId) => {
+            allCategories.filter(cat => cat.parentId === parentId).forEach(cat => {
                 const li = document.createElement('li');
                 li.dataset.id = cat.id;
-                li.style.paddingLeft = `${level * 20}px`;
-
-                let iconHtml = '';
+                
                 const isParent = categoriesWithChildren.has(cat.id);
                 const isCollapsed = collapsedCategories.has(cat.id);
-
-                // 2. 如果是父分类，则添加可点击的折叠/展开箭头
-                if (isParent) {
-                    const iconClass = isCollapsed ? 'fa-caret-right' : 'fa-caret-down';
-                    iconHtml = `<i class="fas ${iconClass} category-toggle"></i>`;
-                } else {
-                    // 为非父分类添加一个占位符，以保持对齐
-                    iconHtml = `<span class="category-toggle-placeholder"></span>`;
-                }
-
+                const iconClass = isCollapsed ? 'fa-caret-right' : 'fa-caret-down';
+                
                 li.innerHTML = `
-                    ${iconHtml}
-                    <i class="fas fa-folder"></i>
+                    <span class="category-toggle-placeholder">
+                        ${isParent ? `<i class="fas ${iconClass} category-toggle"></i>` : ''}
+                    </span>
+                    <i class="fas fa-folder fa-fw"></i>
                     <span>${escapeHTML(cat.name)}</span>
                 `;
                 
+                const level = allCategories.filter(c=>c.id === cat.id)[0].parentId ? allCategories.findIndex(c=>c.id === cat.parentId) > -1 ? 2: 1 : 1;
+                li.style.paddingLeft = `${level * 15}px`;
+
+                li.dataset.parentId = cat.parentId || 'root';
+
                 categoryNav.appendChild(li);
 
-                // 3. 如果当前分类是展开状态，则递归渲染其子分类
                 if (isParent && !isCollapsed) {
-                    buildTree(cat.id, level + 1);
+                    buildTree(cat.id);
                 }
             });
+        };
+        buildTree(null);
+
+        const newActiveLi = document.querySelector(`.sidebar li[data-id="${activeId}"]`) || staticNav.querySelector(`li[data-id="all"]`);
+        if(newActiveLi) newActiveLi.classList.add('active');
     };
-    buildTree(null, 1); // 从根节点开始构建
-
-    // --- 恢复激活状态 ---
-    const newActiveLi = document.querySelector(`.sidebar li[data-id="${activeId}"]`) || staticNav.querySelector(`li[data-id="all"]`);
-    if(newActiveLi) newActiveLi.classList.add('active');
-};
     
-
-
-// 找到旧的 document.querySelector('.sidebar').addEventListener... 并完整替换
-document.querySelector('.sidebar').addEventListener('click', (e) => {
-    const clickedLi = e.target.closest('li');
-    if (!clickedLi || !clickedLi.closest('.category-nav') || clickedLi.classList.contains('sortable-ghost')) return;
-
-    // 判断点击的是否是折叠/展开箭头
-    if (e.target.classList.contains('category-toggle')) {
-        e.stopPropagation(); // 阻止事件冒泡，避免触发分类选择
-        const catId = clickedLi.dataset.id;
-        
-        // 更新折叠状态
-        if (collapsedCategories.has(catId)) {
-            collapsedCategories.delete(catId);
-        } else {
-            collapsedCategories.add(catId);
-        }
-
-        // 将新状态保存到 localStorage
-        localStorage.setItem('collapsedCategories', JSON.stringify(Array.from(collapsedCategories)));
-        
-        // 重新渲染分类列表以应用折叠/展开效果
-        renderCategories();
-
-    } else {
-        // 如果点击的不是箭头，则执行原有的“选择分类”逻辑
-        document.querySelectorAll('.sidebar .category-nav li').forEach(li => li.classList.remove('active'));
-        clickedLi.classList.add('active');
-        renderBookmarks(clickedLi.dataset.id, localSearchInput.value);
-    }
-});
-
-
     const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
         bookmarksGrid.innerHTML = '';
-        let filteredBookmarks = categoryId === 'all' 
-            ? allBookmarks 
-            : allBookmarks.filter(bm => bm.categoryId === categoryId);
+        let categoryIdsToDisplay = new Set();
+        if (categoryId === 'all') {
+            allBookmarks.forEach(bm => categoryIdsToDisplay.add(bm.categoryId));
+        } else {
+            categoryIdsToDisplay = getRecursiveCategoryIds([categoryId]);
+        }
+
+        let filteredBookmarks = allBookmarks.filter(bm => categoryIdsToDisplay.has(bm.categoryId));
+
         if (searchTerm) {
             const lower = searchTerm.toLowerCase();
             filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lower) || bm.url.toLowerCase().includes(lower));
         }
+
         if(filteredBookmarks.length === 0){
             bookmarksGrid.innerHTML = '<p class="empty-message">这里什么都没有...</p>';
             return;
         }
+
         filteredBookmarks.forEach(bm => {
             const card = document.createElement('a');
             card.href = bm.url;
@@ -369,69 +257,108 @@ document.querySelector('.sidebar').addEventListener('click', (e) => {
             card.target = '_blank';
             card.rel = 'noopener noreferrer';
             card.dataset.id = bm.id;
+
             const defaultIcon = `https://www.google.com/s2/favicons?domain=${new URL(bm.url).hostname}`;
-            const img = document.createElement('img');
-            img.src = bm.icon || defaultIcon;
-            img.alt = "";
-            img.onerror = function() { this.src=defaultIcon; this.onerror=null; };
-            const h3 = document.createElement('h3');
-            h3.append(img, document.createTextNode(' ' + bm.name));
-            const p = document.createElement('p');
-            p.textContent = bm.description || '';
-            card.append(h3, p);
+            card.innerHTML = `
+                <h3>
+                    <img src="${bm.icon || defaultIcon}" alt="" onerror="this.onerror=null;this.src='${defaultIcon}'">
+                    ${escapeHTML(bm.name)}
+                </h3>
+                <p>${escapeHTML(bm.description || '')}</p>
+            `;
+
             if (!isGuestView && currentUser?.permissions?.canEditBookmarks) {
                 const actions = document.createElement('div');
                 actions.className = 'bookmark-card-actions';
-                const editBtn = document.createElement('button');
-                editBtn.title = '编辑';
-                editBtn.innerHTML = '<i class="fas fa-pencil-alt"></i>';
-                editBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleEditBookmark(bm);
+                actions.innerHTML = `
+                    <button class="edit-btn" title="编辑"><i class="fas fa-pencil-alt"></i></button>
+                    <button class="delete-btn" title="删除"><i class="fas fa-trash-alt"></i></button>
+                `;
+                actions.querySelector('.edit-btn').addEventListener('click', (e) => {
+                    e.preventDefault(); e.stopPropagation(); handleEditBookmark(bm);
                 });
-                const deleteBtn = document.createElement('button');
-                deleteBtn.title = '删除';
-                deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
-                deleteBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleDeleteBookmark(bm);
+                actions.querySelector('.delete-btn').addEventListener('click', (e) => {
+                    e.preventDefault(); e.stopPropagation(); handleDeleteBookmark(bm);
                 });
-                actions.append(editBtn, deleteBtn);
                 card.appendChild(actions);
             }
             bookmarksGrid.appendChild(card);
         });
     };
     
-    localSearchInput.addEventListener('keyup', (e) => {
-        const term = e.target.value;
-        const activeCatId = categoryNav.querySelector('.active')?.dataset.id || 'all';
-        renderBookmarks(activeCatId, term);
-        if (e.key === 'Enter' && term.trim() !== '') {
-            window.open(searchEngineSelect.value + encodeURIComponent(term), '_blank');
+    // --- Event Listeners ---
+    themeToggleButton.addEventListener('click', () => applyTheme(document.body.classList.contains('light-theme') ? 'dark-theme' : 'light-theme'));
+    sidebarToggleBtn.addEventListener('click', () => applySidebarState(!appLayout.classList.contains('sidebar-collapsed')));
+    
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        loginError.textContent = '';
+        try {
+            const result = await apiRequest('login', 'POST', {
+                username: document.getElementById('username').value,
+                password: document.getElementById('password').value,
+            });
+            localStorage.setItem('jwt_token', result.token);
+            await checkLoginStatus();
+        } catch (error) {
+            loginError.textContent = error.message;
         }
     });
 
+    logoutButton.addEventListener('click', () => {
+        isGuestView ? showLoginPage() : logoutAndReset();
+    });
+
+    localSearchInput.addEventListener('keyup', (e) => {
+        renderBookmarks(document.querySelector('.sidebar .active')?.dataset.id || 'all', e.target.value);
+        if (e.key === 'Enter' && e.target.value.trim() !== '') {
+            window.open(searchEngineSelect.value + encodeURIComponent(e.target.value.trim()), '_blank');
+        }
+    });
+
+    document.querySelector('.sidebar').addEventListener('click', (e) => {
+        const clickedLi = e.target.closest('li');
+        if (!clickedLi || !clickedLi.closest('.category-nav') || clickedLi.classList.contains('sortable-ghost')) return;
+
+        if (e.target.classList.contains('category-toggle')) {
+            e.stopPropagation();
+            const catId = clickedLi.dataset.id;
+            collapsedCategories.has(catId) ? collapsedCategories.delete(catId) : collapsedCategories.add(catId);
+            localStorage.setItem('collapsedCategories', JSON.stringify(Array.from(collapsedCategories)));
+            renderCategories();
+        } else {
+            document.querySelectorAll('.sidebar .category-nav li').forEach(li => li.classList.remove('active'));
+            clickedLi.classList.add('active');
+            renderBookmarks(clickedLi.dataset.id, localSearchInput.value);
+        }
+    });
+
+    manageMenu.addEventListener('click', (e) => {
+        if(e.target.closest('.dropdown-toggle')) manageMenu.classList.toggle('open');
+    });
+    document.addEventListener('click', (e) => {
+        if (!manageMenu.contains(e.target)) manageMenu.classList.remove('open');
+    });
+    
+    // --- Modals ---
     const showModal = (modal) => { modalBackdrop.style.display = 'flex'; modal.style.display = 'flex'; };
     const hideAllModals = () => { modalBackdrop.style.display = 'none'; document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); };
     modalBackdrop.addEventListener('click', (e) => { if (e.target === modalBackdrop) hideAllModals(); });
     document.querySelectorAll('.close-btn').forEach(btn => btn.addEventListener('click', hideAllModals));
+    
     const showConfirm = (title, text, onConfirm) => {
         confirmTitle.textContent = title;
         confirmText.textContent = text;
         showModal(confirmModal);
-        const yesHandler = () => { hideAllModals(); onConfirm(); };
-        confirmBtnYes.onclick = yesHandler;
+        confirmBtnYes.onclick = () => { hideAllModals(); onConfirm(); };
     };
     document.getElementById('confirm-btn-no').onclick = hideAllModals;
 
-   const populateCategoryDropdown = (selectElement, selectedId = null) => {
-        selectElement.innerHTML = '';
+    const populateCategoryDropdown = (selectElement, selectedId = null, ignoreId = null) => {
+        selectElement.innerHTML = '<option value="">-- 顶级分类 --</option>'; // Add root option
         const buildOptions = (parentId, level) => {
             allCategories
-                .filter(cat => cat.parentId === parentId)
+                .filter(cat => cat.parentId === parentId && cat.id !== ignoreId)
                 .forEach(cat => {
                     const option = document.createElement('option');
                     option.value = cat.id;
@@ -444,19 +371,22 @@ document.querySelector('.sidebar').addEventListener('click', (e) => {
         buildOptions(null, 0);
     };
 
-    addBookmarkBtn.addEventListener('click', () => {
-        bookmarkModalTitle.textContent = '添加新书签';
-        bookmarkForm.reset();
-        bookmarkForm.querySelector('.modal-error-message').textContent = '';
-        bookmarkForm.querySelector('#bm-id').value = '';
-        const categorySelect = bookmarkForm.querySelector('#bm-category');
-        populateCategoryDropdown(categorySelect);
-        if (categorySelect.options.length === 0) {
-            alert('没有可添加书签的分类！请先创建分类。');
-            return;
-        }
-        showModal(bookmarkModal);
-    });
+    // All handler functions (handleDeleteBookmark, bookmarkForm submit, etc.) from previous steps go here...
+    // These functions use the Optimistic Update pattern.
+    const handleDeleteBookmark = (bookmark) => {
+        showConfirm('确认删除', `您确定要删除书签 "${escapeHTML(bookmark.name)}" 吗？`, async () => {
+            const originalBookmarks = [...allBookmarks];
+            allBookmarks = allBookmarks.filter(bm => bm.id !== bookmark.id);
+            renderUI();
+            try {
+                await apiRequest(`bookmarks/${bookmark.id}`, 'DELETE');
+            } catch (error) {
+                alert(`删除失败: ${error.message}`);
+                allBookmarks = originalBookmarks;
+                renderUI();
+            }
+        });
+    };
 
     const handleEditBookmark = (bookmark) => {
         bookmarkModalTitle.textContent = '编辑书签';
@@ -467,98 +397,67 @@ document.querySelector('.sidebar').addEventListener('click', (e) => {
         bookmarkForm.querySelector('#bm-url').value = bookmark.url;
         bookmarkForm.querySelector('#bm-desc').value = bookmark.description || '';
         bookmarkForm.querySelector('#bm-icon').value = bookmark.icon || '';
-       const categorySelect = bookmarkForm.querySelector('#bm-category');
-        populateCategoryDropdown(categorySelect, bookmark.categoryId);
+        populateCategoryDropdown(bookmarkForm.querySelector('#bm-category'), bookmark.categoryId);
         showModal(bookmarkModal);
     };
 
- // 代码二 (app.js) 的修改
-// 代码二 (app.js) 的修改
-const handleDeleteBookmark = (bookmark) => {
-    showConfirm('确认删除', `您确定要删除书签 "${escapeHTML(bookmark.name)}" 吗？`, async () => {
-        const bookmarkIdToDelete = bookmark.id;
-        
-        // 【乐观更新 - 步骤1】备份当前状态，以备回滚
-        const originalBookmarks = [...allBookmarks];
+    addBookmarkBtn.addEventListener('click', () => {
+        bookmarkModalTitle.textContent = '添加新书签';
+        bookmarkForm.reset();
+        bookmarkForm.querySelector('.modal-error-message').textContent = '';
+        bookmarkForm.querySelector('#bm-id').value = '';
+        const categorySelect = bookmarkForm.querySelector('#bm-category');
+        populateCategoryDropdown(categorySelect, document.querySelector('.sidebar .active')?.dataset.id);
+        if (allCategories.length === 0) {
+            alert('请先创建分类。'); return;
+        }
+        showModal(bookmarkModal);
+    });
 
-        // 【乐观更新 - 步骤2】立即从内存中移除书签，并刷新UI，界面瞬间变化
-        allBookmarks = allBookmarks.filter(bm => bm.id !== bookmarkIdToDelete);
-        renderUI();
-
-        try {
-            // 【乐观更新 - 步骤3】在后台发送API请求
-            await apiRequest(`bookmarks/${bookmarkIdToDelete}`, 'DELETE');
-            // 成功则万事大吉
-        } catch (error) {
-            // 【乐观更新 - 步骤4】如果API请求失败，回滚UI
-            alert(`删除失败: ${error.message}`);
-            allBookmarks = originalBookmarks; // 恢复备份
-            renderUI(); // 再次刷新UI，让书签“回来”
+    bookmarkForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = bookmarkForm.querySelector('#bm-id').value;
+        const errorEl = bookmarkForm.querySelector('.modal-error-message');
+        errorEl.textContent = '';
+        const data = {
+            name: bookmarkForm.querySelector('#bm-name').value,
+            url: bookmarkForm.querySelector('#bm-url').value,
+            description: bookmarkForm.querySelector('#bm-desc').value,
+            icon: bookmarkForm.querySelector('#bm-icon').value,
+            categoryId: bookmarkForm.querySelector('#bm-category').value,
+        };
+        if(!data.categoryId){ errorEl.textContent = '必须选择一个分类。'; return;}
+        hideAllModals();
+        if (id) {
+            const originalBookmarks = JSON.parse(JSON.stringify(allBookmarks));
+            const bookmarkIndex = allBookmarks.findIndex(bm => bm.id === id);
+            if (bookmarkIndex > -1) {
+                allBookmarks[bookmarkIndex] = { ...allBookmarks[bookmarkIndex], ...data };
+                renderUI();
+            }
+            try {
+                await apiRequest(`bookmarks/${id}`, 'PUT', data);
+            } catch (error) {
+                errorEl.textContent = error.message;
+                allBookmarks = originalBookmarks; renderUI(); showModal(bookmarkModal);
+            }
+        } else {
+            const tempId = `temp-${Date.now()}`;
+            const newBookmark = { ...data, id: tempId };
+            allBookmarks.push(newBookmark);
+            renderUI();
+            try {
+                const savedBookmark = await apiRequest('bookmarks', 'POST', data);
+                const tempIndex = allBookmarks.findIndex(bm => bm.id === tempId);
+                if (tempIndex > -1) allBookmarks[tempIndex] = savedBookmark;
+            } catch (error) {
+                errorEl.textContent = error.message;
+                allBookmarks = allBookmarks.filter(bm => bm.id !== tempId); renderUI(); showModal(bookmarkModal);
+            }
         }
     });
-};
 
-   // 代码二 (app.js) 的修改
-bookmarkForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const id = bookmarkForm.querySelector('#bm-id').value;
-    const errorEl = bookmarkForm.querySelector('.modal-error-message');
-    errorEl.textContent = '';
-
-    const data = {
-        name: bookmarkForm.querySelector('#bm-name').value,
-        url: bookmarkForm.querySelector('#bm-url').value,
-        description: bookmarkForm.querySelector('#bm-desc').value,
-        icon: bookmarkForm.querySelector('#bm-icon').value,
-        categoryId: bookmarkForm.querySelector('#bm-category').value,
-    };
-
-    hideAllModals();
-
-    if (id) {
-        // --- 编辑书签的乐观更新 ---
-        const originalBookmarks = JSON.parse(JSON.stringify(allBookmarks)); // 深拷贝备份
-        const bookmarkIndex = allBookmarks.findIndex(bm => bm.id === id);
-        
-        if (bookmarkIndex > -1) {
-            allBookmarks[bookmarkIndex] = { ...allBookmarks[bookmarkIndex], ...data };
-            renderUI(); // 立即应用编辑
-        }
-
-        try {
-            await apiRequest(`bookmarks/${id}`, 'PUT', data);
-        } catch (error) {
-            errorEl.textContent = error.message;
-            allBookmarks = originalBookmarks; // 编辑失败，回滚
-            renderUI();
-            showModal(bookmarkModal); // 重新打开模态框让用户看到错误
-        }
-
-    } else {
-        // --- 添加新书签的乐观更新 ---
-        const tempId = `temp-${Date.now()}`; // 创建一个临时ID
-        const newBookmark = { ...data, id: tempId };
-        allBookmarks.push(newBookmark);
-        renderUI(); // 立即显示新书签
-
-        try {
-            const savedBookmark = await apiRequest('bookmarks', 'POST', data);
-            // 成功后，用服务器返回的真实数据（包含真实ID）替换掉临时书签
-            const tempIndex = allBookmarks.findIndex(bm => bm.id === tempId);
-            if (tempIndex > -1) {
-                allBookmarks[tempIndex] = savedBookmark;
-                // 可以在这里再次调用 renderUI() 来更新ID，但通常不影响显示，所以可选
-            }
-        } catch (error) {
-            errorEl.textContent = error.message;
-            // 添加失败，从UI中移除这个临时书签
-            allBookmarks = allBookmarks.filter(bm => bm.id !== tempId);
-            renderUI();
-            showModal(bookmarkModal); // 重新打开模态框
-        }
-    }
-});
-
+    // --- Category Management ---
     manageCategoriesBtn.addEventListener('click', () => {
         document.getElementById('category-error-message').textContent = '';
         renderCategoryManagerList();
@@ -567,24 +466,22 @@ bookmarkForm.addEventListener('submit', async (e) => {
 
     const renderCategoryManagerList = () => {
         categoryManagerList.innerHTML = '';
-        allCategories.forEach(cat => {
-            const li = document.createElement('li');
-            li.dataset.id = cat.id;
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.id = `del-cat-${cat.id}`;
-            checkbox.dataset.id = cat.id;
-            const span = document.createElement('span');
-            span.className = 'category-name';
-            span.textContent = cat.name;
-            const editBtn = document.createElement('button');
-            editBtn.className = 'edit-cat-btn';
-            editBtn.title = '编辑名称';
-            editBtn.innerHTML = '<i class="fas fa-pencil-alt"></i>';
-            editBtn.onclick = () => handleEditCategory(li, cat);
-            li.append(checkbox, span, editBtn);
-            categoryManagerList.appendChild(li);
-        });
+        const buildList = (parentId, level) => {
+            allCategories.filter(cat => cat.parentId === parentId).forEach(cat => {
+                const li = document.createElement('li');
+                li.dataset.id = cat.id;
+                li.style.paddingLeft = `${level * 20}px`;
+                li.innerHTML = `
+                    <input type="checkbox" id="del-cat-${cat.id}" data-id="${cat.id}">
+                    <span class="category-name">${escapeHTML(cat.name)}</span>
+                    <button class="edit-cat-btn" title="编辑名称"><i class="fas fa-pencil-alt"></i></button>
+                `;
+                li.querySelector('.edit-cat-btn').onclick = () => handleEditCategory(li, cat);
+                categoryManagerList.appendChild(li);
+                buildList(cat.id, level + 1);
+            });
+        };
+        buildList(null, 0);
     };
 
     const handleEditCategory = (liElement, category) => {
@@ -593,47 +490,26 @@ bookmarkForm.addEventListener('submit', async (e) => {
         if(!nameSpan || !editBtn || liElement.querySelector('.inline-edit-input')) return;
         const originalName = category.name;
         const input = document.createElement('input');
-        input.type = 'text';
-        input.value = originalName;
-        input.className = 'inline-edit-input';
-        nameSpan.style.display = 'none';
-        editBtn.style.display = 'none';
+        input.type = 'text'; input.value = originalName; input.className = 'inline-edit-input';
+        nameSpan.style.display = 'none'; editBtn.style.display = 'none';
         liElement.insertBefore(input, editBtn);
-        input.focus();
-        input.select();
-        
-        
+        input.focus(); input.select();
         const finishEditing = async () => {
-        const newName = input.value.trim();
-        
-        // 先移除输入框，恢复显示
-        nameSpan.style.display = '';
-        editBtn.style.display = '';
-        input.remove();
-
-        if (newName && newName !== originalName) {
-            const errorEl = document.getElementById('category-error-message');
-            errorEl.textContent = '';
-            
-            // --- 编辑分类的乐观更新 ---
-            const originalCategories = JSON.parse(JSON.stringify(allCategories)); // 备份
-            const categoryToUpdate = allCategories.find(c => c.id === category.id);
-            if(categoryToUpdate) {
-                categoryToUpdate.name = newName; // 立即更新内存数据
-                renderUI(); // 立即刷新UI
+            const newName = input.value.trim();
+            nameSpan.style.display = ''; editBtn.style.display = ''; input.remove();
+            if (newName && newName !== originalName) {
+                const errorEl = document.getElementById('category-error-message');
+                errorEl.textContent = '';
+                const originalCategories = JSON.parse(JSON.stringify(allCategories));
+                const categoryToUpdate = allCategories.find(c => c.id === category.id);
+                if(categoryToUpdate) { categoryToUpdate.name = newName; renderUI(); }
+                try {
+                    await apiRequest(`categories/${category.id}`, 'PUT', { name: newName });
+                } catch (error) {
+                    errorEl.textContent = error.message; allCategories = originalCategories; renderUI();
+                }
             }
-
-            try {
-                await apiRequest(`categories/${category.id}`, 'PUT', { name: newName });
-            } catch (error) {
-                errorEl.textContent = error.message;
-                allCategories = originalCategories; // 失败，回滚
-                renderUI();
-            }
-        }
-    };
-
-        
+        };
         input.addEventListener('blur', finishEditing);
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') { e.preventDefault(); finishEditing(); }
@@ -641,83 +517,50 @@ bookmarkForm.addEventListener('submit', async (e) => {
         });
     };
 
-// 代码二 (app.js) 的修改
-// 代码二 (app.js) 的修改
-bulkDeleteCatBtn.addEventListener('click', () => {
-    const checkedBoxes = categoryManagerList.querySelectorAll('input[type="checkbox"]:checked');
-    const idsToDelete = Array.from(checkedBoxes).map(cb => cb.dataset.id);
+    bulkDeleteCatBtn.addEventListener('click', () => {
+        const idsToDelete = Array.from(categoryManagerList.querySelectorAll('input:checked')).map(cb => cb.dataset.id);
+        if (idsToDelete.length === 0) return alert('请先选择要删除的分类。');
+        showConfirm('确认强制删除', `确定要删除选中的 ${idsToDelete.length} 个分类及其所有子分类吗？`, async () => {
+            const errorEl = document.getElementById('category-error-message');
+            errorEl.textContent = '';
+            const originalCategories = [...allCategories]; const originalBookmarks = [...allBookmarks];
+            const allIdsToDeleteSet = getRecursiveCategoryIds(idsToDelete);
+            allCategories = allCategories.filter(c => !allIdsToDeleteSet.has(c.id));
+            allBookmarks = allBookmarks.filter(bm => !allIdsToDeleteSet.has(bm.categoryId));
+            renderUI(); hideAllModals();
+            try {
+                await apiRequest('categories', 'DELETE', { ids: idsToDelete });
+            } catch (error) {
+                alert(`删除失败: ${error.message}`);
+                allCategories = originalCategories; allBookmarks = originalBookmarks; renderUI();
+            }
+        });
+    });
 
-    if (idsToDelete.length === 0) {
-        return alert('请先选择要删除的分类。');
-    }
-    
-    showConfirm('确认强制删除', `确定要删除选中的 ${idsToDelete.length} 个分类及其所有子分类吗？其下的所有书签也将被一并删除！`, async () => {
+    addCategoryForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const input = document.getElementById('new-category-name');
+        const name = input.value.trim();
         const errorEl = document.getElementById('category-error-message');
         errorEl.textContent = '';
-
-        // --- 【修改】乐观更新逻辑 ---
-        const originalCategories = [...allCategories];
-        const originalBookmarks = [...allBookmarks];
-
-        // 1. 【重要】调用辅助函数，获取包含所有子孙后代的完整ID列表
-        const allIdsToDeleteSet = getRecursiveCategoryIds(idsToDelete);
-
-        // 2. 使用完整的ID Set来执行过滤，确保所有相关项都被移除
-        allCategories = allCategories.filter(c => !allIdsToDeleteSet.has(c.id));
-        allBookmarks = allBookmarks.filter(bm => !allIdsToDeleteSet.has(bm.categoryId));
-        
-        // 3. 立即刷新UI
-        renderUI(); 
-        hideAllModals();
-
+        if(!name) { errorEl.textContent = '分类名称不能为空'; return; }
+        input.value = '';
+        const tempId = `temp-cat-${Date.now()}`;
+        const newCategory = { id: tempId, name, parentId: null };
+        allCategories.push(newCategory);
+        renderUI();
         try {
-            // API请求只发送用户最初选择的ID，后端会处理递归
-            await apiRequest('categories', 'DELETE', { ids: idsToDelete });
+            const savedCategory = await apiRequest('categories', 'POST', { name });
+            const tempCat = allCategories.find(c => c.id === tempId);
+            if(tempCat) tempCat.id = savedCategory.id;
         } catch (error) {
-            // 如果失败，则回滚前端状态
-            alert(`删除失败: ${error.message}`);
-            allCategories = originalCategories;
-            allBookmarks = originalBookmarks;
-            renderUI();
+            errorEl.textContent = error.message;
+            allCategories = allCategories.filter(c => c.id !== tempId); renderUI();
         }
     });
-});
 
-   // 代码二 (app.js) 的修改
-addCategoryForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const input = document.getElementById('new-category-name');
-    const name = input.value.trim();
-    const errorEl = document.getElementById('category-error-message');
-    errorEl.textContent = '';
-    
-    if(!name) {
-        errorEl.textContent = '分类名称不能为空';
-        return;
-    }
-    
-    input.value = ''; // 立即清空输入框
-
-    // --- 添加分类的乐观更新 ---
-    const tempId = `temp-cat-${Date.now()}`;
-    const newCategory = { id: tempId, name, parentId: null };
-    allCategories.push(newCategory);
-    renderUI(); // 立即刷新UI显示新分类
-
-    try {
-        const savedCategory = await apiRequest('categories', 'POST', { name });
-        // 成功后，用服务器返回的真实ID替换临时ID
-        const tempCat = allCategories.find(c => c.id === tempId);
-        if(tempCat) tempCat.id = savedCategory.id;
-    } catch (error) {
-        errorEl.textContent = error.message;
-        // 失败，从内存中移除临时分类
-        allCategories = allCategories.filter(c => c.id !== tempId);
-        renderUI();
-    }
-});
-
-    userManagementBtn.addEventListener('click', () => {
+    // --- User Management ---
+   userManagementBtn.addEventListener('click', () => {
         renderUserManagementPanel();
         showModal(userManagementModal);
     });
@@ -906,6 +749,7 @@ const renderUserFormCategories = (visibleIds = [], isDisabled = false) => {
         }
     });
 
+   
 // --- Bookmark Import Logic ---
     importBookmarksBtn.addEventListener('click', () => {
         if (!currentUser?.permissions?.canEditBookmarks) {
@@ -1017,69 +861,68 @@ const parseNode = (node, parentId) => {
     await loadData();
 };
 
-    
     // --- Drag and Drop Logic ---
-    const destroySortables = () => {
-        if (categorySortable) categorySortable.destroy();
-        if (bookmarkSortable) bookmarkSortable.destroy();
-    };
-    
     const initSortables = () => {
-        destroySortables(); // 销毁旧实例，防止内存泄漏
-
-        if (isGuestView || !currentUser) return; // 公共模式或未登录，不启用拖拽
-
-        if (currentUser.permissions.canEditCategories) {
-            categorySortable = new Sortable(categoryNav, {
-                animation: 150,
-                filter: '[data-id="all"]', // “全部书签”项不可拖动
-                onEnd: (evt) => {
-                    if (evt.oldIndex === evt.newIndex) return;
-                    // old/newIndex - 1 是因为要排除掉“全部书签”这一项
-                    const itemToMove = allCategories.splice(evt.oldIndex - 1, 1)[0];
-                    allCategories.splice(evt.newIndex - 1, 0, itemToMove);
-                    persistOrder();
-                },
-            });
-        }
+        if (categorySortable) categorySortable.destroy();
+        if (isGuestView || !currentUser?.permissions?.canEditCategories) return;
         
-        if (currentUser.permissions.canEditBookmarks) {
-            bookmarkSortable = new Sortable(bookmarksGrid, {
-                animation: 150,
-                onEnd: (evt) => {
-                    if (evt.oldIndex === evt.newIndex) return;
+        categorySortable = new Sortable(categoryNav, {
+            animation: 150,
+            group: 'categories',
+            onEnd: (evt) => {
+                const itemId = evt.item.dataset.id;
+                const toList = evt.to;
+                const newIndex = evt.newIndex;
+                
+                const itemToMove = allCategories.find(c => c.id === itemId);
+                if (!itemToMove) return;
 
-                    const activeCategoryId = categoryNav.querySelector('.active')?.dataset.id || 'all';
-                    
-                    // 获取当前视图的书签ID顺序
-                    const currentIdOrder = Array.from(evt.from.children).map(el => el.dataset.id);
+                let newParentId = null;
+                // Check if dropped onto another category (making it a child)
+                const parentEl = toList.children[newIndex];
+                if (evt.pullMode === 'clone' || (parentEl && parentEl.dataset.id !== itemId)) {
+                    newParentId = parentEl ? parentEl.dataset.id : null;
+                } else {
+                     // Dropped in the root list
+                     newParentId = null;
+                }
+                
+                // If dropped on another item, it becomes a child of that item
+                if (evt.to.children[newIndex-1] && newIndex > 0) {
+                   const siblingEl = evt.to.children[newIndex-1];
+                   if (siblingEl) {
+                       newParentId = siblingEl.dataset.id;
+                   }
+                } else {
+                    newParentId = null; // Dropped at the top level
+                }
+                
+                // Create a flat representation of the new visual order
+                const newOrder = Array.from(categoryNav.querySelectorAll('li')).map(li => li.dataset.id);
 
-                    // 从旧的DOM顺序中找到被移动的书签ID
-                    const movedItemId = evt.item.dataset.id;
-                    
-                    // 创建一个新的ID顺序
-                    currentIdOrder.splice(evt.oldIndex, 1);
-                    currentIdOrder.splice(evt.newIndex, 0, movedItemId);
+                // Update parentId
+                itemToMove.parentId = newParentId;
 
-                    // 根据新的ID顺序来重排 allBookmarks 数组
-                    // 这是一个稳定的排序，可以处理任何视图（全部或分类）
-                    allBookmarks.sort((a, b) => {
-                        let indexA = currentIdOrder.indexOf(a.id);
-                        let indexB = currentIdOrder.indexOf(b.id);
-                        // 如果某项不在当前视图中，则保持其相对顺序
-                        if (indexA === -1) indexA = Infinity;
-                        if (indexB === -1) indexB = Infinity;
-                        return indexA - indexB;
-                    });
-                    
-                    persistOrder();
-                },
-            });
-        }
+                // Re-sort allCategories based on the new visual order
+                allCategories = newOrder.map(id => allCategories.find(c => c.id === id)).filter(Boolean);
+                
+                // Optimistically re-render
+                renderUI();
+
+                // Persist the changes
+                persistOrder();
+            },
+        });
     };
 
     // --- Initial Load ---
-    applyTheme(localStorage.getItem('theme') || 'light-theme');
+    applyTheme(localStorage.getItem('theme') || 'dark-theme');
+    applySidebarState(localStorage.getItem('sidebarCollapsed') === 'true');
     checkLoginStatus();
 });
+
+
+
+
+
 
