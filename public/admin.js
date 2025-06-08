@@ -17,7 +17,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- UI Flow & Modals ---
     const showModal = (modal) => { 
         modalBackdrop.style.display = 'flex'; 
-        modal.style.display = 'flex'; 
+        // 【重要修正】这里使用 'block' 而不是 'flex'
+        // 这能让 .modal-backdrop 的 flex 布局正确地将其居中
+        modal.style.display = 'block'; 
     };
     const hideAllModals = () => { 
         modalBackdrop.style.display = 'none'; 
@@ -28,12 +30,8 @@ document.addEventListener('DOMContentLoaded', () => {
         confirmText.textContent = text;
         showModal(confirmModal);
         confirmBtnYes.onclick = () => { 
+            // 只隐藏确认框，保留背景和其他模态框
             confirmModal.style.display = 'none';
-            if (document.querySelector('#admin-page-container')) {
-                // Keep backdrop if admin panel is open
-            } else {
-                modalBackdrop.style.display = 'none';
-            }
             onConfirm(); 
         };
     };
