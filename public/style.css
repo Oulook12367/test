@@ -463,3 +463,14 @@ input:focus, textarea:focus, select:focus {
 .admin-panel-content .modal {
     display: none; /* 确保 admin 页面的模态框也遵循此规则 */
 }
+
+
+/* 在 style.css 文件末尾添加 */
+#user-list li.disabled {
+    color: var(--text-secondary-light);
+    cursor: not-allowed;
+    background-color: transparent !important; /* 覆盖 hover 效果 */
+}
+.dark-theme #user-list li.disabled {
+    color: var(--text-secondary-dark);
+}
