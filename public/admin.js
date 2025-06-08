@@ -241,16 +241,19 @@ const renderUserAdminTab = (container) => {
     allUsers.forEach(user => {
         const li = document.createElement('li');
         li.dataset.username = user.username;
-        li.innerHTML = `<span>${user.username} (${user.roles.join(', ')})</span>`;
+  //       li.innerHTML = `<span>${user.username} (${user.roles.join(', ')})</span>`;
 
 
  // 【修改】针对 public 用户进行特殊处理
-    if (user.username === 'public') {
-        li.innerHTML = `<span><i class="fas fa-lock fa-fw"></i> ${user.username} (公共模式)</span>`;
-        li.classList.add('disabled'); // 添加一个禁用的样式类
+
+ if (user.username === 'public') {
+        // 使用“眼睛”图标，并移除 .disabled 类
+        li.innerHTML = `<span><i class="fas fa-eye fa-fw"></i> ${user.username} (公共模式)</span>`;
     } else {
         li.innerHTML = `<span>${user.username} (${user.roles.join(', ')})</span>`;
     }
+
+
         
         if (user.username !== 'admin' && user.username !== 'public') {
             const delBtn = document.createElement('button');
@@ -270,14 +273,14 @@ const renderUserAdminTab = (container) => {
                 });
             };
             li.appendChild(delBtn);
-        }
+      //  }
         userList.appendChild(li);
     });
 
-   userList.addEventListener('click', (e) => {
+  userList.addEventListener('click', (e) => {
     const li = e.target.closest('li[data-username]');
-    // 【修改】增加对 .disabled 类的判断
-    if (li && !li.classList.contains('disabled') && !e.target.closest('button')) {
+    // 【修改】移除 .disabled 判断，让 public 用户可以被点击
+    if (li && !e.target.closest('button')) {
         const user = allUsers.find(u => u.username === li.dataset.username);
         if (user) {
             populateUserForm(user);
