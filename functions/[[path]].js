@@ -209,19 +209,35 @@ export async function onRequest(context) {
         if (bookmarkIndex === -1) return jsonResponse({ error: '书签未找到' }, 404);
         const bookmarkToAccess = data.bookmarks[bookmarkIndex];
         if (!currentUser.roles.includes('admin') && !currentUser.permissions.visibleCategories.includes(bookmarkToAccess.categoryId)) return jsonResponse({ error: '权限不足' }, 403);
-        if (request.method === 'PUT') {
-             // 【新增】在这里增加对 public 用户的强校验
-            if (username === 'public') {
-                return jsonResponse({ error: '公共账户为系统保留账户，禁止修改。' }, 403);
-            }
+
+
+
+        if (request.method === 'PUT') {
             const { roles, permissions, password } = await request.json();
 
-            if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
-            const updatedBookmark = await request.json();
-            data.bookmarks[bookmarkIndex] = { ...bookmarkToAccess, ...updatedBookmark };
-            await saveSiteData(env, data);
-            return jsonResponse(data.bookmarks[bookmarkIndex]);
-        }
+            // 【重要修改】针对不同用户类型，应用不同更新规则
+            if (username === 'public') {
+                // 对于 public 用户，我们只允许更新其可见分类
+                if (permissions && typeof permissions.visibleCategories !== 'undefined') {
+                    userToManage.permissions.visibleCategories = permissions.visibleCategories;
+                }
+                // 强制重置/锁定其角色为'viewer'，忽略任何传入的角色修改
+                userToManage.roles = ['viewer'];
+            } else {
+                // 对于其他所有普通用户，按正常逻辑更新
+                if (roles) userToManage.roles = roles;
+                if (permissions) userToManage.permissions.visibleCategories = permissions.visibleCategories;
+                if (password) {
+                    userToManage.salt = generateSalt();
+                    userToManage.passwordHash = await hashPassword(password, userToManage.salt);
+                }
+            }
+            
+            await saveSiteData(env, data);
+            const { passwordHash, salt, ...updatedUser } = userToManage;
+            return jsonResponse(updatedUser);
+        }
+        
         if (request.method === 'DELETE') {
             if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
             data.bookmarks.splice(bookmarkIndex, 1);
