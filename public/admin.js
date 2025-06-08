@@ -241,20 +241,13 @@ const renderUserAdminTab = (container) => {
     allUsers.forEach(user => {
         const li = document.createElement('li');
         li.dataset.username = user.username;
-  //       li.innerHTML = `<span>${user.username} (${user.roles.join(', ')})</span>`;
 
+        if (user.username === 'public') {
+            li.innerHTML = `<span><i class="fas fa-eye fa-fw"></i> ${user.username} (公共模式)</span>`;
+        } else {
+            li.innerHTML = `<span>${user.username} (${user.roles.join(', ')})</span>`;
+        }
 
- // 【修改】针对 public 用户进行特殊处理
-
- if (user.username === 'public') {
-        // 使用“眼睛”图标，并移除 .disabled 类
-        li.innerHTML = `<span><i class="fas fa-eye fa-fw"></i> ${user.username} (公共模式)</span>`;
-    } else {
-        li.innerHTML = `<span>${user.username} (${user.roles.join(', ')})</span>`;
-    }
-
-
-        
         if (user.username !== 'admin' && user.username !== 'public') {
             const delBtn = document.createElement('button');
             delBtn.className = 'button-icon danger';
@@ -273,20 +266,19 @@ const renderUserAdminTab = (container) => {
                 });
             };
             li.appendChild(delBtn);
-      //  }
+        }
         userList.appendChild(li);
     });
 
-  userList.addEventListener('click', (e) => {
-    const li = e.target.closest('li[data-username]');
-    // 【修改】移除 .disabled 判断，让 public 用户可以被点击
-    if (li && !e.target.closest('button')) {
-        const user = allUsers.find(u => u.username === li.dataset.username);
-        if (user) {
-            populateUserForm(user);
+    userList.addEventListener('click', (e) => {
+        const li = e.target.closest('li[data-username]');
+        if (li && !e.target.closest('button')) {
+            const user = allUsers.find(u => u.username === li.dataset.username);
+            if (user) {
+                populateUserForm(user);
+            }
         }
-    }
-});
+    });
 
     container.querySelector('#user-form-clear-btn').onclick = clearUserForm;
     form.onsubmit = handleUserFormSubmit;
@@ -295,9 +287,6 @@ const renderUserAdminTab = (container) => {
 };
 
 // 在 admin.js 中, 找到并完全替换 populateUserForm 函数
-/* ===================================================================== */
-/* 请使用下面这个【简化版】的 populateUserForm 函数进行整体替换         */
-/* ===================================================================== */
 
 const populateUserForm = (user) => {
     const form = document.getElementById('user-form'); if (!form) return;
@@ -305,7 +294,6 @@ const populateUserForm = (user) => {
     form.querySelector('#user-form-title').textContent = `编辑用户: ${user.username}`;
     
     const isPublicUser = user.username === 'public';
-    const isAdmin = user.roles.includes('admin');
 
     const usernameInput = form.querySelector('#user-form-username');
     usernameInput.value = user.username;
@@ -317,37 +305,14 @@ const populateUserForm = (user) => {
 
     form.querySelector('#user-form-username-hidden').value = user.username;
     
-    // 调用角色渲染函数
+    const isAdmin = user.roles.includes('admin');
     renderUserFormRoles(user.roles);
+    renderUserFormCategories(isAdmin ? allCategories.map(c => c.id) : (user.permissions?.visibleCategories || []), isPublicUser ? false : isAdmin);
 
-    // 【重要】以下是原先复杂代码的简化、清晰版本
-    let visibleCategoriesForForm;
-    let areCategoriesDisabled;
-
-    if (isAdmin) {
-        // 如果是 admin，默认拥有所有分类的权限
-        visibleCategoriesForForm = allCategories.map(c => c.id);
-        // 同时，分类列表为禁用状态（因为默认全选）
-        areCategoriesDisabled = true;
-    } else {
-        // 如果是其他用户，则使用其自身的权限
-        visibleCategoriesForForm = user.permissions?.visibleCategories || [];
-        // 分类列表不是禁用状态
-        areCategoriesDisabled = false;
-    }
-
-    // 特殊情况：如果是 public 用户，分类列表必须是可编辑的
-    if (isPublicUser) {
-        areCategoriesDisabled = false;
-    }
-
-    // 使用清晰的变量来调用分类渲染函数
-    renderUserFormCategories(visibleCategoriesForForm, areCategoriesDisabled);
-
-    // 更新用户列表的选中状态
     document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
     document.querySelector(`#user-list li[data-username="${user.username}"]`)?.classList.add('selected');
 };
+
 
 const clearUserForm = () => {
     const form = document.getElementById('user-form'); if (!form) return;
@@ -362,12 +327,10 @@ const clearUserForm = () => {
 };
 
 // 在 admin.js 中, 找到并完全替换 renderUserFormRoles 函数
-
 const renderUserFormRoles = (activeRoles = ['viewer']) => {
     const container = document.getElementById('user-form-roles'); if(!container) return;
     container.innerHTML = '';
     
-    // 【修改】同时获取用户名以判断是否为特殊用户
     const username = document.getElementById('user-form-username').value;
     const isPublicUser = username === 'public';
     const isAdminUser = username === 'admin';
@@ -376,7 +339,6 @@ const renderUserFormRoles = (activeRoles = ['viewer']) => {
         const currentRole = activeRoles[0] || 'viewer';
         const isChecked = currentRole === role;
 
-        // 【修改】锁定 admin 和 public 用户的角色
         const isDisabled = (isAdminUser && role !== 'admin') || (isPublicUser && role !== 'viewer');
         
         container.innerHTML += `
@@ -388,6 +350,7 @@ const renderUserFormRoles = (activeRoles = ['viewer']) => {
         `;
     });
 };
+
 
 const renderUserFormCategories = (visibleIds = [], isDisabled = false) => {
     const container = document.getElementById('user-form-categories'); if(!container) return;
