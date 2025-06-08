@@ -319,6 +319,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderAdminTab = (tabId) => {
         switch (tabId) {
             case 'tab-categories':
+                // 【修正】当切换到分类标签时，才初始化临时数据
+                tempCategories = JSON.parse(JSON.stringify(allCategories));
                 renderCategoryAdminTab();
                 break;
             case 'tab-users':
@@ -330,8 +332,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
     
-    const populateCategoryDropdown = (selectElement, categories, selectedId = null, ignoreId = null) => {
-        selectElement.innerHTML = '<option value="">-- 顶级分类 --</option>';
+    const populateCategoryDropdown = (selectElement, categories, selectedId = null, ignoreId = null, isChecklist = false) => {
+        if (!isChecklist) {
+            selectElement.innerHTML = '<option value="">-- 顶级分类 --</option>';
+        } else {
+            selectElement.innerHTML = '';
+        }
         
         const categoryMap = new Map(categories.map(cat => [cat.id, { ...cat, children: [] }]));
         const tree = [];
@@ -349,14 +355,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const buildOptions = (nodes, level) => {
-            if (level >= 4) return;
+            if (level >= 4 && !isChecklist) return;
             for (const node of nodes) {
                 if (!node) continue;
-                const option = document.createElement('option');
-                option.value = node.id;
-                option.textContent = `${'— '.repeat(level)}${node.name}`;
-                if (node.id === selectedId) option.selected = true;
-                selectElement.appendChild(option);
+                if(isChecklist) {
+                     selectElement.innerHTML += `
+                        <div>
+                            <input type="checkbox" id="cat-perm-${node.id}" value="${node.id}" ${Array.isArray(selectedId) && selectedId.includes(node.id) ? 'checked' : ''}>
+                            <label for="cat-perm-${node.id}" style="padding-left: ${level * 20}px">${escapeHTML(node.name)}</label>
+                        </div>`;
+                } else {
+                    const option = document.createElement('option');
+                    option.value = node.id;
+                    option.textContent = `${'— '.repeat(level)}${node.name}`;
+                    if (node.id === selectedId) option.selected = true;
+                    selectElement.appendChild(option);
+                }
+                
                 if (node.children.length > 0) {
                     buildOptions(node.children, level + 1);
                 }
@@ -367,12 +382,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Tab 1: Category Management ---
     const renderCategoryAdminTab = () => {
-        // 【修正】总是从 allCategories 创建一个新的深拷贝
-        tempCategories = JSON.parse(JSON.stringify(allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0))));
         const listEl = document.getElementById('category-admin-list');
         listEl.innerHTML = '';
         
-        tempCategories.forEach(cat => {
+        tempCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
             const li = document.createElement('li');
             li.dataset.id = cat.id;
             li.innerHTML = `
@@ -399,7 +412,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         });
                     }
                     tempCategories = tempCategories.filter(c => !idsToDelete.has(c.id));
-                    renderCategoryAdminTab(); // Re-render from the modified temp array
+                    renderCategoryAdminTab();
                 });
             };
             listEl.appendChild(li);
@@ -413,13 +426,19 @@ document.addEventListener('DOMContentLoaded', () => {
             parentId: null,
             sortOrder: (tempCategories.length > 0) ? Math.max(...tempCategories.map(c => c.sortOrder || 0)) + 10 : 0
         };
-        tempCategories.push(newCat);
+        tempCategories.unshift(newCat); // Add to the top for visibility
         renderCategoryAdminTab();
+        // Focus on the new input
+        const newLi = document.querySelector(`#category-admin-list li[data-id="${newCat.id}"]`);
+        if (newLi) {
+            newLi.querySelector('.cat-name-input').focus();
+            newLi.querySelector('.cat-name-input').select();
+        }
     });
 
     document.getElementById('save-categories-btn').addEventListener('click', async () => {
         const listItems = document.querySelectorAll('#category-admin-list li');
-        let updatedCategories = [];
+        let finalCategories = [];
         let hasError = false;
 
         listItems.forEach(li => {
@@ -429,8 +448,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('分类名称不能为空！');
                 hasError = true;
             }
-            updatedCategories.push({
-                id: id,
+            finalCategories.push({
+                id: id.startsWith('new-') ? `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` : id,
                 sortOrder: parseInt(li.querySelector('.cat-order-input').value) || 0,
                 name: name,
                 parentId: li.querySelector('.cat-parent-select').value || null,
@@ -439,12 +458,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (hasError) return;
         
-        const finalCategories = updatedCategories.map(cat => cat.id.startsWith('new-') ? {...cat, id: `cat-${Date.now()}-${Math.random()}`.toString(36).substr(2, 9)} : cat);
-
         try {
             await apiRequest('data', 'PUT', { categories: finalCategories });
             alert('分类保存成功！');
             await loadData();
+            // Re-initialize tempCategories after successful save
+            tempCategories = JSON.parse(JSON.stringify(allCategories));
             renderCategoryAdminTab();
         } catch (error) {
             alert('保存失败: ' + error.message);
@@ -565,7 +584,31 @@ document.addEventListener('DOMContentLoaded', () => {
         if(!container) return;
         container.innerHTML = '';
         const sortedCategories = [...allCategories].sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-        populateCategoryDropdown(container, sortedCategories, visibleIds, null, true); // Use dropdown helper
+        
+        const buildCheckboxes = (nodes, level) => {
+            if (level >= 4) return;
+            for (const node of nodes) {
+                 container.innerHTML += `
+                    <div>
+                        <input type="checkbox" id="cat-perm-${node.id}" value="${node.id}" ${visibleIds.includes(node.id) ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}>
+                        <label for="cat-perm-${node.id}" style="padding-left: ${level * 20}px">${escapeHTML(node.name)}</label>
+                    </div>`;
+                if(node.children && node.children.length > 0) {
+                    buildCheckboxes(node.children, level + 1);
+                }
+            }
+        };
+
+        const categoryMap = new Map(sortedCategories.map(cat => [cat.id, { ...cat, children: [] }]));
+        const tree = [];
+        for (const cat of sortedCategories) {
+            if (cat.parentId && categoryMap.has(cat.parentId)) {
+                categoryMap.get(cat.parentId).children.push(categoryMap.get(cat.id));
+            } else {
+                tree.push(categoryMap.get(cat.id));
+            }
+        }
+        buildCheckboxes(tree, 0);
     };
 
     const handleUserFormSubmit = async (e) => {
@@ -714,7 +757,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 allBookmarks[index] = {...allBookmarks[index], ...updatedBookmark};
             }
             hideAllModals();
-            await loadData(); // Full reload to ensure consistency
+            await loadData();
             renderBookmarkAdminTab(document.getElementById('bookmark-sort-select').value);
         } catch (error) {
             bookmarkEditForm.querySelector('.modal-error-message').textContent = error.message;
