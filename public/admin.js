@@ -574,31 +574,34 @@ const handleAddNewBookmark = () => {
         });
     };
 
-    bookmarkEditForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-const id = bookmarkEditForm.querySelector('#bm-edit-id').value;
-    const isEditing = !!id; // 如果id存在，则为编辑模式
-   
-
-        
-       
-        const data = {
-name: bookmarkEditForm.querySelector('#bm-edit-name').value,
+  // 在 admin.js 中找到并替换这个事件监听器
+bookmarkEditForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = bookmarkEditForm.querySelector('#bm-edit-id').value;
+    const isEditing = !!id;
+    const data = {
+        name: bookmarkEditForm.querySelector('#bm-edit-name').value,
         url: bookmarkEditForm.querySelector('#bm-edit-url').value,
         description: bookmarkEditForm.querySelector('#bm-edit-desc').value,
         icon: bookmarkEditForm.querySelector('#bm-edit-icon').value,
         categoryId: bookmarkEditForm.querySelector('#bm-edit-category').value,
     };
 
+    const endpoint = isEditing ? `bookmarks/${id}` : 'bookmarks';
+    const method = isEditing ? 'PUT' : 'POST';
 
-        try {
-            await apiRequest(`bookmarks/${id}`, 'PUT', data);
-            hideAllModals();
-            await initializePage();
-        } catch (error) {
-            bookmarkEditForm.querySelector('.modal-error-message').textContent = error.message;
-        }
-    });
+    // 【重要】在这里增加一行日志，用于调试
+    console.log('正在向后端发送请求:', { endpoint: endpoint, method: method });
+
+    try {
+        await apiRequest(endpoint, method, data);
+        hideAllModals();
+        await initializePage('tab-bookmarks');
+    } catch (error) {
+        const errorEl = bookmarkEditForm.querySelector('.modal-error-message');
+        if(errorEl) errorEl.textContent = error.message;
+    }
+});
 
     // --- Tab 4: System Settings ---
     const renderSystemSettingsTab = (container) => {
