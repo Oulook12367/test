@@ -383,19 +383,42 @@ const handleUserFormSubmit = async (e) => {
     errorEl.textContent = '';
     if (!username) { errorEl.textContent = '用户名不能为空'; return; }
     if (!isEditing && !password) { errorEl.textContent = '新用户必须设置密码'; return; }
-    const userData = {
-        roles: Array.from(form.querySelectorAll('#user-form-roles input:checked')).map(cb => cb.value),
-        permissions: { visibleCategories: Array.from(form.querySelectorAll('#user-form-categories input:checked')).map(cb => cb.value) }
-    };
+    const selectedRole = form.querySelector('input[name="role-selection"]:checked').value;
+     const userData = {
+        roles: [selectedRole],
+        permissions: { visibleCategories: Array.from(form.querySelectorAll('#user-form-categories input:checked')).map(cb => cb.value) }
+    };
+    
+    
     if (password) userData.password = password;
     if (!isEditing) userData.username = username;
     const endpoint = isEditing ? `users/${hiddenUsername}` : 'users';
     const method = isEditing ? 'PUT' : 'POST';
-    try {
-        await apiRequest(endpoint, method, userData);
-        alert('用户保存成功！');
-        await initializePage('tab-users');
-    } catch(error) { errorEl.textContent = error.message; }
+     try {
+        // 发起API请求，保存用户信息
+        const updatedUser = await apiRequest(endpoint, method, userData);
+        alert('用户保存成功！');
+
+        // 【新增逻辑】检查被修改的是否为当前用户，以及权限是否变更
+        const token = localStorage.getItem('jwt_token');
+        if (token) {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const currentUsername = payload.sub;
+
+            // 如果当前登录的用户就是被编辑的用户
+            if (currentUsername === updatedUser.username) {
+                // 并且他的新角色列表中不再包含 'admin'
+                if (!updatedUser.roles.includes('admin')) {
+                    alert('您的管理员权限已被移除，将退出管理后台并返回主页。');
+                    localStorage.removeItem('jwt_token');
+                    window.location.href = 'index.html';
+                    return; // 终止后续操作
+                }
+            }
+        }
+
+        await initializePage('tab-users');
+    } catch(error) { errorEl.textContent = error.message; }
 };
 
 // =======================================================================
