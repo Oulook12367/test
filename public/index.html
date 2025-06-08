@@ -22,6 +22,8 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <h2>分类</h2>
+                <!-- 新的切换按钮位置 -->
+                <button id="sidebar-toggle-btn" title="切换侧边栏"><i class="fas fa-angle-double-left"></i></button>
             </div>
             <ul id="category-nav" class="category-nav"></ul>
             <div class="sidebar-footer">
@@ -31,9 +33,6 @@
 
         <div class="main-content">
             <header>
-                <!-- 【新】侧边栏切换按钮 -->
-                <button id="sidebar-toggle-btn" title="切换侧边栏"><i class="fas fa-bars"></i></button>
-
                 <div class="search-bar">
                     <select id="search-engine">
                         <option value="https://www.google.com/search?q=">Google</option>
@@ -94,7 +93,14 @@
                         <!-- Bookmarks Tab -->
                         <div id="tab-bookmarks" class="admin-tab-content">
                             <h2>书签管理</h2>
-                            <p class="admin-panel-tip">在这里快速编辑或删除所有书签。</p>
+                            <div class="bookmark-admin-controls">
+                                <span>排序方式:</span>
+                                <select id="bookmark-sort-select">
+                                    <option value="name_asc">名称 (A-Z)</option>
+                                    <option value="name_desc">名称 (Z-A)</option>
+                                    <option value="category">按分类</option>
+                                </select>
+                            </div>
                             <div class="bookmark-admin-header">
                                 <span>书签名称</span>
                                 <span>所属分类</span>
@@ -118,6 +124,29 @@
             </div>
         </div>
         
+        <!-- Bookmark Edit Modal (New) -->
+        <div id="bookmark-edit-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn">&times;</span>
+                <h2 id="bookmark-modal-title">编辑书签</h2>
+                <form id="bookmark-edit-form">
+                    <input type="hidden" id="bm-edit-id">
+                    <label for="bm-edit-name">名称:</label>
+                    <input type="text" id="bm-edit-name" required>
+                    <label for="bm-edit-url">网址 (URL):</label>
+                    <input type="url" id="bm-edit-url" placeholder="https://example.com" required>
+                    <label for="bm-edit-desc">描述:</label>
+                    <textarea id="bm-edit-desc" rows="2"></textarea>
+                    <label for="bm-edit-icon">图标 URL (可选):</label>
+                    <input type="url" id="bm-edit-icon" placeholder="将自动获取，也可自定义">
+                    <label for="bm-edit-category">分类:</label>
+                    <select id="bm-edit-category" required></select>
+                    <button type="submit">确认</button>
+                    <p class="modal-error-message"></p>
+                </form>
+            </div>
+        </div>
+
         <!-- Confirmation Modal (retained) -->
         <div id="confirm-modal" class="modal no-animation">
             <div class="modal-content small">
