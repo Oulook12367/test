@@ -173,8 +173,11 @@ export async function onRequest(context) {
     if (apiPath === 'data' && request.method === 'GET') {
         const authHeader = request.headers.get('Authorization');
         const data = await getSiteData(env);
+        
+        // Return a flag indicating if public mode is enabled by the environment variable
+        data.publicModeEnabled = env.PUBLIC_MODE_ENABLED === 'true';
 
-        if (env.PUBLIC_MODE_ENABLED === 'true' && !authHeader) {
+        if (data.publicModeEnabled && !authHeader) {
             const publicUser = data.users.public;
             const publicCategories = data.categories.filter(cat => publicUser.permissions.visibleCategories.includes(cat.id));
             const publicCategoryIds = publicCategories.map(cat => cat.id);
@@ -183,7 +186,8 @@ export async function onRequest(context) {
                 isPublic: true,
                 categories: publicCategories,
                 bookmarks: publicBookmarks,
-                users: []
+                users: [],
+                publicModeEnabled: true,
             });
         }
         
@@ -199,7 +203,7 @@ export async function onRequest(context) {
         const visibleCategoryIds = visibleCategories.map(cat => cat.id);
         const visibleBookmarks = data.bookmarks.filter(bm => visibleCategoryIds.includes(bm.categoryId));
         const { passwordHash, salt, ...safeUser } = currentUser;
-        return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks, users: [safeUser] });
+        return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks, users: [safeUser], publicModeEnabled: data.publicModeEnabled });
     }
     
     // --- Auth Wall for all Write Operations ---
@@ -236,6 +240,11 @@ export async function onRequest(context) {
                 return jsonResponse({ error: '无权在此分类下添加书签' }, 403);
             }
             bookmark.id = `bm-${Date.now()}`;
+            // Add sortOrder if missing
+            if(typeof bookmark.sortOrder === 'undefined') {
+                 const maxOrder = data.bookmarks.length > 0 ? Math.max(...data.bookmarks.map(b => b.sortOrder || 0)) : -1;
+                 bookmark.sortOrder = maxOrder + 10;
+            }
             data.bookmarks.push(bookmark);
             await saveSiteData(env, data);
             return jsonResponse(bookmark, 201);
