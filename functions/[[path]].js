@@ -245,11 +245,9 @@ export async function onRequest(context) {
         return jsonResponse({ error: '用户未找到'}, 404);
     }
 
-    // 【重要修改】采用更健壮的路由逻辑
     if (apiPath.startsWith('users')) {
         if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
 
-        // 新增用户: POST /api/users
         if (request.method === 'POST' && apiPath === 'users') {
             const { username: newUsername, password, roles, permissions } = await request.json();
             if (!newUsername || !password || data.users[newUsername]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
@@ -261,9 +259,14 @@ export async function onRequest(context) {
             return jsonResponse(newUser, 201);
         }
 
-        // 修改或删除单个用户: /api/users/:username
         if (apiPath.startsWith('users/')) {
-            const username = apiPath.substring('users/'.length);
+            // 【重要修正】对从URL中提取的用户名进行解码
+            let username = apiPath.substring('users/'.length);
+            try {
+                username = decodeURIComponent(username);
+            } catch (e) {
+                return jsonResponse({ error: '用户名编码无效' }, 400);
+            }
 
             if (!username) {
                 return jsonResponse({ error: '未提供用户名' }, 400);
