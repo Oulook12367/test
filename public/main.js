@@ -48,19 +48,45 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Data Loading & Rendering ---
     async function initializePage() {
         try {
+            // 【重要修正】重构页面初始化逻辑，使其更健壮
+            const token = localStorage.getItem('jwt_token');
+
+            // Case 1: No token, try to load public data
+            if (!token) {
+                 const publicData = await apiRequest('data');
+                 if (publicData && publicData.isPublic) {
+                    allCategories = publicData.categories || [];
+                    allBookmarks = publicData.bookmarks || [];
+                    currentUser = { roles: ['viewer'], defaultCategoryId: publicData.defaultCategoryId || 'all' };
+                    updateHeader(true);
+                    renderUI();
+                    appLayout.style.display = 'flex';
+                    return;
+                 }
+                 throw new Error("No token and not in public mode.");
+            }
+            
+            // Case 2: Has a token, verify it and fetch data
+            let currentUsername = '';
+            try {
+                currentUsername = JSON.parse(atob(token.split('.')[1])).sub;
+            } catch (e) {
+                throw new Error("Invalid token.");
+            }
+
             const data = await apiRequest('data');
             
-            if (data.isPublic) { // Public mode
-                allCategories = data.categories || [];
-                allBookmarks = data.bookmarks || [];
-                currentUser = { roles: ['viewer'], defaultCategoryId: 'all' }; // Mock user for public
-                updateHeader(true);
-            } else { // Logged-in user
-                allCategories = data.categories || [];
-                allBookmarks = data.bookmarks || [];
-                currentUser = data.users[0]; // API returns a single user array
-                updateHeader(false);
+            // Find the correct user from the server response
+            const userFromServer = data.users.find(u => u.username === currentUsername);
+
+            if (!userFromServer) {
+                throw new Error("Logged in user not found in data from server.");
             }
+            
+            allCategories = data.categories || [];
+            allBookmarks = data.bookmarks || [];
+            currentUser = userFromServer;
+            updateHeader(false);
             
             renderUI();
             appLayout.style.display = 'flex';
@@ -77,17 +103,21 @@ document.addEventListener('DOMContentLoaded', () => {
         renderCategories();
         
         const activeId = document.querySelector('.sidebar .active')?.dataset.id;
-        // 如果没有活动的项（首次加载），则使用用户的默认设置
         const initialIdToRender = activeId || currentUser.defaultCategoryId || 'all';
-        renderBookmarks(initialIdToRender, localSearchInput.value);
+        
+        // Ensure the initial category to render is actually visible to the user
+        const isVisible = initialIdToRender === 'all' || allCategories.some(c => c.id === initialIdToRender);
+        const finalIdToRender = isVisible ? initialIdToRender : 'all';
 
-        // 如果是首次加载，确保默认项被高亮
+        renderBookmarks(finalIdToRender, localSearchInput.value);
+
         if (!activeId) {
-            const defaultLi = document.querySelector(`.sidebar li[data-id="${initialIdToRender}"]`);
+            const defaultLi = document.querySelector(`.sidebar li[data-id="${finalIdToRender}"]`);
             if (defaultLi) {
                 defaultLi.classList.add('active');
-            } else { // 如果默认分类不存在，则高亮“全部书签”
-                document.querySelector(`.sidebar li[data-id="all"]`)?.classList.add('active');
+            } else {
+                const allBookmarksLi = document.querySelector(`.sidebar li[data-id="all"]`);
+                if(allBookmarksLi) allBookmarksLi.classList.add('active');
             }
         }
     };
@@ -114,15 +144,14 @@ document.addEventListener('DOMContentLoaded', () => {
         categoryNav.innerHTML = '';
         sidebarFooterNav.innerHTML = '';
         
-        // Render "All Bookmarks" to the footer
+        const canSetDefault = currentUser && (currentUser.roles.includes('admin') || currentUser.roles.includes('editor'));
+
         const allLi = document.createElement('li');
         allLi.dataset.id = 'all';
-        // 【修改】为“全部书签”也添加星星
         const allIsDefault = 'all' === currentUser.defaultCategoryId;
-        const canSetDefault = currentUser.roles.includes('admin') || currentUser.roles.includes('editor');
         let allStarHTML = '';
         if (canSetDefault) {
-            allStarHTML = `<i class="star-icon ${allIsDefault ? 'fas fa-star is-default' : 'far fa-star'}" data-cat-id="all"></i>`;
+            allStarHTML = `<i class="star-icon ${allIsDefault ? 'fas fa-star is-default' : 'far fa-star'}" data-cat-id="all" title="设为默认"></i>`;
         }
         allLi.innerHTML = `<i class="fas fa-inbox fa-fw"></i><span>全部书签</span>${allStarHTML}`;
         sidebarFooterNav.appendChild(allLi);
@@ -148,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let starHTML = '';
                 if (canSetDefault) {
                     const isDefault = node.id === currentUser.defaultCategoryId;
-                    starHTML = `<i class="star-icon ${isDefault ? 'fas fa-star is-default' : 'far fa-star'}" data-cat-id="${node.id}"></i>`;
+                    starHTML = `<i class="star-icon ${isDefault ? 'fas fa-star is-default' : 'far fa-star'}" data-cat-id="${node.id}" title="设为默认"></i>`;
                 }
 
                 li.innerHTML = `<i class="fas fa-folder fa-fw"></i><span>${escapeHTML(node.name)}</span>${starHTML}`;
@@ -172,7 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const lower = searchTerm.toLowerCase();
             filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lower) || bm.url.toLowerCase().includes(lower));
         }
-        filteredBookmarks.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        filteredBookmarks.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
         
         bookmarksGrid.innerHTML = '';
         if(filteredBookmarks.length === 0){
@@ -185,7 +214,13 @@ document.addEventListener('DOMContentLoaded', () => {
             card.className = 'bookmark-card';
             card.target = '_blank';
             card.rel = 'noopener noreferrer';
-            const defaultIcon = `https://www.google.com/s2/favicons?domain=${new URL(bm.url).hostname}`;
+            let domain;
+            try {
+                domain = new URL(bm.url).hostname;
+            } catch (e) {
+                domain = '';
+            }
+            const defaultIcon = `https://www.google.com/s2/favicons?sz=64&domain_url=${domain}`;
             card.innerHTML = `<h3><img src="${bm.icon || defaultIcon}" alt="" onerror="this.onerror=null;this.src='${defaultIcon}'"> ${escapeHTML(bm.name)}</h3><p>${escapeHTML(bm.description || '')}</p>`;
             bookmarksGrid.appendChild(card);
         });
@@ -212,23 +247,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 【修改】统一处理侧边栏点击事件
     document.querySelector('.sidebar').addEventListener('click', async (e) => {
         const star = e.target.closest('.star-icon');
         const li = e.target.closest('li[data-id]');
 
-        // 如果点击的是星星
         if (star) {
-            e.stopPropagation(); // 阻止li的点击事件触发
+            e.stopPropagation();
             const newDefaultId = star.dataset.catId;
-            if (newDefaultId === currentUser.defaultCategoryId) return; // 如果已经是默认，则不操作
+            if (newDefaultId === currentUser.defaultCategoryId) return;
 
             try {
                 await apiRequest('users/self', 'PUT', { defaultCategoryId: newDefaultId });
-                // 更新本地的用户对象，并重绘侧边栏以更新星星状态
                 currentUser.defaultCategoryId = newDefaultId;
                 renderCategories();
-                // 重新高亮当前活动的项
                 const activeLi = document.querySelector(`.sidebar li[data-id="${li.dataset.id}"]`);
                 if(activeLi) activeLi.classList.add('active');
             } catch (error) {
@@ -237,7 +268,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 如果点击的是列表项
         if (li) {
             document.querySelectorAll('.sidebar li').forEach(el => el.classList.remove('active'));
             li.classList.add('active');
