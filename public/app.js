@@ -308,7 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const tabId = link.dataset.tab;
         adminTabContents.forEach(content => {
-            content.classList.toggle('active', content.id === tabId);
+             content.classList.toggle('active', content.id === tabId);
         });
         renderAdminTab(tabId);
     });
@@ -336,15 +336,19 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const cat of categories) {
             if (cat.id === ignoreId) continue;
             if (cat.parentId && categoryMap.has(cat.parentId)) {
-                categoryMap.get(cat.parentId).children.push(categoryMap.get(cat.id));
+                const parent = categoryMap.get(cat.parentId);
+                if (parent) {
+                    parent.children.push(categoryMap.get(cat.id));
+                }
             } else {
                 tree.push(categoryMap.get(cat.id));
             }
         }
 
         const buildOptions = (nodes, level) => {
-            if (level >= 4) return; // Limit to 4 levels
+            if (level >= 4) return;
             for (const node of nodes) {
+                if (!node) continue;
                 const option = document.createElement('option');
                 option.value = node.id;
                 option.textContent = `${'— '.repeat(level)}${node.name}`;
@@ -377,7 +381,19 @@ document.addEventListener('DOMContentLoaded', () => {
             populateCategoryDropdown(parentSelect, tempCategories, cat.parentId, cat.id);
             
             li.querySelector('.delete-cat-btn').onclick = () => {
-                tempCategories = tempCategories.filter(c => c.id !== cat.id);
+                const catIdToDelete = cat.id;
+                let idsToDelete = new Set([catIdToDelete]);
+                let queue = [catIdToDelete];
+                while(queue.length > 0){
+                    const parentId = queue.shift();
+                    tempCategories.forEach(c => {
+                        if(c.parentId === parentId) {
+                            idsToDelete.add(c.id);
+                            queue.push(c.id);
+                        }
+                    });
+                }
+                tempCategories = tempCategories.filter(c => !idsToDelete.has(c.id));
                 renderCategoryAdminTab();
             };
             listEl.appendChild(li);
@@ -392,9 +408,7 @@ document.addEventListener('DOMContentLoaded', () => {
             sortOrder: (tempCategories.length > 0) ? Math.max(...tempCategories.map(c => c.sortOrder || 0)) + 10 : 0
         };
         tempCategories.push(newCat);
-        allCategories.push(newCat); // Also add to allCategories to appear in dropdowns
         renderCategoryAdminTab();
-        allCategories.pop(); // Remove after rendering
     });
 
     document.getElementById('save-categories-btn').addEventListener('click', async () => {
@@ -574,6 +588,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         try {
             await apiRequest(endpoint, method, userData);
+            alert('用户保存成功！');
             await loadData();
             renderUserAdminTab();
         } catch(error) {
@@ -704,8 +719,10 @@ document.addEventListener('DOMContentLoaded', () => {
         let currentSort = highestSortOrder + 10;
 
         const parseNode = (node, parentId) => {
-            const children = Array.from(node.children).filter(child => child.tagName === 'DT');
-            for (const child of children) {
+            if (!node || !node.children) return;
+            for (const child of node.children) {
+                if (child.tagName !== 'DT') continue;
+                
                 const folderHeader = child.querySelector('h3');
                 const link = child.querySelector('a');
 
@@ -738,9 +755,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!rootDl) throw new Error('无效的书签文件格式。');
         
         let uncategorizedCatId = null;
-        const rootLinks = Array.from(rootDl.children).filter(child => child.tagName === 'DT' && child.querySelector('a'));
         
-        if (rootLinks.length > 0) {
+        // Find links at root level and create a folder for them if needed
+        const rootItems = Array.from(rootDl.children);
+        const hasRootLinks = rootItems.some(child => child.tagName === 'DT' && child.querySelector('A'));
+        
+        if (hasRootLinks) {
             let uncategorizedCat = allCategories.find(c => c.name === '导入的未分类书签');
             if (!uncategorizedCat) {
                 uncategorizedCatId = generateId('cat');
@@ -752,9 +772,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         parseNode(rootDl, null);
         
-        // Assign uncategorized bookmarks to the special category
         importedBookmarks.forEach(bm => {
-            if (bm.categoryId === null) {
+            if (bm.categoryId === null && uncategorizedCatId) {
                 bm.categoryId = uncategorizedCatId;
             }
         });
