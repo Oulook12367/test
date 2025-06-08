@@ -20,7 +20,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminPanel = document.getElementById('admin-panel');
     const adminPanelNav = document.querySelector('.admin-panel-nav');
     const adminTabContents = document.querySelectorAll('.admin-tab-content');
-    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn'); // Get the new button
+    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+    const bookmarkEditModal = document.getElementById('bookmark-edit-modal');
+    const bookmarkEditForm = document.getElementById('bookmark-edit-form');
+
 
     // --- State ---
     let allBookmarks = [], allCategories = [], allUsers = [], currentUser = null, isGuestView = false;
@@ -83,6 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const applySidebarState = (isCollapsed) => {
         appLayout.classList.toggle('sidebar-collapsed', isCollapsed);
+        sidebarToggleBtn.innerHTML = isCollapsed ? '<i class="fas fa-angle-double-right"></i>' : '<i class="fas fa-angle-double-left"></i>';
         localStorage.setItem('sidebarCollapsed', isCollapsed);
     };
 
@@ -275,6 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     modalBackdrop.addEventListener('click', (e) => { if (e.target === modalBackdrop) hideAllModals(); });
+    document.querySelectorAll('.close-btn').forEach(btn => btn.addEventListener('click', hideAllModals));
     document.getElementById('confirm-btn-no').onclick = hideAllModals;
 
 
@@ -292,8 +297,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderAdminTab(firstTabId);
         showModal(adminPanel);
     });
-    
-    document.querySelector('#admin-panel .close-btn').addEventListener('click', hideAllModals);
 
     adminPanelNav.addEventListener('click', (e) => {
         e.preventDefault();
@@ -323,14 +326,45 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
         }
     };
+    
+    const populateCategoryDropdown = (selectElement, categories, selectedId = null, ignoreId = null) => {
+        selectElement.innerHTML = '<option value="">-- 顶级分类 --</option>';
+        
+        const categoryMap = new Map(categories.map(cat => [cat.id, { ...cat, children: [] }]));
+        const tree = [];
 
+        for (const cat of categories) {
+            if (cat.id === ignoreId) continue;
+            if (cat.parentId && categoryMap.has(cat.parentId)) {
+                categoryMap.get(cat.parentId).children.push(categoryMap.get(cat.id));
+            } else {
+                tree.push(categoryMap.get(cat.id));
+            }
+        }
+
+        const buildOptions = (nodes, level) => {
+            if (level >= 4) return; // Limit to 4 levels
+            for (const node of nodes) {
+                const option = document.createElement('option');
+                option.value = node.id;
+                option.textContent = `${'— '.repeat(level)}${node.name}`;
+                if (node.id === selectedId) option.selected = true;
+                selectElement.appendChild(option);
+                if (node.children.length > 0) {
+                    buildOptions(node.children, level + 1);
+                }
+            }
+        };
+        buildOptions(tree, 0);
+    };
 
     // --- Tab 1: Category Management ---
     const renderCategoryAdminTab = () => {
-        tempCategories = JSON.parse(JSON.stringify(allCategories));
+        tempCategories = JSON.parse(JSON.stringify(allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0))));
         const listEl = document.getElementById('category-admin-list');
         listEl.innerHTML = '';
-        tempCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
+        
+        tempCategories.forEach(cat => {
             const li = document.createElement('li');
             li.dataset.id = cat.id;
             li.innerHTML = `
@@ -340,16 +374,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <button class="delete-cat-btn secondary danger" title="删除"><i class="fas fa-trash-alt"></i></button>
             `;
             const parentSelect = li.querySelector('.cat-parent-select');
-            parentSelect.innerHTML = '<option value="">-- 顶级分类 --</option>';
-            tempCategories.forEach(p => {
-                if (p.id !== cat.id) {
-                    const option = document.createElement('option');
-                    option.value = p.id;
-                    option.textContent = p.name;
-                    parentSelect.appendChild(option);
-                }
-            });
-            parentSelect.value = cat.parentId || '';
+            populateCategoryDropdown(parentSelect, tempCategories, cat.parentId, cat.id);
+            
             li.querySelector('.delete-cat-btn').onclick = () => {
                 tempCategories = tempCategories.filter(c => c.id !== cat.id);
                 renderCategoryAdminTab();
@@ -359,13 +385,16 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     document.getElementById('add-new-category-btn').addEventListener('click', () => {
-        tempCategories.push({
+        const newCat = {
             id: `new-${Date.now()}`,
             name: '新分类',
             parentId: null,
             sortOrder: (tempCategories.length > 0) ? Math.max(...tempCategories.map(c => c.sortOrder || 0)) + 10 : 0
-        });
+        };
+        tempCategories.push(newCat);
+        allCategories.push(newCat); // Also add to allCategories to appear in dropdowns
         renderCategoryAdminTab();
+        allCategories.pop(); // Remove after rendering
     });
 
     document.getElementById('save-categories-btn').addEventListener('click', async () => {
@@ -381,7 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 hasError = true;
             }
             updatedCategories.push({
-                id: id.startsWith('new-') ? `cat-${Date.now()}-${Math.random()}`: id,
+                id: id.startsWith('new-') ? `cat-${Date.now()}-${Math.random()}`.slice(-10) : id,
                 sortOrder: parseInt(li.querySelector('.cat-order-input').value) || 0,
                 name: name,
                 parentId: li.querySelector('.cat-parent-select').value || null,
@@ -394,6 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await apiRequest('data', 'PUT', { categories: updatedCategories });
             alert('分类保存成功！');
             await loadData();
+            renderCategoryAdminTab();
         } catch (error) {
             alert('保存失败: ' + error.message);
         }
@@ -497,6 +527,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const renderUserFormRoles = (activeRoles = []) => {
         const container = document.getElementById('user-form-roles');
+        if(!container) return;
         container.innerHTML = '';
         ['admin', 'editor', 'viewer'].forEach(role => {
             container.innerHTML += `
@@ -537,9 +568,10 @@ document.addEventListener('DOMContentLoaded', () => {
             permissions: { visibleCategories: Array.from(form.querySelectorAll('#user-form-categories input:checked')).map(cb => cb.value) }
         };
         if (password) userData.password = password;
+        if (!isEditing) userData.username = username;
         const endpoint = isEditing ? `users/${hiddenUsername}` : 'users';
         const method = isEditing ? 'PUT' : 'POST';
-        if (!isEditing) userData.username = username;
+        
         try {
             await apiRequest(endpoint, method, userData);
             await loadData();
@@ -550,10 +582,31 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     // --- Tab 3: Bookmark Management ---
-    const renderBookmarkAdminTab = () => {
+    const renderBookmarkAdminTab = (sortBy = 'name_asc') => {
         const container = document.getElementById('bookmark-admin-list-container');
         const ul = document.createElement('ul');
-        allBookmarks.forEach(bm => {
+        
+        let sortedBookmarks = [...allBookmarks];
+        const categoryNameMap = new Map(allCategories.map(c => [c.id, c.name]));
+
+        switch (sortBy) {
+            case 'name_desc':
+                sortedBookmarks.sort((a,b) => b.name.localeCompare(a.name));
+                break;
+            case 'category':
+                sortedBookmarks.sort((a,b) => {
+                    const catA = categoryNameMap.get(a.categoryId) || '';
+                    const catB = categoryNameMap.get(b.categoryId) || '';
+                    return catA.localeCompare(catB);
+                });
+                break;
+            case 'name_asc':
+            default:
+                sortedBookmarks.sort((a,b) => a.name.localeCompare(b.name));
+                break;
+        }
+
+        sortedBookmarks.forEach(bm => {
             const li = document.createElement('li');
             const category = allCategories.find(c => c.id === bm.categoryId);
             li.innerHTML = `
@@ -564,12 +617,61 @@ document.addEventListener('DOMContentLoaded', () => {
                     <button class="delete-bm-btn danger secondary" title="删除"><i class="fas fa-trash-alt"></i></button>
                 </div>
             `;
-            // Add event listeners for edit/delete here if needed
+            li.querySelector('.edit-bm-btn').onclick = () => handleEditBookmark(bm);
+            li.querySelector('.delete-bm-btn').onclick = () => handleDeleteBookmark(bm);
             ul.appendChild(li);
         });
         container.innerHTML = '';
         container.appendChild(ul);
     };
+
+    document.getElementById('bookmark-sort-select').onchange = (e) => {
+        renderBookmarkAdminTab(e.target.value);
+    };
+
+    const handleEditBookmark = (bookmark) => {
+        bookmarkEditForm.reset();
+        bookmarkEditForm.querySelector('#bm-edit-id').value = bookmark.id;
+        bookmarkEditForm.querySelector('#bm-edit-name').value = bookmark.name;
+        bookmarkEditForm.querySelector('#bm-edit-url').value = bookmark.url;
+        bookmarkEditForm.querySelector('#bm-edit-desc').value = bookmark.description || '';
+        bookmarkEditForm.querySelector('#bm-edit-icon').value = bookmark.icon || '';
+        populateCategoryDropdown(bookmarkEditForm.querySelector('#bm-edit-category'), allCategories, bookmark.categoryId);
+        showModal(bookmarkEditModal);
+    };
+
+    const handleDeleteBookmark = (bookmark) => {
+        showConfirm('删除书签', `确定删除书签 "${bookmark.name}"?`, async () => {
+            try {
+                await apiRequest(`bookmarks/${bookmark.id}`, 'DELETE');
+                await loadData();
+                renderBookmarkAdminTab(document.getElementById('bookmark-sort-select').value);
+            } catch (error) {
+                alert(`删除失败: ${error.message}`);
+            }
+        });
+    };
+
+    bookmarkEditForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = bookmarkEditForm.querySelector('#bm-edit-id').value;
+        const data = {
+            name: bookmarkEditForm.querySelector('#bm-edit-name').value,
+            url: bookmarkEditForm.querySelector('#bm-edit-url').value,
+            description: bookmarkEditForm.querySelector('#bm-edit-desc').value,
+            icon: bookmarkEditForm.querySelector('#bm-edit-icon').value,
+            categoryId: bookmarkEditForm.querySelector('#bm-edit-category').value,
+        };
+        try {
+            await apiRequest(`bookmarks/${id}`, 'PUT', data);
+            hideAllModals();
+            await loadData();
+            renderBookmarkAdminTab(document.getElementById('bookmark-sort-select').value);
+        } catch (error) {
+            bookmarkEditForm.querySelector('.modal-error-message').textContent = error.message;
+        }
+    });
+
 
     // --- Tab 4: System Settings ---
     document.getElementById('import-bookmarks-btn-admin').addEventListener('click', () => {
@@ -598,10 +700,11 @@ document.addEventListener('DOMContentLoaded', () => {
         let importedCategories = [];
         let importedBookmarks = [];
         const generateId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const highestSortOrder = allCategories.length > 0 ? Math.max(...allCategories.map(c => c.sortOrder || 0)) : -1;
+        let currentSort = highestSortOrder + 10;
 
-        const parseNode = (node, parentId, sortOrder) => {
+        const parseNode = (node, parentId) => {
             const children = Array.from(node.children).filter(child => child.tagName === 'DT');
-            let currentOrder = sortOrder;
             for (const child of children) {
                 const folderHeader = child.querySelector('h3');
                 const link = child.querySelector('a');
@@ -612,11 +715,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         id: newCategoryId,
                         name: folderHeader.textContent.trim(),
                         parentId: parentId,
-                        sortOrder: currentOrder++
+                        sortOrder: currentSort++
                     });
                     const subList = child.nextElementSibling;
                     if (subList && subList.tagName === 'DL') {
-                        parseNode(subList, newCategoryId, currentOrder);
+                        parseNode(subList, newCategoryId);
                     }
                 } else if (link) {
                     importedBookmarks.push({
@@ -630,10 +733,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         };
-
-        const root = doc.querySelector('dl');
-        if (root) parseNode(root, null, allCategories.length);
         
+        const rootDl = doc.querySelector('dl');
+        if (!rootDl) throw new Error('无效的书签文件格式。');
+        
+        let uncategorizedCatId = null;
+        const rootLinks = Array.from(rootDl.children).filter(child => child.tagName === 'DT' && child.querySelector('a'));
+        
+        if (rootLinks.length > 0) {
+            let uncategorizedCat = allCategories.find(c => c.name === '导入的未分类书签');
+            if (!uncategorizedCat) {
+                uncategorizedCatId = generateId('cat');
+                importedCategories.push({ id: uncategorizedCatId, name: '导入的未分类书签', parentId: null, sortOrder: currentSort++ });
+            } else {
+                uncategorizedCatId = uncategorizedCat.id;
+            }
+        }
+
+        parseNode(rootDl, null);
+        
+        // Assign uncategorized bookmarks to the special category
+        importedBookmarks.forEach(bm => {
+            if (bm.categoryId === null) {
+                bm.categoryId = uncategorizedCatId;
+            }
+        });
+
         if (importedCategories.length === 0 && importedBookmarks.length === 0) {
             throw new Error('未在文件中找到可导入的书签或文件夹。');
         }
