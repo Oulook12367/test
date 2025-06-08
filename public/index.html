@@ -9,22 +9,22 @@
 </head>
 <body class="is-loading">
     <div id="app-layout" style="display: none;">
+        <button id="sidebar-toggle-btn" title="切换侧边栏"><i class="fas fa-angle-double-left"></i></button>
+
         <aside class="sidebar">
             <div class="sidebar-header">
                 <h2>分类</h2>
-                <button id="sidebar-toggle-btn" title="切换侧边栏"><i class="fas fa-angle-double-left"></i></button>
             </div>
-            <ul id="category-nav" class="category-nav"></ul>
-            <div class="sidebar-footer">
-                 <ul id="static-nav" class="category-nav"></ul>
-            </div>
+            <ul id="static-nav" class="category-nav">
+                <!-- "All Bookmarks" will be inserted here by JS -->
+            </ul>
+            <ul id="category-nav" class="category-nav dynamic">
+                <!-- Categories will be inserted here by JS -->
+            </ul>
         </aside>
 
         <div class="main-content">
             <header>
-                 <div id="main-header-left" class="main-header-left">
-                    <button id="mobile-sidebar-toggle-btn" title="切换侧边栏"><i class="fas fa-bars"></i></button>
-                </div>
                 <div class="search-bar">
                     <select id="search-engine">
                         <option value="https://www.google.com/search?q=">Google</option>
@@ -35,9 +35,9 @@
                 </div>
 
                 <div class="header-buttons">
-                    <button id="action-btn" style="display: none;"></button>
-                    <button id="theme-toggle" title="切换主题"><i class="fas fa-sun"></i></button>
-                    <button id="logout-btn" title="退出登录" style="display: none;"><i class="fas fa-sign-out-alt"></i></button>
+                    <button id="action-btn" class="button-primary" style="display: none;"></button>
+                    <button id="theme-toggle" title="切换主题" class="button-icon"></button>
+                    <button id="logout-btn" title="退出登录" class="button-icon" style="display: none;"><i class="fas fa-sign-out-alt"></i></button>
                 </div>
             </header>
             <main id="bookmarks-grid"></main>
