@@ -130,14 +130,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Tab 1: Category Management ---
    // 在 admin.js 中找到并【完全替换】此函数
+// 在 admin.js 中找到并【完全替换】此函数
 const renderCategoryAdminTab = (container) => {
-    // 【修改】移除了底部的“保存”按钮，并修改了提示文字
-    container.innerHTML = `<h2>分类管理</h2><p class="admin-panel-tip">任何修改（名称、排序、父级）都会<b>即时自动保存</b>。</p><div class="category-admin-header"><span>排序</span><span style="grid-column: span 2;">分类名称</span><span>操作</span></div><ul id="category-admin-list"></ul><div class="admin-panel-actions"><button id="add-new-category-btn" class="secondary"><i class="fas fa-plus"></i> 添加新分类</button></div>`;
+    container.innerHTML = `<h2>分类管理</h2>
+        <p class="admin-panel-tip">任何修改（名称、排序、父级）都会即时自动保存。
+        <span id="cat-save-status" style="margin-left: 10px; opacity: 0; transition: opacity 0.3s;"></span></p>
+        <div class="category-admin-header"><span>排序</span><span style="grid-column: span 2;">分类名称</span><span>操作</span></div>
+        <ul id="category-admin-list"></ul>
+        <div class="admin-panel-actions"><button id="add-new-category-btn" class="secondary"><i class="fas fa-plus"></i> 添加新分类</button></div>`;
     
     const listEl = container.querySelector('#category-admin-list');
-    
-    // 【新增】一个统一的保存函数，用于即时保存
+    const saveStatusEl = container.querySelector('#cat-save-status');
+
     const saveAllCategoriesNow = debounce(async () => {
+        saveStatusEl.textContent = '正在保存...';
+        saveStatusEl.style.opacity = '1';
+        
         const listItems = document.querySelectorAll('#category-admin-list li');
         let finalCategories = [];
         let hasError = false;
@@ -145,7 +153,7 @@ const renderCategoryAdminTab = (container) => {
         listItems.forEach(li => {
             const id = li.dataset.id;
             const name = li.querySelector('.cat-name-input').value.trim();
-            const parentId = li.querySelector('.cat-parent-select').value || null; // 确保空值为 null
+            const parentId = li.querySelector('.cat-parent-select').value || null;
             const sortOrder = parseInt(li.querySelector('.cat-order-input').value) || 0;
             
             if (!name) {
@@ -159,25 +167,31 @@ const renderCategoryAdminTab = (container) => {
             });
         });
 
-        if (hasError) return;
+        if (hasError) {
+            saveStatusEl.textContent = '保存失败！';
+            setTimeout(() => { saveStatusEl.style.opacity = '0'; }, 2000);
+            return;
+        }
 
         try {
             await apiRequest('data', 'PUT', { categories: finalCategories });
-            // 成功后重新加载数据，但保持在当前标签页
-            await initializePage('tab-categories');
+            saveStatusEl.textContent = '已保存！';
+            // 成功后只更新状态，等待用户切换标签页时自动刷新
         } catch (error) {
+            saveStatusEl.textContent = '保存失败！';
             alert('保存失败: ' + error.message);
+        } finally {
+            setTimeout(() => { saveStatusEl.style.opacity = '0'; }, 2000);
         }
-    }, 1000); // 使用 debounce 防止过于频繁的保存，延迟1秒
+    }, 500); // 【优化】将延迟从1000毫秒缩短为500毫秒
 
-    // 【新增】使用事件委托来监听所有修改，并触发自动保存
     listEl.addEventListener('change', (e) => {
         if (e.target.matches('.cat-order-input, .cat-name-input, .cat-parent-select')) {
             saveAllCategoriesNow();
         }
     });
 
-    // --- 以下是构建分类列表的逻辑，保持不变 ---
+    // 构建列表的逻辑 (保持不变)
     const categoryMap = new Map(allCategories.map(cat => [cat.id, { ...cat, children: [] }]));
     const tree = [];
     [...allCategories].sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
@@ -472,33 +486,25 @@ const handleUserFormSubmit = async (e) => {
     
     // --- Tab 3: Bookmark Management ---
 // 在 admin.js 中找到并完全替换此函数
+// 在 admin.js 中找到并【完全替换】此函数
 const renderBookmarkAdminTab = (container) => {
-    // 【修改】将旧的排序控件替换为新的分类筛选控件
+    // 静态HTML结构
     container.innerHTML = `<h2>书签管理</h2>
         <p class="admin-panel-tip">请从下方选择一个分类来筛选书签。列表将根据“排序”数字（越小越靠前）进行排列。</p>
         <div class="bookmark-admin-controls">
             <span>筛选分类:</span>
             <select id="bookmark-category-filter">
                 <option value="all">-- 显示全部分类 --</option>
-                </select>
+            </select>
         </div>
-        <div class="bookmark-admin-header">
-            <span class="sort-col">排序</span>
-            <span>书签名称</span>
-            <span>所属分类</span>
-            <span>操作</span>
-        </div>
-        <div id="bookmark-admin-list-container"></div>
-        <div class="admin-panel-actions">
-            <button id="save-bookmarks-btn"><i class="fas fa-save"></i> 保存书签顺序</button>
-        </div>`;
+        <div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div>
+        <div id="bookmark-admin-list-container"><ul></ul></div>
+        <div class="admin-panel-actions"><button id="save-bookmarks-btn"><i class="fas fa-save"></i> 保存书签顺序</button></div>`;
 
-    const listContainer = container.querySelector('#bookmark-admin-list-container');
+    const listEl = container.querySelector('#bookmark-admin-list-container ul');
     const categoryFilter = container.querySelector('#bookmark-category-filter');
-    const ul = document.createElement('ul');
-    listContainer.appendChild(ul);
     
-    // 动态填充分类筛选器的选项
+    // 动态填充分类选项
     allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
         const option = document.createElement('option');
         option.value = cat.id;
@@ -506,16 +512,26 @@ const renderBookmarkAdminTab = (container) => {
         categoryFilter.appendChild(option);
     });
 
-    // 【重要修改】根据选择的分类来筛选和排序书签
+    // 【重要修改】当筛选器变化时，调用 initializePage 来获取最新数据并重绘
+    categoryFilter.onchange = () => {
+        // 保存当前选择的值，以便刷新后恢复
+        localStorage.setItem('admin_bookmark_filter', categoryFilter.value);
+        initializePage('tab-bookmarks');
+    };
+
+    // 恢复上次的选择
+    const lastFilter = localStorage.getItem('admin_bookmark_filter');
+    if (lastFilter) {
+        categoryFilter.value = lastFilter;
+    }
+
+    // 根据当前筛选器的值，过滤和排序书签
     const selectedCategoryId = categoryFilter.value;
     let bookmarksToDisplay = [...allBookmarks];
 
-    // 1. 按分类筛选
     if (selectedCategoryId !== 'all') {
         bookmarksToDisplay = bookmarksToDisplay.filter(bm => bm.categoryId === selectedCategoryId);
     }
-
-    // 2. 按排序数字排序
     bookmarksToDisplay.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
     
     // 渲染列表
@@ -526,13 +542,10 @@ const renderBookmarkAdminTab = (container) => {
         li.innerHTML = `<input type="number" class="bm-sort-order" value="${bm.sortOrder || 0}"><span class="bm-admin-name">${escapeHTML(bm.name)}</span><span class="bm-admin-cat">${categoryNameMap.get(bm.categoryId) || '无分类'}</span><div class="bm-admin-actions"><button class="edit-bm-btn secondary" title="编辑"><i class="fas fa-pencil-alt"></i></button><button class="delete-bm-btn danger secondary" title="删除"><i class="fas fa-trash-alt"></i></button></div>`;
         li.querySelector('.edit-bm-btn').onclick = () => handleEditBookmark(bm);
         li.querySelector('.delete-bm-btn').onclick = () => handleDeleteBookmark(bm);
-        ul.appendChild(li);
+        listEl.appendChild(li);
     });
 
-    // 绑定事件
     container.querySelector('#save-bookmarks-btn').onclick = handleSaveBookmarks;
-    // 当筛选器变化时，重新渲染整个标签页
-    categoryFilter.onchange = () => renderBookmarkAdminTab(container);
 };
 
 // 【新增】一个处理“添加新书签”的函数
@@ -665,27 +678,34 @@ bookmarkEditForm.addEventListener('submit', async (e) => {
         let currentCatSort = highestCatSortOrder + 10;
         let currentBmSort = highestBmSortOrder + 10;
 // 在 admin.js 中，找到 parseAndImport 函数，并将其中的 parseNode 子函数替换为下面的版本
-
+// 在 admin.js 的 parseAndImport 函数内部，找到并【完全替换】parseNode 子函数
 const parseNode = (node, parentId) => {
     if (!node || !node.children) return;
     for (const child of node.children) {
         if (child.tagName !== 'DT') continue;
+        
         const folderHeader = child.querySelector('h3');
         const link = child.querySelector('a');
+
         if (folderHeader) {
             const newCategoryId = generateId('cat');
             importedCategories.push({
                 id: newCategoryId, name: folderHeader.textContent.trim(), parentId: parentId, sortOrder: currentCatSort++
             });
 
-            // 【重要修改】使用循环来查找下一个<DL>，而不是假定它紧邻其后
-            let nextSibling = child.nextElementSibling;
-            while(nextSibling && nextSibling.tagName !== 'DL') {
-                nextSibling = nextSibling.nextElementSibling;
+            // 【重要修改】更鲁棒的子列表查找逻辑
+            // 1. 先尝试在当前 <DT> 内部查找 <DL>
+            let subList = child.querySelector('dl');
+            // 2. 如果内部没有，再尝试查找 <DT> 的下一个兄弟元素是不是 <DL>
+            if (!subList) {
+                let nextSibling = child.nextElementSibling;
+                while(nextSibling && nextSibling.tagName !== 'DL') {
+                    nextSibling = nextSibling.nextElementSibling;
+                }
+                subList = nextSibling;
             }
-            const subList = nextSibling; // subList 现在是正确的 <DL> 或者 null
             
-            if (subList) { // 只有在找到 <DL> 的情况下才进行递归解析
+            if (subList) {
                 parseNode(subList, newCategoryId);
             }
 
@@ -697,6 +717,7 @@ const parseNode = (node, parentId) => {
         }
     }
 };
+
         
         const rootDl = doc.querySelector('dl');
         if (!rootDl) throw new Error('无效的书签文件格式。');
