@@ -115,7 +115,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const categoryMap = new Map(categories.map(cat => [cat.id, { ...cat, children: [] }]));
         const tree = [];
-        const sortedCategories = [...categories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        // 【稳定排序】如果排序号相同，则按名称排序
+        const sortedCategories = [...categories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
         for (const cat of sortedCategories) {
             if (cat.id === ignoreId) continue;
             if (cat.parentId && categoryMap.has(cat.parentId)) {
@@ -199,7 +200,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const categoryMap = new Map(allCategories.map(cat => [cat.id, { ...cat, children: [] }]));
         const tree = [];
-        [...allCategories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
+        // 【稳定排序】
+        [...allCategories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name)).forEach(cat => {
             if (cat.parentId && categoryMap.has(cat.parentId)) {
                 categoryMap.get(cat.parentId).children.push(categoryMap.get(cat.id));
             } else {
@@ -208,7 +210,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         const buildList = (nodes, level) => {
-            nodes.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
+            // 【稳定排序】
+            nodes.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name)).forEach(cat => {
                 const li = document.createElement('li');
                 li.dataset.id = cat.id;
                 li.innerHTML = `<input type="number" class="cat-order-input" value="${cat.sortOrder || 0}"><div class="cat-name-cell" style="padding-left: ${level * 25}px;"><input type="text" class="cat-name-input" value="${escapeHTML(cat.name)}"></div><select class="cat-parent-select"></select><button class="delete-cat-btn secondary danger" title="删除"><i class="fas fa-trash-alt"></i></button>`;
@@ -351,7 +354,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderUserFormCategories = (visibleIds = [], isDisabled = false) => {
         const container = document.getElementById('user-form-categories'); if (!container) return;
         container.innerHTML = '';
-        const sortedCategories = [...allCategories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        // 【稳定排序】
+        const sortedCategories = [...allCategories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
         const categoryMap = new Map(sortedCategories.map(cat => [cat.id, { ...cat, children: [] }]));
         const tree = [];
         for (const cat of sortedCategories) {
@@ -430,7 +434,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 500));
         
-        allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
+        // 【稳定排序】
+        allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name)).forEach(cat => {
             const option = document.createElement('option');
             option.value = cat.id;
             option.textContent = cat.name;
@@ -451,7 +456,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (selectedCategoryId !== 'all') {
             bookmarksToDisplay = bookmarksToDisplay.filter(bm => bm.categoryId === selectedCategoryId);
         }
-        bookmarksToDisplay.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        // 【稳定排序】
+        bookmarksToDisplay.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
         
         const categoryNameMap = new Map(allCategories.map(c => [c.id, c.name]));
         listEl.innerHTML = '';
