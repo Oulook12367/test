@@ -8,7 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const categoryNav = document.getElementById('category-nav');
     const sidebarFooterNav = document.getElementById('sidebar-footer-nav');
     const logoutButton = document.getElementById('logout-btn');
-    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn'); // Desktop
+    const mobileSidebarToggleBtn = document.getElementById('mobile-sidebar-toggle'); // Mobile
     const actionBtn = document.getElementById('action-btn');
 
     // --- State ---
@@ -48,10 +49,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Data Loading & Rendering ---
     async function initializePage() {
         try {
-            // 【重要修正】重构页面初始化逻辑，使其更健壮
             const token = localStorage.getItem('jwt_token');
 
-            // Case 1: No token, try to load public data
             if (!token) {
                  const publicData = await apiRequest('data');
                  if (publicData && publicData.isPublic) {
@@ -66,7 +65,6 @@ document.addEventListener('DOMContentLoaded', () => {
                  throw new Error("No token and not in public mode.");
             }
             
-            // Case 2: Has a token, verify it and fetch data
             let currentUsername = '';
             try {
                 currentUsername = JSON.parse(atob(token.split('.')[1])).sub;
@@ -75,8 +73,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const data = await apiRequest('data');
-            
-            // Find the correct user from the server response
             const userFromServer = data.users.find(u => u.username === currentUsername);
 
             if (!userFromServer) {
@@ -105,7 +101,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const activeId = document.querySelector('.sidebar .active')?.dataset.id;
         const initialIdToRender = activeId || currentUser.defaultCategoryId || 'all';
         
-        // Ensure the initial category to render is actually visible to the user
         const isVisible = initialIdToRender === 'all' || allCategories.some(c => c.id === initialIdToRender);
         const finalIdToRender = isVisible ? initialIdToRender : 'all';
 
@@ -173,19 +168,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 const li = document.createElement('li');
                 li.dataset.id = node.id;
                 li.style.paddingLeft = `${15 + level * 20}px`;
-
                 let starHTML = '';
                 if (canSetDefault) {
                     const isDefault = node.id === currentUser.defaultCategoryId;
                     starHTML = `<i class="star-icon ${isDefault ? 'fas fa-star is-default' : 'far fa-star'}" data-cat-id="${node.id}" title="设为默认"></i>`;
                 }
-
                 li.innerHTML = `<i class="fas fa-folder fa-fw"></i><span>${escapeHTML(node.name)}</span>${starHTML}`;
                 container.appendChild(li);
                 if (node.children.length > 0) buildTreeUI(node.children, container, level + 1);
             }
         };
-
         buildTreeUI(tree, categoryNav, 0);
     };
     
@@ -208,29 +200,36 @@ document.addEventListener('DOMContentLoaded', () => {
             bookmarksGrid.innerHTML = '<p class="empty-message">这里什么都没有...</p>';
             return;
         }
-        filteredBookmarks.forEach(bm => {
-            const card = document.createElement('a');
-            card.href = bm.url;
-            card.className = 'bookmark-card';
-            card.target = '_blank';
-            card.rel = 'noopener noreferrer';
-            let domain;
-            try {
-                domain = new URL(bm.url).hostname;
-            } catch (e) {
-                domain = '';
-            }
+        bookmarksGrid.innerHTML = filteredBookmarks.map(bm => {
+            let domain = '';
+            try { domain = new URL(bm.url).hostname; } catch (e) {}
             const defaultIcon = `https://www.google.com/s2/favicons?sz=64&domain_url=${domain}`;
-            card.innerHTML = `<h3><img src="${bm.icon || defaultIcon}" alt="" onerror="this.onerror=null;this.src='${defaultIcon}'"> ${escapeHTML(bm.name)}</h3><p>${escapeHTML(bm.description || '')}</p>`;
-            bookmarksGrid.appendChild(card);
-        });
+            return `<a href="${bm.url}" class="bookmark-card" target="_blank" rel="noopener noreferrer">
+                        <h3><img src="${bm.icon || defaultIcon}" alt="" onerror="this.onerror=null;this.src='${defaultIcon}'"> ${escapeHTML(bm.name)}</h3>
+                        <p>${escapeHTML(bm.description || '')}</p>
+                    </a>`;
+        }).join('');
     };
 
     // --- Event Listeners ---
     themeToggleButton.addEventListener('click', () => applyTheme(document.body.classList.contains('light-theme') ? 'dark-theme' : 'light-theme'));
     
-    const toggleSidebar = () => applySidebarState(!appLayout.classList.contains('sidebar-collapsed'));
-    if (sidebarToggleBtn) sidebarToggleBtn.addEventListener('click', toggleSidebar);
+    if (sidebarToggleBtn) sidebarToggleBtn.addEventListener('click', () => applySidebarState(!appLayout.classList.contains('sidebar-collapsed')));
+    
+    // 【新增】移动端导航逻辑
+    if (mobileSidebarToggleBtn) {
+        mobileSidebarToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            appLayout.classList.toggle('sidebar-open');
+        });
+    }
+    // 【新增】点击遮罩层关闭侧边栏
+    appLayout.addEventListener('click', (e) => {
+        if (e.target === appLayout) {
+             appLayout.classList.remove('sidebar-open');
+        }
+    });
+
 
     logoutButton.addEventListener('click', () => {
         localStorage.removeItem('jwt_token');
@@ -259,8 +258,9 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 await apiRequest('users/self', 'PUT', { defaultCategoryId: newDefaultId });
                 currentUser.defaultCategoryId = newDefaultId;
+                const currentActiveId = document.querySelector('.sidebar li.active')?.dataset.id;
                 renderCategories();
-                const activeLi = document.querySelector(`.sidebar li[data-id="${li.dataset.id}"]`);
+                const activeLi = document.querySelector(`.sidebar li[data-id="${currentActiveId}"]`);
                 if(activeLi) activeLi.classList.add('active');
             } catch (error) {
                 alert('设置失败: ' + error.message);
@@ -269,6 +269,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (li) {
+            appLayout.classList.remove('sidebar-open'); // 在移动端，点击后关闭侧边栏
             document.querySelectorAll('.sidebar li').forEach(el => el.classList.remove('active'));
             li.classList.add('active');
             renderBookmarks(li.dataset.id, localSearchInput.value);
