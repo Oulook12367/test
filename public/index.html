@@ -3,18 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的导航页</title>
+    <title>导航中心</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- 【新增】引入科幻风格字体 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 </head>
 <body class="is-loading">
     <div id="app-layout" style="display: none;">
-        <!-- 桌面端侧边栏开关 -->
-        <button id="sidebar-toggle-btn" title="切换侧边栏"><i class="fas fa-angle-double-left"></i></button>
-
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h2>分类</h2>
+                <h2><i class="fas fa-atom fa-spin"></i> 分类</h2>
             </div>
             
             <ul id="category-nav" class="category-nav dynamic">
@@ -28,11 +29,9 @@
 
         <div class="main-content">
             <header>
-                 <!-- 【新增】移动端头部和汉堡按钮 -->
-                <div class="mobile-header">
-                    <button id="mobile-sidebar-toggle" class="button-icon"><i class="fas fa-bars"></i></button>
-                    <h1 class="mobile-title">导航</h1>
-                </div>
+                 <!-- 【修改】将桌面和移动端开关按钮都放在header中 -->
+                <button id="sidebar-toggle-btn" class="button-icon" title="切换侧边栏"><i class="fas fa-bars"></i></button>
+                <button id="mobile-sidebar-toggle" class="button-icon"><i class="fas fa-bars"></i></button>
 
                 <div class="search-bar">
                     <select id="search-engine">
@@ -40,7 +39,7 @@
                         <option value="https://www.bing.com/search?q=">Bing</option>
                         <option value="https://duckduckgo.com/?q=">DuckDuckGo</option>
                     </select>
-                    <input type="search" id="local-search" placeholder="搜索书签或在网络上搜索...">
+                    <input type="search" id="local-search" placeholder="搜索本地或在网络上搜索...">
                 </div>
 
                 <div class="header-buttons">
