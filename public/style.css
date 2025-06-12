@@ -40,7 +40,7 @@ body {
     background-color: var(--bg-light);
     color: var(--text-primary-light);
     transition: background-color var(--transition-speed), color var(--transition-speed);
-    overflow: hidden;
+    overflow-x: hidden; /* 防止移动端横向滚动 */
 }
 body.dark-theme {
     background-color: var(--bg-dark);
@@ -48,7 +48,7 @@ body.dark-theme {
 }
 body.is-loading { visibility: hidden; }
 
-/* 3. LAYOUT (MAIN PAGE & ADMIN) */
+/* 3. LAYOUT (DESKTOP) */
 #app-layout {
     display: flex;
     height: 100vh;
@@ -88,7 +88,6 @@ body.is-loading { visibility: hidden; }
     flex-direction: column;
     overflow-y: auto;
     padding: 1.5rem 2rem;
-    transition: padding-left var(--transition-speed) ease;
 }
 
 header {
@@ -99,9 +98,7 @@ header {
     flex-shrink: 0;
 }
 
-#app-layout.sidebar-collapsed .main-content > header {
-    padding-left: 45px;
-}
+.mobile-header { display: none; } /* 默认隐藏移动端头部 */
 
 /* 4. GENERIC COMPONENTS */
 .button, button {
@@ -189,13 +186,8 @@ input:focus, textarea:focus, select:focus {
     border-right-color: var(--border-dark);
     background-color: var(--surface-dark);
 }
-.search-bar input {
-    flex-grow: 1;
-    border: none;
-}
-.dark-theme .search-bar input {
-    background-color: var(--surface-dark);
-}
+.search-bar input { flex-grow: 1; border: none; }
+.dark-theme .search-bar input { background-color: var(--surface-dark); }
 
 /* 5. PAGE SPECIFIC STYLES */
 
@@ -528,3 +520,86 @@ input:focus, textarea:focus, select:focus {
 .empty-message { text-align: center; color: var(--text-secondary-light); padding: 4rem 0; font-style: italic; }
 .dark-theme .empty-message { color: var(--text-secondary-dark); }
 .error-fullpage { text-align: center; padding: 4rem; font-size: 1.2rem; }
+
+/* 5. RESPONSIVE DESIGN (FOR TABLETS AND PHONES) */
+@media (max-width: 900px) {
+    #sidebar-toggle-btn {
+        display: none; /* 隐藏桌面版开关 */
+    }
+
+    .mobile-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .mobile-header .mobile-title {
+        font-size: 1.25rem;
+        margin: 0;
+    }
+
+    .header-buttons {
+        display: none; /* 隐藏桌面版的右侧按钮组 */
+    }
+
+    header {
+        flex-wrap: wrap;
+    }
+    .search-bar {
+        width: 100%;
+        order: 2; /* 让搜索框换行 */
+    }
+
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100%;
+        z-index: 2000;
+        transform: translateX(-100%);
+        transition: transform var(--transition-speed) ease-in-out;
+        border-right: 1px solid var(--border-light);
+        box-shadow: 4px 0px 15px rgba(0,0,0,0.1);
+    }
+    #app-layout.sidebar-open .sidebar {
+        transform: translateX(0);
+    }
+
+    /* 遮罩层 */
+    #app-layout::after {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 1999;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity var(--transition-speed) ease, visibility var(--transition-speed) ease;
+    }
+    #app-layout.sidebar-open::after {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .main-content {
+        padding: 1rem;
+    }
+
+    #bookmarks-grid {
+        /* 在小屏幕上显示更少的列 */
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    #bookmarks-grid {
+        /* 在手机上只显示一列 */
+        grid-template-columns: 1fr;
+    }
+}
+
+
