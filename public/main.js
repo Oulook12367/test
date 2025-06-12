@@ -41,8 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const applySidebarState = (isCollapsed) => {
         appLayout.classList.toggle('sidebar-collapsed', isCollapsed);
-        const iconClass = isCollapsed ? 'fa-angle-double-right' : 'fa-angle-double-left';
-        if (sidebarToggleBtn) sidebarToggleBtn.innerHTML = `<i class="fas ${iconClass}"></i>`;
         localStorage.setItem('sidebarCollapsed', isCollapsed);
     };
 
@@ -168,16 +166,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 const li = document.createElement('li');
                 li.dataset.id = node.id;
                 li.style.paddingLeft = `${15 + level * 20}px`;
+
                 let starHTML = '';
                 if (canSetDefault) {
                     const isDefault = node.id === currentUser.defaultCategoryId;
                     starHTML = `<i class="star-icon ${isDefault ? 'fas fa-star is-default' : 'far fa-star'}" data-cat-id="${node.id}" title="设为默认"></i>`;
                 }
+
                 li.innerHTML = `<i class="fas fa-folder fa-fw"></i><span>${escapeHTML(node.name)}</span>${starHTML}`;
                 container.appendChild(li);
                 if (node.children.length > 0) buildTreeUI(node.children, container, level + 1);
             }
         };
+
         buildTreeUI(tree, categoryNav, 0);
     };
     
@@ -214,22 +215,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Event Listeners ---
     themeToggleButton.addEventListener('click', () => applyTheme(document.body.classList.contains('light-theme') ? 'dark-theme' : 'light-theme'));
     
+    // 【修改】统一处理侧边栏开关逻辑
     if (sidebarToggleBtn) sidebarToggleBtn.addEventListener('click', () => applySidebarState(!appLayout.classList.contains('sidebar-collapsed')));
     
-    // 【新增】移动端导航逻辑
     if (mobileSidebarToggleBtn) {
         mobileSidebarToggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             appLayout.classList.toggle('sidebar-open');
         });
     }
-    // 【新增】点击遮罩层关闭侧边栏
     appLayout.addEventListener('click', (e) => {
         if (e.target === appLayout) {
              appLayout.classList.remove('sidebar-open');
         }
     });
-
 
     logoutButton.addEventListener('click', () => {
         localStorage.removeItem('jwt_token');
@@ -269,7 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (li) {
-            appLayout.classList.remove('sidebar-open'); // 在移动端，点击后关闭侧边栏
+            appLayout.classList.remove('sidebar-open');
             document.querySelectorAll('.sidebar li').forEach(el => el.classList.remove('active'));
             li.classList.add('active');
             renderBookmarks(li.dataset.id, localSearchInput.value);
