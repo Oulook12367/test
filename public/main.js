@@ -239,11 +239,21 @@ document.addEventListener('DOMContentLoaded', () => {
         renderBookmarks(document.querySelector('.sidebar .active')?.dataset.id || 'all', e.target.value);
     }, 250));
     
-    localSearchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && e.target.value.trim() !== '') {
-            window.open(searchEngineSelect.value + encodeURIComponent(e.target.value.trim()), '_blank');
-        }
-    });
+ // 在 main.js 中找到此段
+localSearchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.value.trim() !== '') {
+        // 修改这一行
+        document.getElementById('search-engine-submit').click();
+    }
+});
+
+// 添加新的点击事件
+document.getElementById('search-engine-submit').addEventListener('click', () => {
+    const query = localSearchInput.value.trim();
+    if (query !== '') {
+        window.open(searchEngineSelect.value + encodeURIComponent(query), '_blank');
+    }
+});
 
     document.querySelector('.sidebar').addEventListener('click', async (e) => {
         const star = e.target.closest('.star-icon');
