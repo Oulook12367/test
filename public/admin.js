@@ -14,14 +14,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let allBookmarks = [], allCategories = [], allUsers = [];
 
     // --- 3. UI Flow & Modals ---
-
     const showModal = (modal) => {
-    hideAllModals(); // 新增：先隐藏所有模态框
-    if (modal) {
-        modalBackdrop.style.display = 'flex';
-        modal.style.display = 'block';
-    }
-};
+        hideAllModals(); // [最终修复] 在显示任何新模态框之前，先隐藏所有已存在的模态框
+        if (modal) {
+            modalBackdrop.style.display = 'flex';
+            modal.style.display = 'block';
+        }
+    };
     const hideAllModals = () => { if(modalBackdrop) modalBackdrop.style.display = 'none'; document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); };
     const showConfirm = (title, text, onConfirm) => {
         if (!confirmTitle || !confirmText || !confirmModal || !confirmBtnYes) return;
@@ -127,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         buildOptions(tree, 0);
     };
     
-    // --- All render functions now ONLY render HTML. They do NOT add listeners. ---
+    // --- Render functions for each tab ---
     const renderCategoryAdminTab = (container) => {
         container.innerHTML = `<p class="admin-panel-tip">通过修改表单来调整分类，完成后请点击下方的“保存”按钮。</p><div class="category-admin-header"><span>排序</span><span>分类名称</span><span>上级分类</span><span>操作</span></div><ul id="category-admin-list"></ul><div class="admin-panel-actions"><button id="save-categories-btn" class="button button-primary"><i class="fas fa-save"></i> 保存全部分类</button><button id="add-new-category-btn" class="button"><i class="fas fa-plus"></i> 添加新分类</button></div>`;
         const listEl = container.querySelector('#category-admin-list');
@@ -193,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
         container.innerHTML = `<div class="system-setting-item"><h3><i class="fas fa-file-import"></i> 导入书签</h3><p>从浏览器导出的HTML文件导入书签。导入操作会合并现有书签，不会清空原有数据。</p><button id="import-bookmarks-btn-admin" class="button">选择HTML文件</button><input type="file" id="import-file-input-admin" accept=".html,.htm" style="display: none;"></div>`;
     };
 
-    // --- Helper Functions (Now all are here) ---
+    // --- All Helper Functions ---
     const handleAddNewCategory = () => {
         const listEl = document.getElementById('category-admin-list');
         if (!listEl) return;
@@ -494,119 +493,77 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- MASTER CLICK LISTENER ---
         adminContentPanel.addEventListener('click', (event) => {
             const target = event.target;
-const isDeleteBtn = target.closest('.delete-cat-btn, .delete-bm-btn, .button-icon.danger');
- // 修复1：优先处理所有删除操作并完全阻止事件传播
-        if (isDeleteBtn) {
-            event.stopPropagation();
-            event.preventDefault();
-            
-            // 分类删除
-            if (target.closest('.delete-cat-btn')) {
-                const listItem = target.closest('li[data-id]');
-                if (!listItem) return;
-                const catId = listItem.dataset.id;
-                if (catId.startsWith('new-')) {
-                    listItem.remove();
-                } else {
-                    const catName = listItem.querySelector('.cat-name-input').value;
-                    handleDeleteCategory(catId, catName);
-                }
-                return;
-            }
-            
-            // 书签删除
-            const bookmarkListItem = target.closest('li[data-id]');
-            if (bookmarkListItem && target.closest('.delete-bm-btn')) {
-                const bookmark = allBookmarks.find(bm => bm.id === bookmarkListItem.dataset.id);
-                if (bookmark) handleDeleteBookmark(bookmark);
-                return;
-            }
-            
-            // 用户删除
-            const userListItem = target.closest('li[data-username]');
-            if (userListItem && target.closest('.button-icon.danger')) {
-                const username = userListItem.dataset.username;
-                showConfirm('删除用户', `确定删除用户 "${username}"?`, async () => {
-                    try {
-                        await apiRequest(`users/${encodeURIComponent(username)}`, 'DELETE');
-                        await initializePage('tab-users');
-                    } catch (error) { alert(error.message); }
-                });
-                return;
-            }
-        }
-            
-            // --- Category Tab Logic ---
-            if (document.getElementById('tab-categories')?.classList.contains('active')) {
-                if (target.closest('.delete-cat-btn')) {
-                    event.stopPropagation();
-                    const listItem = target.closest('li[data-id]');
-                    if (!listItem) return;
-                    const catId = listItem.dataset.id;
-                    if (catId.startsWith('new-')) {
-                        listItem.remove();
-                    } else {
-                        const catName = listItem.querySelector('.cat-name-input').value;
-                        handleDeleteCategory(catId, catName);
+            const activeTab = document.querySelector('.admin-tab-content.active');
+            if (!activeTab) return;
+
+            // Use a switch statement for clarity and to prevent fall-through
+            switch (activeTab.id) {
+                case 'tab-categories':
+                    if (target.closest('.delete-cat-btn')) {
+                        event.stopPropagation();
+                        const listItem = target.closest('li[data-id]');
+                        if (!listItem) return;
+                        const catId = listItem.dataset.id;
+                        if (catId.startsWith('new-')) {
+                            listItem.remove();
+                        } else {
+                            const catName = listItem.querySelector('.cat-name-input').value;
+                            handleDeleteCategory(catId, catName);
+                        }
+                    } else if (target.closest('#add-new-category-btn')) {
+                        handleAddNewCategory();
+                    } else if (target.closest('#save-categories-btn')) {
+                        handleSaveCategories();
                     }
-                    return;
-                }
-                if (target.closest('#add-new-category-btn')) { handleAddNewCategory(); return; }
-                if (target.closest('#save-categories-btn')) { handleSaveCategories(); return; }
-            }
+                    break;
 
-            // --- Bookmarks Tab Logic ---
-            if (document.getElementById('tab-bookmarks')?.classList.contains('active')) {
-                const listItem = target.closest('li[data-id]');
-                if (!listItem) { // Handle buttons outside the list
-                     if (target.closest('#add-new-bookmark-btn')) { handleAddNewBookmark(); return; }
-                     if (target.closest('#save-bookmarks-btn')) { handleSaveBookmarks(); return; }
-                     return;
-                }
-                const bookmark = allBookmarks.find(bm => bm.id === listItem.dataset.id);
-                if (!bookmark) return;
+                case 'tab-bookmarks':
+                    const bmListItem = target.closest('li[data-id]');
+                    if (bmListItem) {
+                        const bookmark = allBookmarks.find(bm => bm.id === bmListItem.dataset.id);
+                        if (!bookmark) return;
 
-                if (target.closest('.edit-bm-btn')) {
-                    event.stopPropagation();
-                    handleEditBookmark(bookmark);
-                    return;
-                }
-                if (target.closest('.delete-bm-btn')) {
-                    event.stopPropagation();
-                    handleDeleteBookmark(bookmark);
-                    return;
-                }
-            }
+                        if (target.closest('.edit-bm-btn')) {
+                            event.stopPropagation();
+                            handleEditBookmark(bookmark);
+                        } else if (target.closest('.delete-bm-btn')) {
+                            event.stopPropagation();
+                            handleDeleteBookmark(bookmark);
+                        }
+                    } else { // Buttons outside the list
+                        if (target.closest('#add-new-bookmark-btn')) {
+                            handleAddNewBookmark();
+                        } else if (target.closest('#save-bookmarks-btn')) {
+                            handleSaveBookmarks();
+                        }
+                    }
+                    break;
 
-            // --- Users Tab Logic ---
-            if (document.getElementById('tab-users')?.classList.contains('active')) {
-                const userListItem = target.closest('li[data-username]');
-                if(target.closest('.button-icon.danger')) { // Delete button
-                    event.stopPropagation();
-                    if(!userListItem) return;
-                    const username = userListItem.dataset.username;
-                    showConfirm('删除用户', `确定删除用户 "${username}"?`, async () => {
-                        try {
-                            await apiRequest(`users/${encodeURIComponent(username)}`, 'DELETE');
-                            await initializePage('tab-users');
-                        } catch (error) { alert(error.message); }
-                    });
-                    return;
-                }
-                if(userListItem) { // Click on the list item itself
-                    const user = allUsers.find(u => u.username === userListItem.dataset.username);
-                    if (user) populateUserForm(user);
-                    return;
-                }
-                if (target.closest('#user-form-clear-btn')) { clearUserForm(); return; }
-            }
+                case 'tab-users':
+                    const userListItem = target.closest('li[data-username]');
+                    if (target.closest('.button-icon.danger')) { // Delete button
+                        event.stopPropagation();
+                        if (!userListItem) return;
+                        const username = userListItem.dataset.username;
+                        showConfirm('删除用户', `确定删除用户 "${username}"?`, async () => {
+                            try {
+                                await apiRequest(`users/${encodeURIComponent(username)}`, 'DELETE');
+                                await initializePage('tab-users');
+                            } catch (error) { alert(error.message); }
+                        });
+                    } else if (userListItem) { // Click on the list item itself
+                        const user = allUsers.find(u => u.username === userListItem.dataset.username);
+                        if (user) populateUserForm(user);
+                    } else if (target.closest('#user-form-clear-btn')) {
+                        clearUserForm();
+                    }
+                    break;
 
-            // --- System Tab Logic ---
-            if (document.getElementById('tab-system')?.classList.contains('active')) {
-                if(target.closest('#import-bookmarks-btn-admin')) {
-                    document.getElementById('import-file-input-admin')?.click();
-                    return;
-                }
+                case 'tab-system':
+                    if (target.closest('#import-bookmarks-btn-admin')) {
+                        document.getElementById('import-file-input-admin')?.click();
+                    }
+                    break;
             }
         });
 
@@ -622,7 +579,9 @@ const isDeleteBtn = target.closest('.delete-cat-btn, .delete-bm-btn, .button-ico
         adminContentPanel.addEventListener('change', (event) => {
             if (document.getElementById('tab-bookmarks')?.classList.contains('active')) {
                 if (event.target.id === 'bookmark-category-filter') {
-                    renderAdminTab('tab-bookmarks');
+                    const newCategoryId = event.target.value;
+                    sessionStorage.setItem('admin_bookmark_filter', newCategoryId);
+                    renderBookmarkList(newCategoryId); // Only re-render the list
                 }
             }
             if (document.getElementById('tab-users')?.classList.contains('active')) {
@@ -649,7 +608,7 @@ const isDeleteBtn = target.closest('.delete-cat-btn, .delete-bm-btn, .button-ico
         });
     }
 
-    // --- Final Initialization ---
+    // --- Final Initialization & Modal Handlers ---
     document.querySelectorAll('.close-btn').forEach(btn => btn.addEventListener('click', hideAllModals));
     const confirmNoBtn = document.getElementById('confirm-btn-no');
     if(confirmNoBtn) confirmNoBtn.onclick = hideAllModals;
