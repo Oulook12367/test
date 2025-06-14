@@ -89,7 +89,7 @@ input::placeholder, textarea::placeholder { color: rgba(255, 255, 255, 0.7); }
 
 select {
     -webkit-appearance: none; -moz-appearance: none; appearance: none;
-    width: 20%; background: transparent; border: none;
+    width: 100%; background: transparent; border: none;
     border-bottom: 2px solid rgba(255, 255, 255, 0.5);
     padding: 10px 4px; color: white; font-size: 1rem;
     transition: border-color 0.3s;
@@ -101,11 +101,10 @@ select {
 }
 select:focus { outline: none; border-bottom-color: white; }
 
-/* [关键修正] 强制为下拉选项设置可见的样式 */
 select option {
-    background: #1e293b; /* 一个明确的、不透明的深色背景 */
-    color: #f1f5f9;      /* 一个明亮的文字颜色 */
-    padding: 12px 8px;   /* 增加内边距，确保选项有高度 */
+    background: #1e293b; 
+    color: #f1f5f9;      
+    padding: 12px 8px;   
 }
 
 label { display: block; margin-bottom: 0.5rem; font-weight: 700; }
@@ -123,6 +122,7 @@ body.login-page { display: flex; align-items: center; justify-content: center; p
     margin-bottom: 1.5rem; /* 为每个表单组添加 1.5rem 的下外边距 */
 }
 /* ------------------------- */
+
 .auth-box .full-width { width: 100%; padding: 14px; }
 
 #app-layout { display: flex; height: 100vh; padding: 1.5rem; gap: 1.5rem; }
@@ -141,7 +141,14 @@ body.login-page { display: flex; align-items: center; justify-content: center; p
 .header { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1.5rem; }
 .search-bar { flex-grow: 1; }
 .search-bar form { display: flex; align-items: center; }
-.search-bar select { flex-shrink: 0; min-width: 120px; border-radius: 0; border-right: 2px solid rgba(255,255,255,0.5); }
+
+/* [关键修正] 强制为下拉框设置固定且不可压缩的宽度 */
+.search-bar select {
+    width: 130px; /* 赋予一个明确的宽度 */
+    flex-shrink: 0; /* 禁止在flex布局中被压缩 */
+    border-radius: 0;
+    border-right: 2px solid rgba(255,255,255,0.5);
+}
 .search-bar input { padding-left: 1rem; }
 
 #bookmarks-grid {
