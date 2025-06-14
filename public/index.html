@@ -27,7 +27,6 @@
                 </div>
                 <div class="search-bar">
                     <form onsubmit="event.preventDefault(); document.getElementById('local-search').dispatchEvent(new KeyboardEvent('keyup', {'key': 'Enter'}));">
-                        <!-- [重要修正] 将搜索引擎选项加回到HTML中 -->
                         <select id="search-engine">
                             <option value="https://www.google.com/search?q=">Google</option>
                             <option value="https://www.bing.com/search?q=">Bing</option>
