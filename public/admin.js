@@ -640,6 +640,60 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+ // --- [新增] MASTER FOCUSOUT LISTENER for URL Scraping ---
+        adminContentPanel.addEventListener('focusout', async (event) => {
+            // 仅当事件发生在书签编辑模态框中的 URL 输入框时触发
+            if (event.target.id === 'bm-edit-url' && bookmarkEditModal.style.display === 'block') {
+                const urlInput = event.target;
+                const url = urlInput.value.trim();
+
+                // 简单的URL验证
+                if (!url || !url.startsWith('http')) {
+                    return;
+                }
+                
+                // 查找表单中的其他字段
+                const nameInput = document.getElementById('bm-edit-name');
+                const descInput = document.getElementById('bm-edit-desc');
+                const iconInput = document.getElementById('bm-edit-icon');
+                const originalPlaceholder = urlInput.placeholder;
+
+                try {
+                    // 提供视觉反馈：正在获取信息...
+                    urlInput.placeholder = '正在获取网站信息...';
+                    urlInput.disabled = true;
+                    nameInput.disabled = true;
+
+                    // 调用新的API端点
+                    const data = await apiRequest(`scrape-url?url=${encodeURIComponent(url)}`);
+
+                    // 如果名称、描述、图标字段为空，则用获取到的数据填充
+                    if (data.title && !nameInput.value) {
+                        nameInput.value = data.title;
+                    }
+                    if (data.description && !descInput.value) {
+                        descInput.value = data.description;
+                    }
+                    if (data.icon && !iconInput.value) {
+                        iconInput.value = data.icon;
+                    }
+                } catch (error) {
+                    console.error('网址信息获取失败:', error);
+                    // 可以在这里给用户一个提示，例如在模态框的错误消息区
+                    const errorEl = bookmarkEditForm.querySelector('.modal-error-message');
+                    if (errorEl) errorEl.textContent = `网址信息获取失败: ${error.message}`;
+                } finally {
+                    // 恢复输入框状态
+                    urlInput.placeholder = originalPlaceholder;
+                    urlInput.disabled = false;
+                    nameInput.disabled = false;
+                }
+            }
+        });
+    }
+
+
+    
     // --- Final Initialization & Modal Handlers ---
     document.querySelectorAll('.close-btn').forEach(btn => btn.addEventListener('click', hideAllModals));
     const confirmNoBtn = document.getElementById('confirm-btn-no');
