@@ -52,40 +52,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 4. Core Logic ---
 // 替换 admin.js 中的整个 initializePage 函数
+// 替换 admin.js 中的整个 initializePage 函数
 async function initializePage(activeTabId = 'tab-categories') {
     try {
         const token = localStorage.getItem('jwt_token');
-        if (!token) {
-            // 如果本地没有 token，则无法访问管理页面
-            throw new Error("未找到 Token，拒绝访问。");
-        }
+        
+        // 使用新的、安全的函数来解析 Token
+        const payload = parseJwtPayload(token);
 
-        // --- 关键修正 ---
-        // 使用与 main.js 相同的、带有错误处理的健壮方式来解析用户名
-        let currentUsername = '';
-        try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            currentUsername = payload.sub;
-            // 同时，我们在这里也进行一次初步的角色检查，如果token本身就没admin角色，就没必要发API请求了
-            if (!payload.roles || !payload.roles.includes('admin')) {
-                throw new Error("Token 声明的用户非管理员。");
-            }
-        } catch (e) {
-            // 捕获 atob 或 JSON.parse 可能发生的错误
-            throw new Error("无效或已损坏的 Token，无法解析。");
+        // 如果 token 不存在或解析失败，或者角色不正确，则抛出错误
+        if (!payload || !payload.roles || !payload.roles.includes('admin')) {
+            throw new Error("Token 无效或用户非管理员。");
         }
-
-        // 向服务器请求数据。到这一步时，我们已经知道 Token 是有效且声明为 admin 的
+        
+        // Token 验证通过后，再从服务器获取最新数据
         const data = await apiRequest('data');
 
-        // 为确保万无一失，再次基于从服务器返回的最新数据进行最终确认
-        const currentUserFromServer = data.users.find(u => u.username === currentUsername);
+        // (可选但推荐) 再次验证从服务器返回的数据，防止权限在登录后被变更
+        const currentUserFromServer = data.users.find(u => u.username === payload.sub);
         if (!currentUserFromServer || !currentUserFromServer.roles.includes('admin')) {
-            // 这可以处理用户在登录后权限被其他管理员撤销的边缘情况
-            throw new Error("用户权限不足或数据异常。");
+            throw new Error("用户权限不足或服务器数据异常。");
         }
 
-        // --- 后续逻辑保持不变 ---
         allCategories = data.categories || [];
         allBookmarks = data.bookmarks || [];
         allUsers = data.users || [];
@@ -107,8 +95,7 @@ async function initializePage(activeTabId = 'tab-categories') {
         }
 
     } catch (error) {
-        console.error("Initialization failed:", error);
-        // 如果初始化失败，跳转回功能正常的主页是正确的行为
+        console.error("Initialization failed:", error); // 这就是您看到的错误信息
         window.location.href = 'index.html';
     }
 }
