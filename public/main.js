@@ -192,36 +192,33 @@ document.addEventListener('DOMContentLoaded', () => {
         buildTreeUI(tree, categoryNav, 0);
     };
     
-    const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
-        if (!bookmarksGrid) return; // Add check
-        let categoryIdsToDisplay;
-        if (categoryId === 'all') {
-            categoryIdsToDisplay = new Set(allCategories.map(c => c.id));
-        } else {
-            categoryIdsToDisplay = getRecursiveCategoryIds( [categoryId], allCategories);
-        }
-        let filteredBookmarks = allBookmarks.filter(bm => categoryIdsToDisplay.has(bm.categoryId));
-        if (searchTerm) {
-            const lower = searchTerm.toLowerCase();
-            filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lower) || bm.url.toLowerCase().includes(lower));
-        }
-        filteredBookmarks.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
-        
-        bookmarksGrid.innerHTML = '';
-        if(filteredBookmarks.length === 0){
-            bookmarksGrid.innerHTML = '<p class="empty-message">这里什么都没有...</p>';
-            return;
-        }
-        bookmarksGrid.innerHTML = filteredBookmarks.map(bm => {
-            let domain = '';
-            try { domain = new URL(bm.url).hostname; } catch (e) {}
-            const defaultIcon = `https://www.google.com/s2/favicons?sz=64&domain_url=${domain}`;
-            return `<a href="${bm.url}" class="bookmark-card glass-pane" target="_blank" rel="noopener noreferrer">
-                        <h3><img src="${bm.icon || defaultIcon}" alt="" onerror="this.onerror=null;this.src='${defaultIcon}'"> ${escapeHTML(bm.name)}</h3>
-                        <p>${escapeHTML(bm.description || '')}</p>
-                    </a>`;
-        }).join('');
-    };
+   const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
+    if (!bookmarksGrid) return; 
+    let categoryIdsToDisplay;
+    if (categoryId === 'all') {
+        categoryIdsToDisplay = new Set(allCategories.map(c => c.id));
+    } else {
+        categoryIdsToDisplay = getRecursiveCategoryIds( [categoryId], allCategories);
+    }
+    let filteredBookmarks = allBookmarks.filter(bm => categoryIdsToDisplay.has(bm.categoryId));
+    if (searchTerm) {
+        const lower = searchTerm.toLowerCase();
+        filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lower) || bm.url.toLowerCase().includes(lower));
+    }
+    filteredBookmarks.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
+    
+
+
+          bookmarksGrid.innerHTML = filteredBookmarks.map(bm => {
+        let domain = '';
+        try { domain = new URL(bm.url).hostname; } catch (e) {}
+        const defaultIcon = `https://www.google.com/s2/favicons?sz=64&domain_url=${domain}`;
+        return `<a href="${bm.url}" class="bookmark-card glass-pane" target="_blank" rel="noopener noreferrer">
+                    <h3><img src="${bm.icon || defaultIcon}" alt="" onerror="this.onerror=null;this.src='${defaultIcon}'"> ${escapeHTML(bm.name)}</h3>
+                    <p>${escapeHTML(bm.description || '')}</p>
+                </a>`;
+    }).join('');
+};
 
     // --- Event Listeners ---
     // [修正] 为所有事件监听器添加元素存在性检查
