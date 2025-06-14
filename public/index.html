@@ -3,66 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>导航中心 - 大胆活力</title>
+    <title>导航中心</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* Custom style for the search engine dropdown arrow */
-        #search-engine {
-            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-            background-repeat: no-repeat;
-            background-position: right 0.5rem center;
-            background-size: 1.5em 1.5em;
-        }
-    </style>
 </head>
-<body class="bg-gradient-to-br from-purple-600 to-indigo-800 text-white">
+<body>
     <div id="app-layout">
-        <aside class="sidebar bg-black/30 backdrop-blur-sm border-r border-white/10">
+        <aside class="sidebar">
             <div class="sidebar-header">
-                <h2><i class="fas fa-atom fa-spin"></i> 分类</h2>
+                <h2><i class="fas fa-rocket"></i> 导航中心</h2>
             </div>
             <ul id="category-nav" class="category-nav dynamic"></ul>
             <ul id="sidebar-footer-nav" class="category-nav"></ul>
         </aside>
 
-        <div class="main-content">
-            <header class="p-4 flex items-center justify-between w-full">
-                <div class="flex-shrink-0">
-                    <button id="sidebar-toggle-btn" class="button-icon text-white text-xl p-2 rounded-full hover:bg-white/20 transition-colors" title="切换侧边栏"><i class="fas fa-bars"></i></button>
-                    <button id="mobile-sidebar-toggle" class="button-icon text-white text-xl p-2 rounded-full hover:bg-white/20 transition-colors" title="打开分类"><i class="fas fa-bars"></i></button>
-                </div>
+        <div class="main-content-wrapper">
+            <header style="padding: 1.5rem; display: flex; align-items: center; gap: 1rem;">
+                <button id="sidebar-toggle-btn" class="button-icon" title="切换侧边栏"><i class="fas fa-bars"></i></button>
+                <button id="mobile-sidebar-toggle" class="button-icon" title="打开分类"><i class="fas fa-bars"></i></button>
 
-                <div class="flex-grow max-w-2xl mx-4">
-                    <form onsubmit="event.preventDefault(); document.getElementById('search-engine-submit').click();" class="flex w-full items-center bg-white/20 border border-white/30 rounded-full backdrop-blur-sm shadow-lg focus-within:bg-white/30 transition-all duration-300">
-                        <div class="relative">
-                            <select id="search-engine" class="bg-transparent text-white font-semibold pl-4 pr-10 py-3 appearance-none focus:outline-none cursor-pointer">
-                                <option value="https://www.google.com/search?q=" class="text-black">Google</option>
-                                <option value="https://www.bing.com/search?q=" class="text-black">Bing</option>
-                                <option value="https://duckduckgo.com/?q=" class="text-black">DuckDuckGo</option>
-                            </select>
-                        </div>
-                        <div class="w-px h-6 bg-white/30 mx-2"></div>
-                        <input type="search" id="local-search" placeholder="搜索本地书签或网络..." class="w-full pl-2 pr-4 py-3 text-lg text-white placeholder-indigo-200 bg-transparent focus:outline-none">
-                        <button type="button" id="search-engine-submit" class="text-white rounded-full p-3 m-1 text-lg font-semibold hover:bg-white/20 focus:outline-none transition-colors">
-                            <i class="fas fa-search"></i>
-                        </button>
+                <div style="flex-grow: 1; max-width: 700px; margin: 0 auto;">
+                    <form id="search-form" class="search-form-container">
+                        <select id="search-engine">
+                            <option value="https://www.google.com/search?q=">Google</option>
+                            <option value="https://www.bing.com/search?q=">Bing</option>
+                            <option value="https://duckduckgo.com/?q=">DuckDuckGo</option>
+                        </select>
+                        <div class="divider"></div>
+                        <input type="search" id="local-search" placeholder="搜索书签或网络...">
+                        <button type="submit" class="button-icon" title="搜索" style="color: var(--color-accent);"><i class="fas fa-search"></i></button>
                     </form>
                 </div>
-                
-                <div class="flex-shrink-0 flex items-center space-x-2">
+
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
                     <button id="action-btn" class="button-primary" style="display: none;"></button>
-                    <button id="theme-toggle" title="切换主题" class="button-icon text-white text-xl p-2 rounded-full hover:bg-white/20 transition-colors"></button>
-                    <button id="logout-btn" title="退出登录" class="button-icon text-white text-xl p-2 rounded-full hover:bg-white/20 transition-colors" style="display: none;"><i class="fas fa-sign-out-alt"></i></button>
+                    <button id="theme-toggle" title="切换主题" class="button-icon"></button>
+                    <button id="logout-btn" title="退出登录" class="button-icon" style="display: none;"><i class="fas fa-sign-out-alt"></i></button>
                 </div>
             </header>
 
-            <main class="w-full max-w-7xl mx-auto px-4">
+            <main>
                 <div id="bookmarks-grid"></div>
             </main>
         </div>
     </div>
+
+    <div id="modal-backdrop" class="modal-backdrop">
+        </div>
 
     <script src="shared.js"></script>
     <script src="main.js"></script>
