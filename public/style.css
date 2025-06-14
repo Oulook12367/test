@@ -1,37 +1,47 @@
-/* --- UNIFIED & MODERN STYLESHEET V2 --- */
+/*
+ * UNIFIED & MODERN STYLESHEET V3.0
+ * Description: A complete visual overhaul for the navigation project.
+ * Fixes layout issues, unifies style, and implements a modern, responsive design.
+ */
 
-/* 1. FONT & ROOT */
+/* 1. GLOBAL SETTINGS & MODERN COLOR PALETTE */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
 
 :root {
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --sidebar-width: 260px;
     --transition-speed: 0.3s;
-    --color-gray-900: #111827;
-    --color-gray-800: #1f2937;
-    --color-gray-700: #374151;
-    --color-gray-400: #9ca3af;
-    --color-indigo-300: #a5b4fc;
-    --color-indigo-600: #4f46e5;
-    --color-indigo-700: #4338ca;
-    --color-white: #ffffff;
-    --color-danger: #ef4444;
+
+    /* A fresh, modern color palette */
+    --color-bg-dark: #111827;      /* Dark gray for main background */
+    --color-surface-dark: #1f2937; /* Slightly lighter gray for cards, modals */
+    --color-border-dark: #374151;  /* Subtle borders */
+    --color-text-primary: #f9fafb; /* Off-white for primary text */
+    --color-text-secondary: #9ca3af;/* Muted gray for secondary text */
+    --color-accent: #6366f1;       /* Indigo for primary actions, highlights */
+    --color-accent-hover: #4f46e5; /* Darker indigo for hover */
+    --color-danger: #ef4444;       /* Red for delete/danger actions */
 }
 
-/* 2. GLOBAL & BODY */
-* { box-sizing: border-box; }
+* {
+    box-sizing: border-box;
+}
 
 body {
     font-family: var(--font-sans);
     margin: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    color: var(--color-white);
-    background-color: var(--color-indigo-700); /* Fallback */
+    background-color: var(--color-bg-dark);
+    color: var(--color-text-primary);
 }
-body.is-loading { visibility: hidden; }
 
-/* 3. LAYOUT */
+body.is-loading {
+    visibility: hidden;
+}
+
+
+/* 2. LAYOUT & STRUCTURE */
 #app-layout {
     display: flex;
     height: 100vh;
@@ -39,144 +49,290 @@ body.is-loading { visibility: hidden; }
     overflow-x: hidden;
     position: relative;
 }
-.main-content {
+
+.main-content-wrapper {
     flex-grow: 1;
     display: flex;
     flex-direction: column;
     height: 100vh;
     overflow-y: auto;
 }
+
 .sidebar {
     width: var(--sidebar-width);
     flex-shrink: 0;
+    background-color: rgba(31, 41, 55, 0.7); /* surface-dark with transparency */
+    backdrop-filter: blur(10px);
+    border-right: 1px solid var(--color-border-dark);
     transition: margin-left var(--transition-speed) ease-in-out;
     display: flex;
     flex-direction: column;
 }
+
 #app-layout.sidebar-collapsed .sidebar {
     margin-left: calc(-1 * var(--sidebar-width));
 }
-main { flex-grow: 1; }
 
-/* 4. MAIN PAGE COMPONENTS */
+main {
+    flex-grow: 1;
+    padding: 1.5rem;
+    width: 100%;
+    max-width: 1400px; /* Constrains content width on large screens */
+    margin: 0 auto;
+}
+
+
+/* 3. REFINED COMPONENTS */
+
+/* --- Buttons --- */
+.button, button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.65rem 1.25rem;
+    font-weight: 600;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+.button-primary {
+    background-color: var(--color-accent);
+    color: var(--color-text-primary);
+}
+.button-primary:hover {
+    background-color: var(--color-accent-hover);
+}
+.button.secondary, button.secondary {
+    background-color: var(--color-surface-dark);
+    border-color: var(--color-border-dark);
+    color: var(--color-text-primary);
+}
+.button.secondary:hover {
+    background-color: var(--color-border-dark);
+}
+.button.danger {
+    background-color: transparent;
+    color: var(--color-danger);
+}
+.button.danger:hover {
+    background-color: rgba(239, 68, 68, 0.1);
+}
+.button-icon {
+    padding: 0.6rem;
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+}
+.button-icon:hover {
+    color: var(--color-text-primary);
+    background-color: var(--color-surface-dark)
+}
+
+/* --- Forms & Search Bar --- */
+.search-form-container {
+    display: flex;
+    align-items: center;
+    background-color: var(--color-surface-dark);
+    border: 1px solid var(--color-border-dark);
+    border-radius: 9999px; /* pill shape */
+    padding: 0.25rem;
+    transition: all 0.2s ease;
+}
+.search-form-container:focus-within {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4);
+}
+.search-form-container select, .search-form-container input {
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--color-text-primary);
+    font-size: 1rem;
+    padding: 0.5rem 1rem;
+}
+.search-form-container select {
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 1.25em 1.25em;
+    padding-right: 2.25rem;
+    font-weight: 500;
+}
+.search-form-container .divider {
+    width: 1px;
+    height: 1.5rem;
+    background-color: var(--color-border-dark);
+}
+
+/* --- Bookmarks --- */
 #bookmarks-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 1.5rem;
-    padding-bottom: 2rem;
 }
-/* Other components like .bookmark-card, .sidebar-header, .category-nav are fine from previous CSS */
-.bookmark-card { /* Small tweaks */
-    display: block; background-color: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px);
-    border-radius: 0.75rem; padding: 1.25rem; text-decoration: none; color: var(--color-white); transition: all 0.2s ease;
+.bookmark-card {
+    display: block;
+    background-color: var(--color-surface-dark);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    text-decoration: none;
+    color: var(--color-text-primary);
+    transition: all 0.2s ease;
+    border: 1px solid var(--color-border-dark);
 }
-.bookmark-card:hover { transform: translateY(-5px); background-color: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.3); }
+.bookmark-card:hover {
+    transform: translateY(-5px);
+    border-color: var(--color-accent);
+}
 
-/* 5. ADMIN & LOGIN PAGES */
-.auth-container, #admin-page-container {
+/* --- Modals --- */
+.modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+.modal-backdrop.visible {
+    display: flex;
+}
+.modal {
+    background-color: var(--color-surface-dark);
+    border-radius: 1rem;
+    padding: 2rem;
+    width: 90%;
+    max-width: 500px;
+}
+
+
+/* 4. PAGE-SPECIFIC STYLES */
+
+/* --- Main Page Sidebar --- */
+.sidebar-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--color-border-dark);
+}
+.category-nav { list-style: none; padding: 0.5rem; margin: 0; }
+#sidebar-footer-nav { border-top: 1px solid var(--color-border-dark); }
+.category-nav li {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.category-nav li.active, .category-nav li:hover {
+    background-color: var(--color-accent);
+    color: var(--color-text-primary);
+}
+
+
+/* --- Admin & Login Pages --- */
+.auth-container, .admin-page-container-wrapper {
     min-height: 100vh;
     padding: 1rem;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(to right, #1e3a8a, #3730a3);
 }
-.auth-box {
-    width: 100%; max-width: 420px; padding: 2.5rem; background-color: var(--color-gray-900);
-    border-radius: 1rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+.auth-box, .admin-page-container {
+    width: 100%;
+    max-width: 420px;
+    padding: 2.5rem;
+    background-color: var(--color-surface-dark);
+    border-radius: 1rem;
 }
-#admin-page-container { max-width: 1400px; width: 100%; justify-content: flex-start; }
+.admin-page-container {
+    max-width: 1400px;
+    padding: 0;
+    height: calc(100vh - 4rem);
+    display: flex;
+    flex-direction: column;
+}
 .admin-header {
-    width: 100%; display: flex; justify-content: space-between; align-items: center;
-    padding: 1rem 0 2rem 0; color: white;
+    padding: 2rem 2.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--color-border-dark);
 }
-.admin-header h1 { font-size: 2rem; font-weight: 900; margin: 0; }
-.admin-panel-container {
-    max-width: 1400px; width: 100%; padding: 0; display: flex; flex-direction: row;
-    height: calc(100vh - 160px); background-color: var(--color-gray-900); border-radius: 1rem;
+.admin-content-area {
+    display: flex;
+    flex-grow: 1;
     overflow: hidden;
 }
 .admin-panel-nav {
-    flex-shrink: 0; width: 220px; border-right: 1px solid var(--color-gray-700); padding: 1rem;
-    display: flex; flex-direction: column; gap: 0.5rem; /* Default is column */
+    flex-shrink: 0;
+    width: 240px;
+    border-right: 1px solid var(--color-border-dark);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column; /* Vertical by default */
+    gap: 0.5rem;
 }
-.admin-panel-nav a {
-    display: flex; align-items: center; gap: 10px; padding: 0.75rem 1rem; border-radius: 0.5rem;
-    text-decoration: none; font-weight: 500; color: var(--color-gray-400); transition: all 0.2s;
+.admin-panel-content {
+    flex-grow: 1;
+    padding: 1.5rem 2rem;
+    overflow-y: auto;
 }
-.admin-panel-nav a:hover { background-color: var(--color-gray-800); color: var(--color-white); }
-.admin-panel-nav a.active { background-color: var(--color-indigo-600); color: var(--color-white); font-weight: 700; }
-.admin-panel-content { flex-grow: 1; padding: 1.5rem 2rem; display: flex; flex-direction: column; overflow: auto; }
 .admin-tab-content { display: none; }
 .admin-tab-content.active { display: block; }
 
-/* 6. FORMS & BUTTONS */
-/* Styling from previous response is good, just ensure consistency */
-.button, button {
-    display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.75rem 1.5rem; font-weight: 700;
-    border: 1px solid transparent; border-radius: 0.5rem; cursor: pointer; text-decoration: none; transition: all 0.2s;
-}
-.button-primary { background-color: var(--color-indigo-600); color: white; }
-.button-primary:hover { background-color: var(--color-indigo-700); }
-.button.secondary { background-color: var(--color-gray-800); border-color: var(--color-gray-700); color: white; }
-.button.secondary:hover { background-color: var(--color-gray-700); }
-input, textarea, select {
-    width: 100%; padding: 0.75rem 1rem; font-size: 1rem; background-color: var(--color-gray-800); border: 1px solid var(--color-gray-700);
-    border-radius: 0.5rem; color: var(--color-white); transition: all 0.2s;
-}
-input:focus, textarea:focus, select:focus {
-    outline: none; border-color: var(--color-indigo-600); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.5);
-}
 
-/* 7. MODALS - Default Hidden State */
-#modal-backdrop { display: none; /* Initially hidden */ }
-.modal { display: none; /* Initially hidden */ }
-#modal-backdrop.visible {
-    display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background-color: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px);
-    z-index: 1000; justify-content: center; align-items: center;
-}
-#modal-backdrop.visible .modal.visible { display: block; }
-
-
-/* 8. RESPONSIVE & FIXES */
+/* 5. RESPONSIVE FIXES */
 
 /* Default button visibility */
 #mobile-sidebar-toggle { display: none; }
 #sidebar-toggle-btn { display: inline-flex; }
 
-@media (max-width: 1023px) {
+/* Tablet & Mobile Breakpoint */
+@media (max-width: 1024px) {
     /* --- FIX: Show/Hide correct buttons --- */
     #sidebar-toggle-btn { display: none; }
     #mobile-sidebar-toggle { display: inline-flex; }
 
     /* --- FIX: Mobile Sidebar Logic --- */
     .sidebar {
-        position: fixed; top: 0; left: 0; height: 100%; z-index: 2000;
-        transform: translateX(-100%); transition: transform var(--transition-speed) ease-in-out;
-        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100%;
+        z-index: 2000;
+        transform: translateX(-100%);
     }
-    #app-layout.sidebar-open .sidebar { transform: translateX(0); }
-    #app-layout::after {
-        content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.6); z-index: 1999; opacity: 0; visibility: hidden;
-        transition: opacity var(--transition-speed) ease;
+    #app-layout.sidebar-open .sidebar {
+        transform: translateX(0);
     }
-    #app-layout.sidebar-open::after { opacity: 1; visibility: visible; }
-    
-    .main-content { padding: 1rem; }
+    #app-layout.sidebar-open::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.6);
+        z-index: 1999;
+    }
 
     /* --- FIX: Admin Layout on Mobile --- */
-    .admin-panel-container { flex-direction: column; height: auto; }
+    .admin-content-area {
+        flex-direction: column;
+    }
     .admin-panel-nav {
-        width: 100%; border-right: none; border-bottom: 1px solid var(--color-gray-700);
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--color-border-dark);
         flex-direction: row; /* Horizontal on mobile */
         overflow-x: auto;
     }
-    .admin-panel-nav a { flex-shrink: 0; }
-    .admin-panel-nav a span { display: none; } /* Hide text on very small screens */
-    @media (min-width: 480px) {
-        .admin-panel-nav a span { display: inline; }
+    .admin-panel-nav a {
+        flex-shrink: 0;
     }
 }
