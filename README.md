@@ -35,12 +35,9 @@
 
 ### 4. 配置环境变量
 
-1.  在你的 Pages 项目设置页面 (**Settings** > **Environment variables**)，为 **Production** 和 **Preview** 环境添加以下变量：
+1.  在你的 Pages 项目设置页面 (**Settings** > **Environment variables**)，添加以下变量：
 
-    * **`JWT_SECRET`**
-        * **用途**: 用于签名和验证用户登录凭证，必须保密。
-        * **值**: 一个长且随机的字符串。你可以使用密码生成器或 `openssl rand -base64 32` 命令生成一个。
-        * *示例值*: `aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890!@#$%^&*()`
+
 
     * **`PUBLIC_MODE_ENABLED`** (可选)
         * **用途**: 控制是否开启公共访问模式。
