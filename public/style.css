@@ -46,11 +46,11 @@ body:not(.login-page) { overflow: hidden; }
 
 /* 2. GLASS PANE UTILITY */
 .glass-pane {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(25px);
     -webkit-backdrop-filter: blur(25px);
     border-radius: var(--border-radius);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
     transition: var(--transition-speed);
 }
@@ -64,14 +64,14 @@ body:not(.login-page) { overflow: hidden; }
     background: rgba(255, 255, 255, 0.1);
 }
 .button:hover, button:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
     transform: translateY(-2px);
 }
 .button.button-primary {
-    background: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
 }
 .button.button-primary:hover {
-    background: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .button-icon, #action-btn {
@@ -84,7 +84,7 @@ body:not(.login-page) { overflow: hidden; }
 
 input, textarea {
     width: 100%; background: transparent; border: none;
-    border-bottom: 2px solid rgba(255, 255, 255, 0.5);
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
     padding: 10px 4px; color: white; font-size: 1rem;
     transition: border-color 0.3s;
 }
