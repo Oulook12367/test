@@ -1,4 +1,4 @@
-/* --- Glassmorphism UI - Final Fixed Version by Gemini --- */
+/* --- Glassmorphism UI - Final Polished Version by Gemini --- */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
 
 :root {
@@ -67,16 +67,26 @@ body:not(.login-page) { overflow: hidden; }
     background: rgba(255, 255, 255, 0.2);
     transform: translateY(-2px);
 }
-.button-primary { background: rgba(255, 255, 255, 0.3); }
-.button-primary:hover { background: rgba(255, 255, 255, 0.4); }
+.button-primary {
+    background: rgba(255, 255, 255, 0.3);
+}
+.button-primary:hover {
+    background: rgba(255, 255, 255, 0.4);
+}
 
 .button-icon, #action-btn {
     padding: 0;
     width: 44px; height: 44px;
     font-size: 1.2rem; border-radius: 50%;
 }
-#action-btn { font-size: 0; gap: 0; }
-#action-btn i { font-size: 1.2rem; margin: 0; }
+#action-btn {
+    font-size: 0;
+    gap: 0;
+}
+#action-btn i {
+    font-size: 1.2rem;
+    margin: 0;
+}
 
 input, textarea {
     width: 100%; background: transparent; border: none;
@@ -100,7 +110,6 @@ select {
     padding-right: 2rem;
 }
 select:focus { outline: none; border-bottom-color: white; }
-
 select option {
     background: #1e293b; 
     color: #f1f5f9;      
@@ -122,7 +131,6 @@ body.login-page { display: flex; align-items: center; justify-content: center; p
     margin-bottom: 1.5rem; /* 为每个表单组添加 1.5rem 的下外边距 */
 }
 /* ------------------------- */
-
 .auth-box .full-width { width: 100%; padding: 14px; }
 
 #app-layout { display: flex; height: 100vh; padding: 1.5rem; gap: 1.5rem; }
@@ -141,11 +149,9 @@ body.login-page { display: flex; align-items: center; justify-content: center; p
 .header { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1.5rem; }
 .search-bar { flex-grow: 1; }
 .search-bar form { display: flex; align-items: center; }
-
-/* [关键修正] 强制为下拉框设置固定且不可压缩的宽度 */
 .search-bar select {
-    width: 130px; /* 赋予一个明确的宽度 */
-    flex-shrink: 0; /* 禁止在flex布局中被压缩 */
+    width: 130px; 
+    flex-shrink: 0; 
     border-radius: 0;
     border-right: 2px solid rgba(255,255,255,0.5);
 }
