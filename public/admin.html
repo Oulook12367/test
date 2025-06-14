@@ -7,34 +7,38 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
-<body class="is-loading">
-    <div id="admin-page-container">
-        <header class="admin-header">
-            <h1 class="text-white"><i class="fas fa-cogs"></i> 管理后台</h1>
-            <a href="index.html" class="button secondary"><i class="fas fa-home"></i> 回到主页面</a>
-        </header>
+<body>
+    <div class="admin-page-container-wrapper">
+        <div class="admin-page-container">
+            <header class="admin-header">
+                <h1 style="font-size: 1.5rem; font-weight: 700;">
+                    <i class="fas fa-cogs" style="margin-right: 0.75rem;"></i>管理后台
+                </h1>
+                <a href="index.html" class="button secondary"><i class="fas fa-home"></i> 回到主页面</a>
+            </header>
 
-        <div class="admin-panel-container">
-            <nav class="admin-panel-nav">
-                <a href="#" class="admin-tab-link active" data-tab="tab-categories"><i class="fas fa-folder-tree fa-fw"></i> <span>分类管理</span></a>
-                <a href="#" class="admin-tab-link" data-tab="tab-users"><i class="fas fa-users fa-fw"></i> <span>用户管理</span></a>
-                <a href="#" class="admin-tab-link" data-tab="tab-bookmarks"><i class="fas fa-bookmark fa-fw"></i> <span>书签管理</span></a>
-                <a href="#" class="admin-tab-link" data-tab="tab-system"><i class="fas fa-tools fa-fw"></i> <span>导入书签</span></a>
-            </nav>
-            <main class="admin-panel-content">
-                <div id="tab-categories" class="admin-tab-content active"></div>
-                <div id="tab-users" class="admin-tab-content"></div>
-                <div id="tab-bookmarks" class="admin-tab-content"></div>
-                <div id="tab-system" class="admin-tab-content"></div>
-            </main>
+            <div class="admin-content-area">
+                <nav class="admin-panel-nav">
+                    <a href="#" class="admin-tab-link active" data-tab="tab-categories"><i class="fas fa-folder-tree fa-fw"></i> <span>分类管理</span></a>
+                    <a href="#" class="admin-tab-link" data-tab="tab-users"><i class="fas fa-users fa-fw"></i> <span>用户管理</span></a>
+                    <a href="#" class="admin-tab-link" data-tab="tab-bookmarks"><i class="fas fa-bookmark fa-fw"></i> <span>书签管理</span></a>
+                    <a href="#" class="admin-tab-link" data-tab="tab-system"><i class="fas fa-tools fa-fw"></i> <span>导入书签</span></a>
+                </nav>
+                <main class="admin-panel-content">
+                    <div id="tab-categories" class="admin-tab-content active"></div>
+                    <div id="tab-users" class="admin-tab-content"></div>
+                    <div id="tab-bookmarks" class="admin-tab-content"></div>
+                    <div id="tab-system" class="admin-tab-content"></div>
+                </main>
+            </div>
         </div>
     </div>
 
     <div id="modal-backdrop" class="modal-backdrop">
         <div id="bookmark-edit-modal" class="modal">
             </div>
-        <div id="confirm-modal" class="modal no-animation">
-            </div>
+        <div id="confirm-modal" class="modal">
+             </div>
     </div>
 
     <script src="shared.js"></script>
