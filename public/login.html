@@ -7,24 +7,24 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
-<body>
+<body class="login-page">
     <div class="page-background"></div>
-    <div class="auth-container">
-        <div class="auth-box glass-pane">
-            <h1 class="auth-title">导航中心</h1>
-            <p class="auth-subtitle">通往您数字世界的传送门</p>
-            <form id="login-form">
-                <div class="form-group">
-                    <input type="text" id="username" placeholder="用户名" required autocomplete="username">
-                </div>
-                <div class="form-group">
-                    <input type="password" id="password" placeholder="密码" required autocomplete="current-password">
-                </div>
-                <p id="login-error" class="error-message"></p>
-                <button type="submit" class="button button-primary full-width">安全登录</button>
-            </form>
-        </div>
+
+    <div class="auth-box glass-pane">
+        <h1 class="auth-title">导航中心</h1>
+        <p class="auth-subtitle">通往您数字世界的传送门</p>
+        <form id="login-form">
+            <div class="form-group">
+                <input type="text" id="username" placeholder="用户名" required autocomplete="username">
+            </div>
+            <div class="form-group">
+                <input type="password" id="password" placeholder="密码" required autocomplete="current-password">
+            </div>
+            <p id="login-error" class="error-message"></p>
+            <button type="submit" class="button button-primary full-width">安全登录</button>
+        </form>
     </div>
+
     <script src="shared.js"></script>
     <script src="login.js"></script>
 </body>
