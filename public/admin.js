@@ -427,38 +427,56 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { errorEl.textContent = error.message; }
     };
     
-    const renderBookmarkAdminTab = (container, signal) => {
-        container.innerHTML = `<p class="admin-panel-tip">通过下拉菜单筛选分类。修改排序数字后，点击下方的“保存”按钮来应用更改。</p><div class="bookmark-admin-controls"><span>筛选分类:</span><select id="bookmark-category-filter"><option value="all">-- 显示全部分类 --</option></select></div><div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div><div id="bookmark-admin-list-container"><ul></ul></div><div class="admin-panel-actions"><button id="save-bookmarks-btn" class="button button-primary"><i class="fas fa-save"></i> 保存书签顺序</button><button id="add-new-bookmark-btn" class="button"><i class="fas fa-plus"></i> 添加新书签</button></div>`;
-        const listEl = container.querySelector('#bookmark-admin-list-container ul');
-        const categoryFilter = container.querySelector('#bookmark-category-filter');
-        allCategories.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)).forEach(cat=>{const o=document.createElement('option');o.value=cat.id;o.textContent=cat.name;categoryFilter.appendChild(o)});
-        const lastFilter=sessionStorage.getItem('admin_bookmark_filter');if(lastFilter)categoryFilter.value=lastFilter;
-        
-        categoryFilter.addEventListener('change', () => {
-            sessionStorage.setItem('admin_bookmark_filter', categoryFilter.value);
-            renderAdminTab('tab-bookmarks');
-        }, { signal });
+ // 在你的 admin.js 文件中找到 renderBookmarkAdminTab 函数，并用下面的完整版本替换它
 
-        const selectedCategoryId=categoryFilter.value;
-        let bookmarksToDisplay=selectedCategoryId==='all'?[...allBookmarks]:allBookmarks.filter(bm=>bm.categoryId===selectedCategoryId);
-        bookmarksToDisplay.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
-        const categoryNameMap=new Map(allCategories.map(c=>[c.id,c.name]));
-        listEl.innerHTML=bookmarksToDisplay.map(bm=>`<li data-id="${bm.id}"><input type="number" class="bm-sort-order" value="${bm.sortOrder||0}"><span class="bm-admin-name">${escapeHTML(bm.name)}</span><span class="bm-admin-cat">${categoryNameMap.get(bm.categoryId)||"无分类"}</span><div class="bm-admin-actions"><button class="edit-bm-btn button-icon" title="编辑"><i class="fas fa-pencil-alt"></i></button><button class="delete-bm-btn danger button-icon" title="删除"><i class="fas fa-trash-alt"></i></button></div></li>`).join('');
-        
-        listEl.addEventListener('click', (event) => {
-            const editButton = event.target.closest('.edit-bm-btn');
-            const deleteButton = event.target.closest('.delete-bm-btn');
-            const listItem = event.target.closest('li[data-id]');
-            if (!listItem) return;
-            const bookmark = allBookmarks.find(bm => bm.id === listItem.dataset.id);
-            if (!bookmark) return;
-            if (editButton) { event.stopPropagation(); handleEditBookmark(bookmark); } 
-            else if (deleteButton) { event.stopPropagation(); handleDeleteBookmark(bookmark); }
-        }, { signal });
+const renderBookmarkAdminTab = (container, signal) => {
+    container.innerHTML = `<p class="admin-panel-tip">通过下拉菜单筛选分类。修改排序数字后，点击下方的“保存”按钮来应用更改。</p><div class="bookmark-admin-controls"><span>筛选分类:</span><select id="bookmark-category-filter"><option value="all">-- 显示全部分类 --</option></select></div><div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div><div id="bookmark-admin-list-container"><ul></ul></div><div class="admin-panel-actions"><button id="save-bookmarks-btn" class="button button-primary"><i class="fas fa-save"></i> 保存书签顺序</button><button id="add-new-bookmark-btn" class="button"><i class="fas fa-plus"></i> 添加新书签</button></div>`;
+    const listEl = container.querySelector('#bookmark-admin-list-container ul');
+    const categoryFilter = container.querySelector('#bookmark-category-filter');
+    allCategories.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)).forEach(cat=>{const o=document.createElement('option');o.value=cat.id;o.textContent=cat.name;categoryFilter.appendChild(o)});
+    const lastFilter=sessionStorage.getItem('admin_bookmark_filter');if(lastFilter)categoryFilter.value=lastFilter;
+    
+    categoryFilter.addEventListener('change', () => {
+        sessionStorage.setItem('admin_bookmark_filter', categoryFilter.value);
+        renderAdminTab('tab-bookmarks');
+    }, { signal });
 
-        container.querySelector('#add-new-bookmark-btn').addEventListener('click', handleAddNewBookmark, { signal });
-        container.querySelector('#save-bookmarks-btn').addEventListener('click', handleSaveBookmarks, { signal });
-    };
+    const selectedCategoryId=categoryFilter.value;
+    let bookmarksToDisplay=selectedCategoryId==='all'?[...allBookmarks]:allBookmarks.filter(bm=>bm.categoryId===selectedCategoryId);
+    bookmarksToDisplay.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
+    const categoryNameMap=new Map(allCategories.map(c=>[c.id,c.name]));
+    listEl.innerHTML=bookmarksToDisplay.map(bm=>`<li data-id="${bm.id}"><input type="number" class="bm-sort-order" value="${bm.sortOrder||0}"><span class="bm-admin-name">${escapeHTML(bm.name)}</span><span class="bm-admin-cat">${categoryNameMap.get(bm.categoryId)||"无分类"}</span><div class="bm-admin-actions"><button class="edit-bm-btn button-icon" title="编辑"><i class="fas fa-pencil-alt"></i></button><button class="delete-bm-btn danger button-icon" title="删除"><i class="fas fa-trash-alt"></i></button></div></li>`).join('');
+    
+    // [!!!] 核心修复在这里：给幽灵装上“紧箍咒”
+    listEl.addEventListener('click', (event) => {
+        // 在执行任何操作前，先检查自己所属的标签页(#tab-bookmarks)是否处于激活状态。
+        // 如果不是，说明自己是“幽灵”，立即停止行动！
+        if (!container.classList.contains('active')) {
+            return;
+        }
+
+        const editButton = event.target.closest('.edit-bm-btn');
+        const deleteButton = event.target.closest('.delete-bm-btn');
+        const listItem = event.target.closest('li[data-id]');
+        if (!listItem) return;
+
+        // 因为代码能执行到这里，说明书签页一定是激活的，可以安全地查找书签
+        const bookmark = allBookmarks.find(bm => bm.id === listItem.dataset.id);
+        if (!bookmark) return;
+
+        if (editButton) { 
+            event.stopPropagation(); 
+            handleEditBookmark(bookmark); // 安全地弹出编辑窗口
+        } 
+        else if (deleteButton) { 
+            event.stopPropagation(); 
+            handleDeleteBookmark(bookmark); // 安全地弹出删除窗口
+        }
+    }, { signal });
+
+    container.querySelector('#add-new-bookmark-btn').addEventListener('click', handleAddNewBookmark, { signal });
+    container.querySelector('#save-bookmarks-btn').addEventListener('click', handleSaveBookmarks, { signal });
+};
 
     const handleSaveBookmarks = async () => {
         const listItems = document.querySelectorAll('#bookmark-admin-list-container li');
