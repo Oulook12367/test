@@ -51,44 +51,51 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- 4. Core Logic ---
-   async function initializePage(activeTabId = 'tab-categories') {
+// 替换 admin.js 中的整个 initializePage 函数
+async function initializePage(activeTabId = 'tab-categories') {
     try {
         const token = localStorage.getItem('jwt_token');
         if (!token) {
-            // 如果没有 token，则无法访问管理页面
+            // 如果本地没有 token，则无法访问管理页面
             throw new Error("未找到 Token，拒绝访问。");
         }
 
-        // 从 token 中解析出用户名，这部分逻辑在 main.js 中是可行的
+        // --- 关键修正 ---
+        // 使用与 main.js 相同的、带有错误处理的健壮方式来解析用户名
         let currentUsername = '';
         try {
-            currentUsername = JSON.parse(atob(token.split('.')[1])).sub;
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            currentUsername = payload.sub;
+            // 同时，我们在这里也进行一次初步的角色检查，如果token本身就没admin角色，就没必要发API请求了
+            if (!payload.roles || !payload.roles.includes('admin')) {
+                throw new Error("Token 声明的用户非管理员。");
+            }
         } catch (e) {
-            throw new Error("无效的 Token。");
+            // 捕获 atob 或 JSON.parse 可能发生的错误
+            throw new Error("无效或已损坏的 Token，无法解析。");
         }
 
-        // 向服务器请求数据，服务器会完成认证和授权
+        // 向服务器请求数据。到这一步时，我们已经知道 Token 是有效且声明为 admin 的
         const data = await apiRequest('data');
 
-        // 从服务器返回的最新数据中查找当前用户
+        // 为确保万无一失，再次基于从服务器返回的最新数据进行最终确认
         const currentUserFromServer = data.users.find(u => u.username === currentUsername);
-
-        // 基于从服务器获取的、最可靠的角色信息进行授权检查
         if (!currentUserFromServer || !currentUserFromServer.roles.includes('admin')) {
-            throw new Error("当前用户不是管理员或用户数据已失效。");
+            // 这可以处理用户在登录后权限被其他管理员撤销的边缘情况
+            throw new Error("用户权限不足或数据异常。");
         }
 
-        // 后续逻辑保持不变
+        // --- 后续逻辑保持不变 ---
         allCategories = data.categories || [];
         allBookmarks = data.bookmarks || [];
         allUsers = data.users || [];
-        
+
         if (adminPageContainer && !document.body.classList.contains('is-loading-removed')) {
             document.body.classList.remove('is-loading');
             adminPageContainer.style.display = 'flex';
             document.body.classList.add('is-loading-removed');
         }
-        
+
         const linkToClick = document.querySelector(`.admin-tab-link[data-tab="${activeTabId}"]`);
         if (linkToClick && !linkToClick.classList.contains('active')) {
             linkToClick.click();
@@ -98,9 +105,10 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             renderAdminTab(activeTabId);
         }
+
     } catch (error) {
         console.error("Initialization failed:", error);
-        // 如果初始化失败（例如，权限被撤销），跳转回主页是合理的
+        // 如果初始化失败，跳转回功能正常的主页是正确的行为
         window.location.href = 'index.html';
     }
 }
