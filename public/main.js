@@ -40,46 +40,54 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Data Loading & Rendering ---
-    async function initializePage() {
-        try {
-            const token = localStorage.getItem('jwt_token');
-            if (!token) {
-                 const publicData = await apiRequest('data');
-                 if (publicData && publicData.isPublic) {
-                    allCategories = publicData.categories || [];
-                    allBookmarks = publicData.bookmarks || [];
-                    currentUser = { roles: ['viewer'], defaultCategoryId: publicData.defaultCategoryId || 'all' };
-                    updateHeader(true);
-                    renderUI();
-                    if(appLayout) appLayout.style.display = 'flex';
-                    return;
-                 }
-                 throw new Error("No token and not in public mode.");
+ // 替换 main.js 中的整个 initializePage 函数
+async function initializePage() {
+    try {
+        const token = localStorage.getItem('jwt_token');
+        
+        // --- 公共模式逻辑 (无需修改) ---
+        if (!token) {
+            const publicData = await apiRequest('data');
+            if (publicData && publicData.isPublic) {
+                allCategories = publicData.categories || [];
+                allBookmarks = publicData.bookmarks || [];
+                currentUser = { roles: ['viewer'], defaultCategoryId: publicData.defaultCategoryId || 'all' };
+                updateHeader(true);
+                renderUI();
+                if(appLayout) appLayout.style.display = 'flex';
+                return;
             }
-            
-            let currentUsername = '';
-            try { currentUsername = JSON.parse(atob(token.split('.')[1])).sub; } 
-            catch (e) { throw new Error("Invalid token."); }
-
-            const data = await apiRequest('data');
-            const userFromServer = data.users.find(u => u.username === currentUsername);
-            if (!userFromServer) { throw new Error("Logged in user not found in data from server."); }
-            
-            allCategories = data.categories || [];
-            allBookmarks = data.bookmarks || [];
-            currentUser = userFromServer;
-            updateHeader(false);
-            renderUI();
-            if(appLayout) appLayout.style.display = 'flex';
-
-        } catch (error) {
-            console.error("Initialization failed:", error);
-            localStorage.removeItem('jwt_token');
-            window.location.href = 'login.html';
-        } finally {
-            document.body.classList.remove('is-loading');
+            throw new Error("No token and not in public mode.");
         }
+        
+        // --- 认证用户逻辑 (关键修正) ---
+        const payload = parseJwtPayload(token); // 使用新的、安全的函数
+        if (!payload || !payload.sub) {
+            throw new Error("Invalid token.");
+        }
+        const currentUsername = payload.sub;
+
+        const data = await apiRequest('data');
+        const userFromServer = data.users.find(u => u.username === currentUsername);
+        if (!userFromServer) { 
+            throw new Error("Logged in user not found in data from server."); 
+        }
+        
+        allCategories = data.categories || [];
+        allBookmarks = data.bookmarks || [];
+        currentUser = userFromServer;
+        updateHeader(false);
+        renderUI();
+        if(appLayout) appLayout.style.display = 'flex';
+
+    } catch (error) {
+        console.error("Initialization failed:", error);
+        localStorage.removeItem('jwt_token');
+        window.location.href = 'login.html';
+    } finally {
+        document.body.classList.remove('is-loading');
     }
+}
 
     const renderUI = () => {
         renderCategories();
