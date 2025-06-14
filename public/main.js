@@ -8,8 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const categoryNav = document.getElementById('category-nav');
     const sidebarFooterNav = document.getElementById('sidebar-footer-nav');
     const logoutButton = document.getElementById('logout-btn');
-    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn'); // Desktop
-    const mobileSidebarToggleBtn = document.getElementById('mobile-sidebar-toggle'); // Mobile
+    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+    const mobileSidebarToggleBtn = document.getElementById('mobile-sidebar-toggle');
     const actionBtn = document.getElementById('action-btn');
 
     // --- State ---
@@ -34,14 +34,20 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- UI Flow & Theme ---
     const applyTheme = (theme) => {
-        document.body.className = theme;
-        themeToggleButton.innerHTML = theme === 'dark-theme' ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
-        localStorage.setItem('theme', theme);
+        // Since glassmorphism is a single theme, this function is no longer needed
+        // but we keep it to prevent other potential errors if called.
+        // document.body.className = theme;
+        // if (themeToggleButton) {
+        //     themeToggleButton.innerHTML = theme === 'dark-theme' ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
+        // }
+        // localStorage.setItem('theme', theme);
     };
 
     const applySidebarState = (isCollapsed) => {
-        appLayout.classList.toggle('sidebar-collapsed', isCollapsed);
-        localStorage.setItem('sidebarCollapsed', isCollapsed);
+        if (appLayout) { // Check if appLayout exists
+            appLayout.classList.toggle('sidebar-collapsed', isCollapsed);
+            localStorage.setItem('sidebarCollapsed', isCollapsed);
+        }
     };
 
     // --- Data Loading & Rendering ---
@@ -57,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentUser = { roles: ['viewer'], defaultCategoryId: publicData.defaultCategoryId || 'all' };
                     updateHeader(true);
                     renderUI();
-                    appLayout.style.display = 'flex';
+                    if(appLayout) appLayout.style.display = 'flex';
                     return;
                  }
                  throw new Error("No token and not in public mode.");
@@ -83,9 +89,10 @@ document.addEventListener('DOMContentLoaded', () => {
             updateHeader(false);
             
             renderUI();
-            appLayout.style.display = 'flex';
+            if(appLayout) appLayout.style.display = 'flex';
 
         } catch (error) {
+            console.error("Initialization failed:", error);
             localStorage.removeItem('jwt_token');
             window.location.href = 'login.html';
         } finally {
@@ -116,6 +123,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     function updateHeader(isPublic) {
+        if (!actionBtn || !logoutButton) return; // Add check
+
         if (isPublic) {
             actionBtn.innerHTML = '<i class="fas fa-key"></i> 登录';
             actionBtn.onclick = () => window.location.href = 'login.html';
@@ -134,6 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const renderCategories = () => {
+        if(!categoryNav || !sidebarFooterNav) return; // Add check
         categoryNav.innerHTML = '';
         sidebarFooterNav.innerHTML = '';
         
@@ -183,6 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
+        if (!bookmarksGrid) return; // Add check
         let categoryIdsToDisplay;
         if (categoryId === 'all') {
             categoryIdsToDisplay = new Set(allCategories.map(c => c.id));
@@ -205,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let domain = '';
             try { domain = new URL(bm.url).hostname; } catch (e) {}
             const defaultIcon = `https://www.google.com/s2/favicons?sz=64&domain_url=${domain}`;
-            return `<a href="${bm.url}" class="bookmark-card" target="_blank" rel="noopener noreferrer">
+            return `<a href="${bm.url}" class="bookmark-card glass-pane" target="_blank" rel="noopener noreferrer">
                         <h3><img src="${bm.icon || defaultIcon}" alt="" onerror="this.onerror=null;this.src='${defaultIcon}'"> ${escapeHTML(bm.name)}</h3>
                         <p>${escapeHTML(bm.description || '')}</p>
                     </a>`;
@@ -213,70 +224,83 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Event Listeners ---
-    themeToggleButton.addEventListener('click', () => applyTheme(document.body.classList.contains('light-theme') ? 'dark-theme' : 'light-theme'));
+    // [修正] 为所有事件监听器添加元素存在性检查
+    if (themeToggleButton) {
+        themeToggleButton.addEventListener('click', () => applyTheme(document.body.classList.contains('light-theme') ? 'dark-theme' : 'light-theme'));
+    }
     
-    // 【修改】统一处理侧边栏开关逻辑
-    if (sidebarToggleBtn) sidebarToggleBtn.addEventListener('click', () => applySidebarState(!appLayout.classList.contains('sidebar-collapsed')));
+    if (sidebarToggleBtn) {
+        sidebarToggleBtn.addEventListener('click', () => applySidebarState(!appLayout.classList.contains('sidebar-collapsed')));
+    }
     
     if (mobileSidebarToggleBtn) {
         mobileSidebarToggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            appLayout.classList.toggle('sidebar-open');
+            if (appLayout) appLayout.classList.toggle('sidebar-open');
         });
     }
-    appLayout.addEventListener('click', (e) => {
-        if (e.target === appLayout) {
-             appLayout.classList.remove('sidebar-open');
-        }
-    });
 
-    logoutButton.addEventListener('click', () => {
-        localStorage.removeItem('jwt_token');
-        window.location.href = 'login.html';
-    });
-    
-    localSearchInput.addEventListener('keyup', debounce((e) => {
-        renderBookmarks(document.querySelector('.sidebar .active')?.dataset.id || 'all', e.target.value);
-    }, 250));
-    
-    localSearchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && e.target.value.trim() !== '') {
-            window.open(searchEngineSelect.value + encodeURIComponent(e.target.value.trim()), '_blank');
-        }
-    });
-
-    document.querySelector('.sidebar').addEventListener('click', async (e) => {
-        const star = e.target.closest('.star-icon');
-        const li = e.target.closest('li[data-id]');
-
-        if (star) {
-            e.stopPropagation();
-            const newDefaultId = star.dataset.catId;
-            if (newDefaultId === currentUser.defaultCategoryId) return;
-
-            try {
-                await apiRequest('users/self', 'PUT', { defaultCategoryId: newDefaultId });
-                currentUser.defaultCategoryId = newDefaultId;
-                const currentActiveId = document.querySelector('.sidebar li.active')?.dataset.id;
-                renderCategories();
-                const activeLi = document.querySelector(`.sidebar li[data-id="${currentActiveId}"]`);
-                if(activeLi) activeLi.classList.add('active');
-            } catch (error) {
-                alert('设置失败: ' + error.message);
+    if (appLayout) {
+        appLayout.addEventListener('click', (e) => {
+            if (e.target === appLayout) {
+                 appLayout.classList.remove('sidebar-open');
             }
-            return;
-        }
+        });
+    }
 
-        if (li) {
-            appLayout.classList.remove('sidebar-open');
-            document.querySelectorAll('.sidebar li').forEach(el => el.classList.remove('active'));
-            li.classList.add('active');
-            renderBookmarks(li.dataset.id, localSearchInput.value);
-        }
-    });
+    if (logoutButton) {
+        logoutButton.addEventListener('click', () => {
+            localStorage.removeItem('jwt_token');
+            window.location.href = 'login.html';
+        });
+    }
+    
+    if (localSearchInput) {
+        localSearchInput.addEventListener('keyup', debounce((e) => {
+            renderBookmarks(document.querySelector('.sidebar .active')?.dataset.id || 'all', e.target.value);
+        }, 250));
+        
+        localSearchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.target.value.trim() !== '') {
+                window.open(searchEngineSelect.value + encodeURIComponent(e.target.value.trim()), '_blank');
+            }
+        });
+    }
+
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) {
+        sidebar.addEventListener('click', async (e) => {
+            const star = e.target.closest('.star-icon');
+            const li = e.target.closest('li[data-id]');
+
+            if (star) {
+                e.stopPropagation();
+                const newDefaultId = star.dataset.catId;
+                if (newDefaultId === currentUser.defaultCategoryId) return;
+
+                try {
+                    await apiRequest('users/self', 'PUT', { defaultCategoryId: newDefaultId });
+                    currentUser.defaultCategoryId = newDefaultId;
+                    const currentActiveId = document.querySelector('.sidebar li.active')?.dataset.id;
+                    renderCategories();
+                    const activeLi = document.querySelector(`.sidebar li[data-id="${currentActiveId}"]`);
+                    if(activeLi) activeLi.classList.add('active');
+                } catch (error) {
+                    alert('设置失败: ' + error.message);
+                }
+                return;
+            }
+
+            if (li) {
+                if(appLayout) appLayout.classList.remove('sidebar-open');
+                document.querySelectorAll('.sidebar li').forEach(el => el.classList.remove('active'));
+                li.classList.add('active');
+                renderBookmarks(li.dataset.id, localSearchInput.value);
+            }
+        });
+    }
 
     // --- Initial Load ---
-    applyTheme(localStorage.getItem('theme') || 'dark-theme');
     applySidebarState(localStorage.getItem('sidebarCollapsed') === 'true');
     initializePage();
 });
