@@ -25,7 +25,7 @@ const getSiteData = async (env) => {
         const adminSalt = generateSalt();
         const adminPasswordHash = await hashPassword('admin123', adminSalt);
         const parentCatId = `cat-${Date.now()}`;
-        const publicCatId = `cat-${Date.now() + 2}`;
+        const publicCatId = `cat-${Date.now() + 1}`;
         
         data = {
             users: {
