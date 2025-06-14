@@ -8,14 +8,12 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
-    <div class="background-shapes"></div>
-
+    <div class="page-background"></div>
     <div id="admin-page-container" style="display: none;">
         <header class="admin-header glass-pane">
             <h1><i class="fas fa-cogs"></i> 控制中心</h1>
             <a href="index.html" class="button secondary"><i class="fas fa-home"></i> 返回主页</a>
         </header>
-        
         <div class="admin-panel-container glass-pane">
             <nav class="admin-panel-nav">
                 <a href="#" class="admin-tab-link active" data-tab="tab-categories"><i class="fas fa-folder-tree fa-fw"></i> 分类管理</a>
@@ -23,30 +21,13 @@
                 <a href="#" class="admin-tab-link" data-tab="tab-bookmarks"><i class="fas fa-bookmark fa-fw"></i> 书签管理</a>
                 <a href="#" class="admin-tab-link" data-tab="tab-system"><i class="fas fa-tools fa-fw"></i> 系统工具</a>
             </nav>
-            <main class="admin-panel-content">
-                <div id="tab-categories" class="admin-tab-content active"></div>
-                <div id="tab-users" class="admin-tab-content"></div>
-                <div id="tab-bookmarks" class="admin-tab-content"></div>
-                <div id="tab-system" class="admin-tab-content"></div>
-            </main>
+            <main class="admin-panel-content"></main>
         </div>
     </div>
-
     <div id="modal-backdrop" class="modal-backdrop">
-        <div id="bookmark-edit-modal" class="modal glass-pane">
-            <div class="modal-content">
-                <span class="close-btn">&times;</span>
-                <h2 id="bookmark-modal-title">编辑书签</h2>
-                <form id="bookmark-edit-form">
-                    </form>
-            </div>
-        </div>
-        <div id="confirm-modal" class="modal glass-pane">
-            <div class="modal-content small">
-                </div>
-        </div>
-     </div>
-
+        <div id="bookmark-edit-modal" class="modal glass-pane"></div>
+        <div id="confirm-modal" class="modal glass-pane"></div>
+    </div>
     <script src="shared.js"></script>
     <script src="admin.js"></script>
 </body>
