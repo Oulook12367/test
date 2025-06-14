@@ -7,11 +7,13 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
-<body class="is-loading">
+<body>
+    <div class="background-shapes"></div>
+
     <div id="app-layout" style="display: none;">
-        <aside class="sidebar">
+        <aside class="sidebar glass-pane">
             <div class="sidebar-header">
-                <h2><i class="fas fa-atom fa-spin"></i> 分类</h2>
+                <h2><i class="fas fa-compass"></i> 分类导航</h2>
             </div>
             
             <ul id="category-nav" class="category-nav dynamic">
@@ -22,8 +24,8 @@
         </aside>
 
         <div class="main-content">
-            <header>
-                <div>
+            <header class="glass-pane">
+                <div class="header-left">
                     <button id="sidebar-toggle-btn" class="button-icon" title="切换侧边栏"><i class="fas fa-bars"></i></button>
                     <button id="mobile-sidebar-toggle" class="button-icon" title="切换侧边栏"><i class="fas fa-bars"></i></button>
                 </div>
@@ -35,16 +37,16 @@
                             <option value="https://www.bing.com/search?q=">Bing</option>
                             <option value="https://duckduckgo.com/?q=">DuckDuckGo</option>
                         </select>
-                        <input type="search" id="local-search" placeholder="搜索本地或在网络上搜索...">
-                        <button type="submit" class="button-icon">
+                        <input type="search" id="local-search" placeholder="搜索书签或进行网络搜索...">
+                        <button type="submit" class="button-icon search-submit-btn">
                             <i class="fas fa-search"></i>
                         </button>
                     </form>
                 </div>
                 
-                <div class="header-buttons">
+                <div class="header-right">
                     <button id="action-btn" class="button-primary" style="display: none;"></button>
-                    <button id="theme-toggle" title="切换主题" class="button-icon"></button> <button id="logout-btn" title="退出登录" class="button-icon" style="display: none;"><i class="fas fa-sign-out-alt"></i></button>
+                    <button id="logout-btn" title="退出登录" class="button-icon" style="display: none;"><i class="fas fa-sign-out-alt"></i></button>
                 </div>
             </header>
 
