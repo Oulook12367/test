@@ -204,6 +204,8 @@ async function initializePage(activeTabId = 'tab-categories') {
       // 在 renderCategoryAdminTab 函数的末尾，找到 addManagedEventListener，并用下面的代码替换它
 
 addManagedEventListener(listEl, 'click', (event) => {
+
+     if (!document.getElementById('tab-categories').classList.contains('active')) return;
     // 寻找点击目标最近的 .delete-cat-btn 按钮
     const deleteButton = event.target.closest('.delete-cat-btn');
 
@@ -317,6 +319,7 @@ addManagedEventListener(listEl, 'click', (event) => {
             userList.appendChild(li);
         });
         addManagedEventListener(userList, 'click', (e) => {
+             if (!document.getElementById('tab-users').classList.contains('active')) return;
             const deleteButton = e.target.closest('.button-icon.danger');
             if (deleteButton) {
                 e.stopPropagation();
@@ -478,6 +481,7 @@ addManagedEventListener(listEl, 'click', (event) => {
         const categoryNameMap=new Map(allCategories.map(c=>[c.id,c.name]));
         listEl.innerHTML=bookmarksToDisplay.map(bm=>`<li data-id="${bm.id}"><input type="number" class="bm-sort-order" value="${bm.sortOrder||0}"><span class="bm-admin-name">${escapeHTML(bm.name)}</span><span class="bm-admin-cat">${categoryNameMap.get(bm.categoryId)||"无分类"}</span><div class="bm-admin-actions"><button class="edit-bm-btn button-icon" title="编辑"><i class="fas fa-pencil-alt"></i></button><button class="delete-bm-btn danger button-icon" title="删除"><i class="fas fa-trash-alt"></i></button></div></li>`).join('');
         addManagedEventListener(listEl, 'click', (event) => {
+             if (!document.getElementById('tab-bookmarks').classList.contains('active')) return;
             const editButton = event.target.closest('.edit-bm-btn');
             const deleteButton = event.target.closest('.delete-bm-btn');
             const listItem = event.target.closest('li[data-id]');
