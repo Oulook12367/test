@@ -14,7 +14,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let allBookmarks = [], allCategories = [], allUsers = [];
 
     // --- 3. UI Flow & Modals ---
-    const showModal = (modal) => { if (modal) { modalBackdrop.style.display = 'flex'; modal.style.display = 'block'; } };
+
+    const showModal = (modal) => {
+    hideAllModals(); // 新增：先隐藏所有模态框
+    if (modal) {
+        modalBackdrop.style.display = 'flex';
+        modal.style.display = 'block';
+    }
+};
     const hideAllModals = () => { if(modalBackdrop) modalBackdrop.style.display = 'none'; document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); };
     const showConfirm = (title, text, onConfirm) => {
         if (!confirmTitle || !confirmText || !confirmModal || !confirmBtnYes) return;
@@ -487,7 +494,48 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- MASTER CLICK LISTENER ---
         adminContentPanel.addEventListener('click', (event) => {
             const target = event.target;
-
+const isDeleteBtn = target.closest('.delete-cat-btn, .delete-bm-btn, .button-icon.danger');
+ // 修复1：优先处理所有删除操作并完全阻止事件传播
+        if (isDeleteBtn) {
+            event.stopPropagation();
+            event.preventDefault();
+            
+            // 分类删除
+            if (target.closest('.delete-cat-btn')) {
+                const listItem = target.closest('li[data-id]');
+                if (!listItem) return;
+                const catId = listItem.dataset.id;
+                if (catId.startsWith('new-')) {
+                    listItem.remove();
+                } else {
+                    const catName = listItem.querySelector('.cat-name-input').value;
+                    handleDeleteCategory(catId, catName);
+                }
+                return;
+            }
+            
+            // 书签删除
+            const bookmarkListItem = target.closest('li[data-id]');
+            if (bookmarkListItem && target.closest('.delete-bm-btn')) {
+                const bookmark = allBookmarks.find(bm => bm.id === bookmarkListItem.dataset.id);
+                if (bookmark) handleDeleteBookmark(bookmark);
+                return;
+            }
+            
+            // 用户删除
+            const userListItem = target.closest('li[data-username]');
+            if (userListItem && target.closest('.button-icon.danger')) {
+                const username = userListItem.dataset.username;
+                showConfirm('删除用户', `确定删除用户 "${username}"?`, async () => {
+                    try {
+                        await apiRequest(`users/${encodeURIComponent(username)}`, 'DELETE');
+                        await initializePage('tab-users');
+                    } catch (error) { alert(error.message); }
+                });
+                return;
+            }
+        }
+            
             // --- Category Tab Logic ---
             if (document.getElementById('tab-categories')?.classList.contains('active')) {
                 if (target.closest('.delete-cat-btn')) {
