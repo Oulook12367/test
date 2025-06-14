@@ -21,6 +21,7 @@ body {
     color: #ffffff;
     height: 100vh;
 }
+
 body:not(.login-page) {
     overflow: hidden;
 }
@@ -80,21 +81,39 @@ body:not(.login-page) {
 .button-primary:hover { background: rgba(255, 255, 255, 0.5); transform: translateY(-2px); }
 .button.secondary { background: rgba(0, 0, 0, 0.2); }
 .button.secondary:hover { background: rgba(0, 0, 0, 0.4); }
+
 .button-icon {
+    display: inline-flex; align-items: center; justify-content: center;
     background: transparent; padding: 0;
     width: 44px; height: 44px;
     font-size: 1.2rem; border-radius: 50%;
 }
 .button-icon:hover { background: rgba(255, 255, 255, 0.2); }
 
-input, select, textarea {
+input, textarea {
     width: 100%; background: transparent; border: none;
     border-bottom: 2px solid rgba(255, 255, 255, 0.5);
     padding: 10px 4px; color: white; font-size: 1rem;
     transition: border-color 0.3s;
 }
-input:focus, select:focus, textarea:focus { outline: none; border-bottom-color: white; }
+input:focus, textarea:focus { outline: none; border-bottom-color: white; }
 input::placeholder, textarea::placeholder { color: rgba(255, 255, 255, 0.7); }
+
+select {
+    -webkit-appearance: none; -moz-appearance: none; appearance: none;
+    width: 100%; background: transparent; border: none;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.5);
+    padding: 10px 4px; color: white; font-size: 1rem;
+    transition: border-color 0.3s;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 1em;
+    padding-right: 2rem;
+}
+select:focus { outline: none; border-bottom-color: white; }
+select option { background-color: #111827; color: white; }
+
 label { display: block; margin-bottom: 0.5rem; font-weight: 700; }
 .form-group { margin-bottom: 1rem; }
 .error-message { color: #f87171; text-align: center; min-height: 1.2em; font-weight: 700;}
@@ -115,12 +134,11 @@ body.login-page {
 }
 .auth-title { font-size: 2.25rem; font-weight: 700; margin-bottom: 1rem; }
 .auth-subtitle { margin-bottom: 1.5rem; opacity: 0.8; }
-.auth-box .form-group { margin-bottom: 1.5rem; }
 .auth-box .full-width { width: 100%; padding: 14px; }
 
 /* Main App */
-#app-layout { display: flex; height: 100vh; padding: 1.5rem; gap: 1.5rem; transition: padding-left var(--transition-speed); }
-.sidebar { width: var(--sidebar-width); flex-shrink: 0; padding: 1.5rem; display: flex; flex-direction: column; transition: margin-left var(--transition-speed); }
+#app-layout { display: flex; height: 100vh; padding: 1.5rem; gap: 1.5rem; }
+.sidebar { width: var(--sidebar-width); flex-shrink: 0; padding: 1.5rem; display: flex; flex-direction: column; }
 .sidebar-header { padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.2); }
 .category-nav { list-style: none; }
 .category-nav.dynamic { flex-grow: 1; overflow-y: auto; padding-right: 10px;}
@@ -191,6 +209,7 @@ body.login-page {
 .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); backdrop-filter: blur(5px); z-index: 1000; justify-content: center; align-items: center; }
 .modal { padding: 2rem; max-width: 500px; width: 90%; }
 .modal .close-btn { position: absolute; top: 1rem; right: 1rem; font-size: 1.5rem; color: white; cursor: pointer; border: none; background: none; }
+.modal-content { /* Added for inner content if needed */ }
 .modal-content.small { text-align: center; }
 .confirm-buttons { display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem;}
 
