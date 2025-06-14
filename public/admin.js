@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
     const hideAllModals = () => {
-        if (modalBackdrop) modalBackdrop.style.display = 'none';
+        if(modalBackdrop) modalBackdrop.style.display = 'none';
         document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
     };
     const showConfirm = (title, text, onConfirm) => {
@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     const cleanupEventListeners = () => {
-        activeEventListeners.forEach(({ element, type, handler }) => {
+        activeEventListeners.forEach(({element, type, handler}) => {
             if (element) element.removeEventListener(type, handler);
         });
         activeEventListeners = [];
@@ -186,6 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const handleAddNewCategory = () => {
         const listEl = document.getElementById('category-admin-list');
+        if (!listEl) return;
         const newCatId = `new-${Date.now()}`;
         const allOrderInputs = listEl.querySelectorAll('.cat-order-input');
         const existingOrders = Array.from(allOrderInputs).map(input => parseInt(input.value) || 0);
