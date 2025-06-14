@@ -62,28 +62,32 @@ body:not(.login-page) { overflow: hidden; }
     border-radius: 12px; cursor: pointer; border: none;
     transition: all 0.3s; color: white;
 }
-.button-primary { background: rgba(255, 255, 255, 0.3); }
-.button-primary:hover { background: rgba(255, 255, 255, 0.5); transform: translateY(-2px); }
-.button.secondary { background: rgba(255, 255, 255, 0.1); } /* [修正] 颜色不再是黑色 */
+/* [修正] 调整主按钮样式，使其更内敛 */
+.button-primary { background: rgba(255, 255, 255, 0.2); }
+.button-primary:hover { background: rgba(255, 255, 255, 0.3); transform: translateY(-2px); }
+
+/* “返回主页”按钮的样式作为参考基准 */
+.button.secondary { background: rgba(255, 255, 255, 0.1); }
 .button.secondary:hover { background: rgba(255, 255, 255, 0.2); }
 
-/* [修正] 统一所有图标按钮的样式 */
+/* [修正] 统一所有图标按钮的样式，使其拥有玻璃背景 */
 .button-icon, #action-btn {
     display: inline-flex; align-items: center; justify-content: center;
-    background: transparent; padding: 0;
+    background: rgba(255, 255, 255, 0.1); /* 匹配 secondary 按钮的背景 */
+    padding: 0;
     width: 44px; height: 44px;
     font-size: 1.2rem; border-radius: 50%;
 }
 .button-icon:hover, #action-btn:hover { background: rgba(255, 255, 255, 0.2); }
 
-/* [修正] CSS技巧：隐藏 #action-btn 中的文字，仅显示图标 */
+/* CSS技巧：隐藏 #action-btn 中的文字，仅显示图标 */
 #action-btn {
-    font-size: 0; /* 隐藏文字节点 */
+    font-size: 0;
     padding: 0;
     gap: 0;
 }
 #action-btn i {
-    font-size: 1.2rem; /* 恢复图标的字体大小 */
+    font-size: 1.2rem;
     margin: 0;
 }
 
@@ -96,7 +100,6 @@ input, textarea {
 input:focus, textarea:focus { outline: none; border-bottom-color: white; }
 input::placeholder, textarea::placeholder { color: rgba(255, 255, 255, 0.7); }
 
-/* [修正] 修复下拉框样式和下拉列表 */
 select {
     -webkit-appearance: none; -moz-appearance: none; appearance: none;
     width: 100%; background: transparent; border: none;
@@ -111,18 +114,25 @@ select {
 }
 select:focus { outline: none; border-bottom-color: white; }
 select option { background-color: #111827; color: white; }
-/* ... (其余组件样式保持不变) ... */
 
 /* 4. LAYOUTS */
 /* Login Page */
 body.login-page { display: flex; align-items: center; justify-content: center; padding: 1rem; }
 .auth-box { width: 100%; max-width: 384px; padding: 2rem; text-align: center; }
-/* ... (其余登录页样式保持不变) ... */
+.auth-title { font-size: 2.25rem; font-weight: 700; margin-bottom: 1rem; }
+.auth-subtitle { margin-bottom: 1.5rem; opacity: 0.8; }
+.auth-box .full-width { width: 100%; padding: 14px; }
 
 /* Main App */
 #app-layout { display: flex; height: 100vh; padding: 1.5rem; gap: 1.5rem; }
 .sidebar { width: var(--sidebar-width); flex-shrink: 0; padding: 1.5rem; display: flex; flex-direction: column; }
-/* ... (其余侧边栏样式保持不变) ... */
+.sidebar-header { padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.2); }
+.category-nav { list-style: none; }
+.category-nav.dynamic { flex-grow: 1; overflow-y: auto; padding-right: 10px;}
+#sidebar-footer-nav { margin-top: auto; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.2); }
+.category-nav li { display: flex; align-items: center; gap: 0.75rem; padding: 12px; border-radius: 10px; cursor: pointer; font-weight: 700; transition: var(--transition-speed); }
+.category-nav li:hover { background: rgba(255, 255, 255, 0.1); }
+.category-nav li.active { background: rgba(255, 255, 255, 0.3); }
 .star-icon { margin-left: auto; padding: 5px; cursor: pointer; opacity: 0.7; transition: var(--transition-speed); z-index: 5; position: relative;}
 .star-icon:hover, .star-icon.is-default { opacity: 1; transform: scale(1.2); }
 .star-icon.is-default { color: #fbbf24; }
@@ -139,10 +149,9 @@ body.login-page { display: flex; align-items: center; justify-content: center; p
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: 1.5rem; padding: 0 10px 10px 0;
 }
-/* [修正] 设置书签卡片固定高度和内容溢出处理 */
 .bookmark-card {
     padding: 1.5rem; text-decoration: none; color: white;
-    height: 140px; /* 固定高度 */
+    height: 140px;
     display: flex; flex-direction: column;
 }
 .bookmark-card:hover { transform: translateY(-5px); box-shadow: 0 12px 40px rgba(31, 38, 135, 0.4); }
@@ -151,14 +160,12 @@ body.login-page { display: flex; align-items: center; justify-content: center; p
 .bookmark-card p {
     font-size: 0.9rem; opacity: 0.8; margin-top: 0.75rem;
     flex-grow: 1; overflow: hidden;
-    /* 多行文本溢出省略 */
     display: -webkit-box;
-    -webkit-line-clamp: 2; /* 最多显示2行 */
+    -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
 }
 
 /* Admin Page & Modals & Responsive Styles... */
-/* (All other styles from the previous complete version are preserved here) */
 #admin-page-container { display: flex; flex-direction: column; height: 100vh; padding: 1.5rem; gap: 1.5rem; }
 .admin-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; flex-shrink: 0; }
 .admin-panel-container { flex-grow: 1; display: flex; overflow: hidden; }
