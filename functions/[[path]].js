@@ -1,7 +1,9 @@
 import { SignJWT, jwtVerify } from 'jose';
+import { HTMLRewriter } from 'html-rewriter-wasm'; // 确保您环境中已安装或支持
 
 // --- Security & Hashing Helpers --- 
 const JWT_SECRET = () => new TextEncoder().encode(globalThis.JWT_SECRET_STRING);
+
 
 const generateSalt = (length = 16) => {
     const array = new Uint8Array(length);
@@ -127,6 +129,10 @@ const authenticateRequest = async (request, siteData) => {
     }
 };
 
+
+
+
+
 const jsonResponse = (data, status = 200, headers = {}) => {
     const defaultHeaders = { 'Content-Type': 'application/json;charset=UTF-8' };
     if (data === null) {
@@ -135,9 +141,104 @@ const jsonResponse = (data, status = 200, headers = {}) => {
     return new Response(JSON.stringify(data), { status, headers: { ...defaultHeaders, ...headers } });
 };
 
+
+/**
+ * [新增] 清洗并提取网页标题的核心部分
+ * @param {string} fullTitle - 完整的网页标题
+ * @returns {string} 清洗后的标题
+ */
+const cleanTitle = (fullTitle) => {
+    if (!fullTitle) return '';
+    // 移除常见的分割符及其后面的内容，例如 "页面标题 | 网站名称" 或 "页面标题 - 网站名称"
+    const cleaned = fullTitle.split(/ \| | - /)[0].trim();
+    return cleaned || fullTitle; // 如果分割后为空，则返回原标题
+};
+
+
 // --- Main onRequest Entrypoint ---
 export async function onRequest(context) {
     const { request, env, next } = context;
+
+  // --- [新增] URL Scraper API Endpoint ---
+    const url = new URL(request.url);
+    if (url.pathname === '/api/scrape-url') {
+        // 此端点需要认证
+        const siteDataForAuth = await getSiteData(env);
+        globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteDataForAuth.jwtSecret;
+        if (!globalThis.JWT_SECRET_STRING) return jsonResponse({ error: 'JWT Secret not configured' }, 500);
+        const authResult = await authenticateRequest(request, siteDataForAuth);
+        if (authResult.error) return jsonResponse(authResult, authResult.status);
+
+        const targetUrl = url.searchParams.get('url');
+        if (!targetUrl) {
+            return jsonResponse({ error: 'URL parameter is missing' }, 400);
+        }
+
+        try {
+            const response = await fetch(targetUrl, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch URL with status: ${response.status}`);
+            }
+
+            let title = '';
+            let description = '';
+            let icon = '';
+
+            const rewriter = new HTMLRewriter()
+                .on('title', {
+                    text(text) {
+                        title += text.text;
+                    },
+                })
+                .on('meta[name="description"]', {
+                    element(element) {
+                        description = element.getAttribute('content');
+                    },
+                })
+                .on('link[rel*="icon"]', {
+                    element(element) {
+                        // 优先选择尺寸最大的或最合适的图标
+                        if (!icon) { // 只取第一个找到的
+                           let href = element.getAttribute('href');
+                           if (href) {
+                               // 将相对路径转换为绝对路径
+                               icon = new URL(href, targetUrl).toString();
+                           }
+                        }
+                    },
+                });
+
+            await rewriter.transform(response).arrayBuffer();
+            
+            // 如果没有找到<link>标签的图标，尝试获取根目录的 favicon.ico
+            if (!icon) {
+                 try {
+                    const iconUrl = new URL('/favicon.ico', targetUrl);
+                    const iconCheck = await fetch(iconUrl.toString(), { method: 'HEAD' });
+                    if(iconCheck.ok) {
+                        icon = iconUrl.toString();
+                    }
+                 } catch (e) { /* ignore */ }
+            }
+
+            return jsonResponse({
+                title: cleanTitle(title),
+                description: description || '',
+                icon: icon || '',
+            });
+
+        } catch (error) {
+            console.error(`Scraping failed for ${targetUrl}:`, error);
+            return jsonResponse({ error: `Could not fetch or parse URL: ${error.message}` }, 500);
+        }
+    }
+
+
+    
+    
 
     // [新增] 严格校验 PUBLIC_MODE_ENABLED 环境变量
     const publicModeValue = env.PUBLIC_MODE_ENABLED;
