@@ -205,7 +205,7 @@ async function initializePage(activeTabId = 'tab-categories') {
 
 addManagedEventListener(listEl, 'click', (event) => {
 
-     if (!document.getElementById('tab-categories').classList.contains('active')) return;
+    
     // 寻找点击目标最近的 .delete-cat-btn 按钮
     const deleteButton = event.target.closest('.delete-cat-btn');
 
@@ -318,27 +318,38 @@ addManagedEventListener(listEl, 'click', (event) => {
             }
             userList.appendChild(li);
         });
-        addManagedEventListener(userList, 'click', (e) => {
-             if (!document.getElementById('tab-users').classList.contains('active')) return;
-            const deleteButton = e.target.closest('.button-icon.danger');
-            if (deleteButton) {
-                e.stopPropagation();
-                const userItem = e.target.closest('li[data-username]');
-                const username = userItem.dataset.username;
-                showConfirm('删除用户', `确定删除用户 "${username}"?`, async () => {
-                    try {
-                        await apiRequest(`users/${encodeURIComponent(username)}`, 'DELETE');
-                        await initializePage('tab-users');
-                    } catch (error) { alert(error.message); }
-                });
-                return;
-            }
-            const li = e.target.closest('li[data-username]');
-            if (li) {
-                const user = allUsers.find(u => u.username === li.dataset.username);
-                if (user) populateUserForm(user);
-            }
-        });
+      // 在 renderUserAdminTab 函数中，替换原有的 userList 点击事件监听器
+addManagedEventListener(userList, 'click', (e) => {
+    const targetLi = e.target.closest('li[data-username]');
+    if (!targetLi) return;
+
+    const username = targetLi.dataset.username;
+    const user = allBookmarks.find(u => u.username === username);
+
+    // 检查是否点击了删除按钮
+    if (e.target.closest('.button-icon.danger')) {
+        e.stopPropagation();
+        // 确保是合法的用户且不是公共或当前管理员账户
+        const token = localStorage.getItem('jwt_token');
+        let currentUsername = '';
+        if (token) { try { currentUsername = JSON.parse(atob(token.split('.')[1])).sub; } catch (e) { console.error("无法解析Token:", e); } }
+
+        if (username !== 'public' && username !== currentUsername) {
+            showConfirm('删除用户', `确定删除用户 "${username}"?`, async () => {
+                try {
+                    await apiRequest(`users/${encodeURIComponent(username)}`, 'DELETE');
+                    await initializePage('tab-users');
+                } catch (error) { alert(error.message); }
+            });
+        }
+        return; // 处理完删除逻辑后退出
+    }
+    
+    // 如果不是点击删除按钮，则执行加载表单的逻辑
+    if (user) {
+        populateUserForm(user);
+    }
+});
         const visibleCategoriesContainer = form.querySelector('#user-form-categories');
         addManagedEventListener(visibleCategoriesContainer, 'change', () => updateDefaultCategoryDropdown(form));
         addManagedEventListener(container.querySelector('#user-form-clear-btn'), 'click', clearUserForm);
@@ -480,17 +491,32 @@ addManagedEventListener(listEl, 'click', (event) => {
         bookmarksToDisplay.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
         const categoryNameMap=new Map(allCategories.map(c=>[c.id,c.name]));
         listEl.innerHTML=bookmarksToDisplay.map(bm=>`<li data-id="${bm.id}"><input type="number" class="bm-sort-order" value="${bm.sortOrder||0}"><span class="bm-admin-name">${escapeHTML(bm.name)}</span><span class="bm-admin-cat">${categoryNameMap.get(bm.categoryId)||"无分类"}</span><div class="bm-admin-actions"><button class="edit-bm-btn button-icon" title="编辑"><i class="fas fa-pencil-alt"></i></button><button class="delete-bm-btn danger button-icon" title="删除"><i class="fas fa-trash-alt"></i></button></div></li>`).join('');
-        addManagedEventListener(listEl, 'click', (event) => {
-             if (!document.getElementById('tab-bookmarks').classList.contains('active')) return;
-            const editButton = event.target.closest('.edit-bm-btn');
-            const deleteButton = event.target.closest('.delete-bm-btn');
-            const listItem = event.target.closest('li[data-id]');
-            if (!listItem) return;
-            const bookmark = allBookmarks.find(bm => bm.id === listItem.dataset.id);
-            if (!bookmark) return;
-            if (editButton) { event.stopPropagation(); handleEditBookmark(bookmark); } 
-            else if (deleteButton) { event.stopPropagation(); handleDeleteBookmark(bookmark); }
-        });
+
+// 在 renderBookmarkAdminTab 函数中，替换原有的 listEl 点击事件监听器
+addManagedEventListener(listEl, 'click', (event) => {
+    const listItem = event.target.closest('li[data-id]');
+    if (!listItem) return;
+
+    const bookmarkId = listItem.dataset.id;
+    const bookmark = allBookmarks.find(bm => bm.id === bookmarkId);
+    if (!bookmark) return;
+
+    // 关键修复：明确判断点击目标
+    // 检查是否点击了编辑按钮
+    if (event.target.closest('.edit-bm-btn')) {
+        event.stopPropagation();
+        handleEditBookmark(bookmark);
+        return; // 处理完后立即退出
+    }
+
+    // 检查是否点击了删除按钮
+    if (event.target.closest('.delete-bm-btn')) {
+        event.stopPropagation();
+        handleDeleteBookmark(bookmark);
+        return; // 处理完后立即退出
+    }
+});
+        
         addManagedEventListener(container.querySelector('#add-new-bookmark-btn'), 'click', handleAddNewBookmark);
         addManagedEventListener(container.querySelector('#save-bookmarks-btn'), 'click', handleSaveBookmarks);
     };
