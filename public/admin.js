@@ -13,7 +13,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- 2. State ---
     let allBookmarks = [], allCategories = [], allUsers = [];
-    let activeEventListeners = [];
+
+    // --- [核心改造 1] 引入 AbortController ---
+    // 这个控制器将负责管理每个标签页的事件监听器的生命周期。
+    let tabAbortController = new AbortController();
 
     // --- 3. UI Flow & Modals ---
     const showModal = (modal) => {
@@ -37,94 +40,77 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     };
     
-    const cleanupEventListeners = () => {
-        activeEventListeners.forEach(({element, type, handler}) => {
-            if (element) element.removeEventListener(type, handler);
-        });
-        activeEventListeners = [];
-    };
-
-    const addManagedEventListener = (element, type, handler) => {
-        if (!element) return;
-        element.addEventListener(type, handler);
-        activeEventListeners.push({ element, type, handler });
-    };
-
     // --- 4. Core Logic ---
-// 替换 admin.js 中的整个 initializePage 函数
-// 替换 admin.js 中的整个 initializePage 函数
-async function initializePage(activeTabId = 'tab-categories') {
-    try {
-        const token = localStorage.getItem('jwt_token');
-        
-        // 使用新的、安全的函数来解析 Token
-        const payload = parseJwtPayload(token);
-
-        // 如果 token 不存在或解析失败，或者角色不正确，则抛出错误
-        if (!payload || !payload.roles || !payload.roles.includes('admin')) {
-            throw new Error("Token 无效或用户非管理员。");
+    async function initializePage(activeTabId = 'tab-categories') {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const payload = parseJwtPayload(token);
+            if (!payload || !payload.roles || !payload.roles.includes('admin')) throw new Error("Token 无效或用户非管理员，禁止访问。");
+            
+            const data = await apiRequest('data');
+            const currentUserFromServer = data.users.find(u => u.username === payload.sub);
+            if (!currentUserFromServer || !currentUserFromServer.roles.includes('admin')) throw new Error("用户权限可能已被变更，请重新登录。");
+            
+            allCategories = data.categories || [];
+            allBookmarks = data.bookmarks || [];
+            allUsers = data.users || [];
+            
+            if (adminPageContainer && !document.body.classList.contains('is-loading-removed')) {
+                document.body.classList.remove('is-loading');
+                adminPageContainer.style.display = 'flex';
+                document.body.classList.add('is-loading-removed');
+            }
+            
+            const linkToClick = document.querySelector(`.admin-tab-link[data-tab="${activeTabId}"]`);
+            if (linkToClick && !linkToClick.classList.contains('active')) {
+                linkToClick.click();
+            } else if (!document.querySelector('.admin-tab-link.active')) {
+                const firstLink = document.querySelector('.admin-tab-link');
+                if (firstLink) firstLink.click();
+            } else {
+                renderAdminTab(activeTabId);
+            }
+        } catch (error) {
+            console.error("Initialization failed:", error);
+            window.location.href = 'index.html';
         }
-        
-        // Token 验证通过后，再从服务器获取最新数据
-        const data = await apiRequest('data');
-
-        // (可选但推荐) 再次验证从服务器返回的数据，防止权限在登录后被变更
-        const currentUserFromServer = data.users.find(u => u.username === payload.sub);
-        if (!currentUserFromServer || !currentUserFromServer.roles.includes('admin')) {
-            throw new Error("用户权限不足或服务器数据异常。");
-        }
-
-        allCategories = data.categories || [];
-        allBookmarks = data.bookmarks || [];
-        allUsers = data.users || [];
-
-        if (adminPageContainer && !document.body.classList.contains('is-loading-removed')) {
-            document.body.classList.remove('is-loading');
-            adminPageContainer.style.display = 'flex';
-            document.body.classList.add('is-loading-removed');
-        }
-
-        const linkToClick = document.querySelector(`.admin-tab-link[data-tab="${activeTabId}"]`);
-        if (linkToClick && !linkToClick.classList.contains('active')) {
-            linkToClick.click();
-        } else if (!document.querySelector('.admin-tab-link.active')) {
-            const firstLink = document.querySelector('.admin-tab-link');
-            if (firstLink) firstLink.click();
-        } else {
-            renderAdminTab(activeTabId);
-        }
-
-    } catch (error) {
-        console.error("Initialization failed:", error); // 这就是您看到的错误信息
-        window.location.href = 'index.html';
     }
-}
 
     if (adminPanelNav) {
         adminPanelNav.addEventListener('click', (e) => {
             e.preventDefault();
             const link = e.target.closest('.admin-tab-link');
             if (!link || link.classList.contains('active')) return;
+            
             adminPanelNav.querySelectorAll('.admin-tab-link').forEach(l => l.classList.remove('active'));
             link.classList.add('active');
+            
             const tabId = link.dataset.tab;
             adminTabContents.forEach(content => {
                 content.classList.toggle('active', content.id === tabId);
             });
+            
             renderAdminTab(tabId);
         });
     }
-    
+
     const renderAdminTab = (tabId) => {
-        cleanupEventListeners();
+        // 1. 中止并销毁上一个标签页的所有事件监听器
+        tabAbortController.abort();
+        // 2. 为新标签页创建一个全新的控制器
+        tabAbortController = new AbortController();
+
         const container = document.getElementById(tabId);
         if (!container) return;
         container.innerHTML = '';
+        
+        // 3. 将新控制器的信号 (signal) 传递给具体的渲染函数
+        const signal = tabAbortController.signal;
         switch (tabId) {
-            case 'tab-categories': renderCategoryAdminTab(container); break;
-            case 'tab-users': renderUserAdminTab(container); break;
-            case 'tab-bookmarks': renderBookmarkAdminTab(container); break;
-            case 'tab-system': renderSystemSettingsTab(container); break;
+            case 'tab-categories': renderCategoryAdminTab(container, signal); break;
+            case 'tab-users': renderUserAdminTab(container, signal); break;
+            case 'tab-bookmarks': renderBookmarkAdminTab(container, signal); break;
+            case 'tab-system': renderSystemSettingsTab(container, signal); break;
         }
     };
     
@@ -134,113 +120,80 @@ async function initializePage(activeTabId = 'tab-categories') {
         const categoryMap = new Map(categories.map(cat => [cat.id, { ...cat, children: [] }]));
         const tree = [];
         const sortedCategories = [...categories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
-        for (const cat of sortedCategories) {
-            if (cat.id === ignoreId) continue;
+        
+        sortedCategories.forEach(cat => {
+            if (cat.id === ignoreId) return;
+            const node = categoryMap.get(cat.id);
             if (cat.parentId && categoryMap.has(cat.parentId)) {
-                const parent = categoryMap.get(cat.parentId);
-                if (parent) parent.children.push(categoryMap.get(cat.id));
+                categoryMap.get(cat.parentId).children.push(node);
             } else {
-                tree.push(categoryMap.get(cat.id));
+                tree.push(node);
             }
-        }
+        });
+
         const buildOptions = (nodes, level) => {
             if (level >= 4) return;
-            for (const node of nodes) {
-                if (!node) continue;
+            nodes.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)).forEach(node => {
+                if (!node) return;
                 const option = document.createElement('option');
                 option.value = node.id;
                 option.textContent = `${'— '.repeat(level)}${node.name}`;
                 if (node.id === selectedId) option.selected = true;
                 selectElement.appendChild(option);
                 if (node.children.length > 0) buildOptions(node.children, level + 1);
-            }
+            });
         };
         buildOptions(tree, 0);
     };
 
-
- // [!!!] 核心修复：替换整个 renderCategoryAdminTab 函数
-    const renderCategoryAdminTab = (container) => {
+    const renderCategoryAdminTab = (container, signal) => {
         container.innerHTML = `<p class="admin-panel-tip">通过修改表单来调整分类，完成后请点击下方的“保存”按钮。</p><div class="category-admin-header"><span>排序</span><span>分类名称</span><span>上级分类</span><span>操作</span></div><ul id="category-admin-list"></ul><div class="admin-panel-actions"><button id="save-categories-btn" class="button button-primary"><i class="fas fa-save"></i> 保存全部分类</button><button id="add-new-category-btn" class="button"><i class="fas fa-plus"></i> 添加新分类</button></div>`;
         const listEl = container.querySelector('#category-admin-list');
-        
-        // 1. Create a map where each category object is enhanced with a `children` array.
         const categoryMap = new Map(allCategories.map(c => [c.id, {...c, children: []}]));
-        
-        // 2. This array will hold the root-level category nodes.
         const tree = [];
-        
-        // 3. Iterate over the original categories to build the tree structure.
-        allCategories.forEach(cat => {
-            const node = categoryMap.get(cat.id); // Get the enhanced object from the map.
-            if (cat.parentId && categoryMap.has(cat.parentId)) {
-                // If it has a parent, find the parent's enhanced object and push this node into its children array.
-                categoryMap.get(cat.parentId).children.push(node);
+        allCategories.forEach(c => {
+            const node = categoryMap.get(c.id);
+            if (c.parentId && categoryMap.has(c.parentId)) {
+                categoryMap.get(c.parentId).children.push(node);
             } else {
-                // If it's a root node (no parentId or parent not found), push it to the tree.
                 tree.push(node);
             }
         });
 
-        // 4. This function now receives nodes that are GUARANTEED to have a 'children' property.
         const buildList = (nodes, level) => {
-            // Sort children within the current level before rendering.
             nodes.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
                 const li = document.createElement('li');
                 li.dataset.id = cat.id;
                 li.innerHTML = `<input type="number" class="cat-order-input" value="${cat.sortOrder || 0}"><div class="cat-name-cell" style="padding-left: ${level * 25}px;"><input type="text" class="cat-name-input" value="${escapeHTML(cat.name)}"></div><select class="cat-parent-select"></select><button class="delete-cat-btn button-icon danger" title="删除"><i class="fas fa-trash-alt"></i></button>`;
                 populateCategoryDropdown(li.querySelector('.cat-parent-select'), allCategories, cat.parentId, cat.id);
                 listEl.appendChild(li);
-                
-                // This check is now safe.
                 if (cat.children && cat.children.length > 0) {
                     buildList(cat.children, level + 1);
                 }
             });
         };
-
         buildList(tree, 0);
 
-      // 在 renderCategoryAdminTab 函数的末尾，找到 addManagedEventListener，并用下面的代码替换它
+        listEl.addEventListener('click', (event) => {
+            const deleteButton = event.target.closest('.delete-cat-btn');
+            if (deleteButton) {
+                event.stopPropagation();
+                const listItem = deleteButton.closest('li[data-id]');
+                if (!listItem) return;
+                const catId = listItem.dataset.id;
+                if (catId.startsWith('new-')) {
+                    listItem.remove();
+                } else {
+                    const catName = listItem.querySelector('.cat-name-input').value;
+                    handleDeleteCategory(catId, catName);
+                }
+            }
+        }, { signal });
 
-addManagedEventListener(listEl, 'click', (event) => {
-
-    
-    // 寻找点击目标最近的 .delete-cat-btn 按钮
-    const deleteButton = event.target.closest('.delete-cat-btn');
-
-    // --- 关键逻辑 ---
-    // 只有当删除按钮确实被点击时，才执行后续操作。
-    if (deleteButton) {
-        // 阻止事件继续向上冒泡，防止触发父元素上可能存在的其他监听器
-        event.stopPropagation(); 
-        
-        const listItem = deleteButton.closest('li[data-id]');
-        if (!listItem) return; // 如果找不到父级 li 元素，则不执行任何操作
-
-        const catId = listItem.dataset.id;
-        
-        // 如果是还未保存的新分类，直接从 DOM 中移除
-        if (catId.startsWith('new-')) {
-            listItem.remove();
-        } else {
-            // 如果是已存在的分类，调用删除处理函数
-            const catName = listItem.querySelector('.cat-name-input').value;
-            handleDeleteCategory(catId, catName); // 这个函数会正确地弹出“确认删除”窗口
-        }
-    }
-    
-    // 注意：这里没有 'else' 或其他逻辑。如果点击的不是删除按钮，这个监听器不会做任何事，
-    // 从而避免了错误地触发其他弹窗。
-});
-
-        addManagedEventListener(container.querySelector('#add-new-category-btn'), 'click', handleAddNewCategory);
-        addManagedEventListener(container.querySelector('#save-categories-btn'), 'click', handleSaveCategories);
+        container.querySelector('#add-new-category-btn').addEventListener('click', handleAddNewCategory, { signal });
+        container.querySelector('#save-categories-btn').addEventListener('click', handleSaveCategories, { signal });
     };
 
-    // The rest of the functions in admin.js remain the same.
-    // Make sure to copy them from your original file if they are not present below.
-    
     const handleAddNewCategory = () => {
         const listEl = document.getElementById('category-admin-list');
         if (!listEl) return;
@@ -257,6 +210,7 @@ addManagedEventListener(listEl, 'click', (event) => {
         listEl.prepend(li);
         li.querySelector('.cat-name-input').focus();
     };
+
     const handleSaveCategories = async () => {
         const listItems = document.querySelectorAll('#category-admin-list li');
         let finalCategories = [];
@@ -279,6 +233,7 @@ addManagedEventListener(listEl, 'click', (event) => {
             await initializePage('tab-categories');
         } catch (error) { alert('保存失败: ' + error.message); }
     };
+
     const handleDeleteCategory = (catIdToDelete, catName) => {
         showConfirm('确认删除', `您确定要删除分类 "${catName}" 吗？这也会删除其下所有的子分类和书签。`, async () => {
             let idsToDelete = new Set([catIdToDelete]);
@@ -298,13 +253,13 @@ addManagedEventListener(listEl, 'click', (event) => {
         });
     };
 
-    const renderUserAdminTab = (container) => {
+    const renderUserAdminTab = (container, signal) => {
         container.innerHTML = `<div id="user-management-container"><div class="user-list-container"><h3>用户列表</h3><ul id="user-list"></ul></div><div class="user-form-container"><form id="user-form"><h3 id="user-form-title">添加新用户</h3><div class="user-form-static-fields"><input type="hidden" id="user-form-username-hidden"><div class="form-group-inline"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required></div><div class="form-group-inline"><label for="user-form-password">密码:</label><input type="password" id="user-form-password"></div><div class="form-group-inline"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div><div class="form-group-inline"><label for="user-form-default-cat">默认显示分类:</label><select id="user-form-default-cat"></select></div></div><div class="form-group flex-grow"><label>可见分类:</label><div id="user-form-categories" class="checkbox-group"></div></div><div class="user-form-buttons"><button type="submit" class="button button-primary">保存用户</button><button type="button" id="user-form-clear-btn" class="button">新增/清空</button></div><p class="modal-error-message"></p></form></div></div>`;
         const userList = container.querySelector('#user-list');
         const form = container.querySelector('#user-form');
         const token = localStorage.getItem('jwt_token');
         let currentUsername = '';
-        if (token) { try { currentUsername = JSON.parse(atob(token.split('.')[1])).sub; } catch (e) { console.error("无法解析Token:", e); } }
+        if (token) { try { currentUsername = parseJwtPayload(token).sub; } catch (e) { console.error("无法解析Token:", e); } }
         allUsers.forEach(user => {
             const li = document.createElement('li');
             li.dataset.username = user.username;
@@ -318,44 +273,35 @@ addManagedEventListener(listEl, 'click', (event) => {
             }
             userList.appendChild(li);
         });
-      // 在 renderUserAdminTab 函数中，替换原有的 userList 点击事件监听器
-addManagedEventListener(userList, 'click', (e) => {
-    const targetLi = e.target.closest('li[data-username]');
-    if (!targetLi) return;
+        
+        userList.addEventListener('click', (e) => {
+            const deleteButton = e.target.closest('.button-icon.danger');
+            if (deleteButton) {
+                e.stopPropagation();
+                const userItem = e.target.closest('li[data-username]');
+                const username = userItem.dataset.username;
+                showConfirm('删除用户', `确定删除用户 "${username}"?`, async () => {
+                    try {
+                        await apiRequest(`users/${encodeURIComponent(username)}`, 'DELETE');
+                        await initializePage('tab-users');
+                    } catch (error) { alert(error.message); }
+                });
+                return;
+            }
+            const li = e.target.closest('li[data-username]');
+            if (li) {
+                const user = allUsers.find(u => u.username === li.dataset.username);
+                if (user) populateUserForm(user);
+            }
+        }, { signal });
 
-    const username = targetLi.dataset.username;
-    const user = allBookmarks.find(u => u.username === username);
-
-    // 检查是否点击了删除按钮
-    if (e.target.closest('.button-icon.danger')) {
-        e.stopPropagation();
-        // 确保是合法的用户且不是公共或当前管理员账户
-        const token = localStorage.getItem('jwt_token');
-        let currentUsername = '';
-        if (token) { try { currentUsername = JSON.parse(atob(token.split('.')[1])).sub; } catch (e) { console.error("无法解析Token:", e); } }
-
-        if (username !== 'public' && username !== currentUsername) {
-            showConfirm('删除用户', `确定删除用户 "${username}"?`, async () => {
-                try {
-                    await apiRequest(`users/${encodeURIComponent(username)}`, 'DELETE');
-                    await initializePage('tab-users');
-                } catch (error) { alert(error.message); }
-            });
-        }
-        return; // 处理完删除逻辑后退出
-    }
-    
-    // 如果不是点击删除按钮，则执行加载表单的逻辑
-    if (user) {
-        populateUserForm(user);
-    }
-});
-        const visibleCategoriesContainer = form.querySelector('#user-form-categories');
-        addManagedEventListener(visibleCategoriesContainer, 'change', () => updateDefaultCategoryDropdown(form));
-        addManagedEventListener(container.querySelector('#user-form-clear-btn'), 'click', clearUserForm);
-        form.onsubmit = handleUserFormSubmit;
+        container.querySelector('#user-form-clear-btn').addEventListener('click', clearUserForm, { signal });
+        form.addEventListener('submit', handleUserFormSubmit, { signal });
+        container.querySelector('#user-form-categories').addEventListener('change', () => updateDefaultCategoryDropdown(form), { signal });
+        
         clearUserForm();
     };
+    
     const populateUserForm = (user) => {
         const form = document.getElementById('user-form'); if (!form) return;
         form.reset();
@@ -375,6 +321,7 @@ addManagedEventListener(userList, 'click', (e) => {
         document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
         document.querySelector(`#user-list li[data-username="${user.username}"]`)?.classList.add('selected');
     };
+
     const clearUserForm = () => {
         const form = document.getElementById('user-form'); if (!form) return;
         form.reset();
@@ -387,6 +334,7 @@ addManagedEventListener(userList, 'click', (e) => {
         updateDefaultCategoryDropdown(form, 'all');
         document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
     };
+
     const renderUserFormRoles = (activeRoles = ['viewer']) => {
         const container = document.getElementById('user-form-roles'); if (!container) return;
         container.innerHTML = '';
@@ -400,6 +348,7 @@ addManagedEventListener(userList, 'click', (e) => {
             container.innerHTML += `<div><input type="radio" id="role-${role}" name="role-selection" value="${role}" ${isChecked ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}><label for="role-${role}">${role}</label></div>`;
         });
     };
+
     const renderUserFormCategories = (visibleIds = [], isDisabled = false) => {
         const container = document.getElementById('user-form-categories'); if (!container) return;
         container.innerHTML = '';
@@ -419,6 +368,7 @@ addManagedEventListener(userList, 'click', (e) => {
         };
         buildCheckboxes(tree, 0);
     };
+
     const updateDefaultCategoryDropdown = (form, selectedId) => {
         const defaultCatSelect = form.querySelector('#user-form-default-cat');
         const visibleCatCheckboxes = form.querySelectorAll('#user-form-categories input:checked');
@@ -438,6 +388,7 @@ addManagedEventListener(userList, 'click', (e) => {
             defaultCatSelect.value = 'all';
         }
     };
+    
     const handleUserFormSubmit = async (e) => {
         e.preventDefault();
         const form = e.target;
@@ -464,7 +415,7 @@ addManagedEventListener(userList, 'click', (e) => {
             alert('用户保存成功！');
             const token = localStorage.getItem('jwt_token');
             if (token) {
-                const payload = JSON.parse(atob(token.split('.')[1]));
+                const payload = parseJwtPayload(token);
                 if (payload.sub === updatedUser.username && !updatedUser.roles.includes('admin')) {
                     alert('您的管理员权限已被移除，将退出管理后台并返回主页。');
                     localStorage.removeItem('jwt_token');
@@ -476,50 +427,39 @@ addManagedEventListener(userList, 'click', (e) => {
         } catch (error) { errorEl.textContent = error.message; }
     };
     
-    const renderBookmarkAdminTab = (container) => {
+    const renderBookmarkAdminTab = (container, signal) => {
         container.innerHTML = `<p class="admin-panel-tip">通过下拉菜单筛选分类。修改排序数字后，点击下方的“保存”按钮来应用更改。</p><div class="bookmark-admin-controls"><span>筛选分类:</span><select id="bookmark-category-filter"><option value="all">-- 显示全部分类 --</option></select></div><div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div><div id="bookmark-admin-list-container"><ul></ul></div><div class="admin-panel-actions"><button id="save-bookmarks-btn" class="button button-primary"><i class="fas fa-save"></i> 保存书签顺序</button><button id="add-new-bookmark-btn" class="button"><i class="fas fa-plus"></i> 添加新书签</button></div>`;
         const listEl = container.querySelector('#bookmark-admin-list-container ul');
         const categoryFilter = container.querySelector('#bookmark-category-filter');
         allCategories.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)).forEach(cat=>{const o=document.createElement('option');o.value=cat.id;o.textContent=cat.name;categoryFilter.appendChild(o)});
         const lastFilter=sessionStorage.getItem('admin_bookmark_filter');if(lastFilter)categoryFilter.value=lastFilter;
-        addManagedEventListener(categoryFilter, 'change', () => {
+        
+        categoryFilter.addEventListener('change', () => {
             sessionStorage.setItem('admin_bookmark_filter', categoryFilter.value);
             renderAdminTab('tab-bookmarks');
-        });
+        }, { signal });
+
         const selectedCategoryId=categoryFilter.value;
         let bookmarksToDisplay=selectedCategoryId==='all'?[...allBookmarks]:allBookmarks.filter(bm=>bm.categoryId===selectedCategoryId);
         bookmarksToDisplay.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
         const categoryNameMap=new Map(allCategories.map(c=>[c.id,c.name]));
         listEl.innerHTML=bookmarksToDisplay.map(bm=>`<li data-id="${bm.id}"><input type="number" class="bm-sort-order" value="${bm.sortOrder||0}"><span class="bm-admin-name">${escapeHTML(bm.name)}</span><span class="bm-admin-cat">${categoryNameMap.get(bm.categoryId)||"无分类"}</span><div class="bm-admin-actions"><button class="edit-bm-btn button-icon" title="编辑"><i class="fas fa-pencil-alt"></i></button><button class="delete-bm-btn danger button-icon" title="删除"><i class="fas fa-trash-alt"></i></button></div></li>`).join('');
-
-// 在 renderBookmarkAdminTab 函数中，替换原有的 listEl 点击事件监听器
-addManagedEventListener(listEl, 'click', (event) => {
-    const listItem = event.target.closest('li[data-id]');
-    if (!listItem) return;
-
-    const bookmarkId = listItem.dataset.id;
-    const bookmark = allBookmarks.find(bm => bm.id === bookmarkId);
-    if (!bookmark) return;
-
-    // 关键修复：明确判断点击目标
-    // 检查是否点击了编辑按钮
-    if (event.target.closest('.edit-bm-btn')) {
-        event.stopPropagation();
-        handleEditBookmark(bookmark);
-        return; // 处理完后立即退出
-    }
-
-    // 检查是否点击了删除按钮
-    if (event.target.closest('.delete-bm-btn')) {
-        event.stopPropagation();
-        handleDeleteBookmark(bookmark);
-        return; // 处理完后立即退出
-    }
-});
         
-        addManagedEventListener(container.querySelector('#add-new-bookmark-btn'), 'click', handleAddNewBookmark);
-        addManagedEventListener(container.querySelector('#save-bookmarks-btn'), 'click', handleSaveBookmarks);
+        listEl.addEventListener('click', (event) => {
+            const editButton = event.target.closest('.edit-bm-btn');
+            const deleteButton = event.target.closest('.delete-bm-btn');
+            const listItem = event.target.closest('li[data-id]');
+            if (!listItem) return;
+            const bookmark = allBookmarks.find(bm => bm.id === listItem.dataset.id);
+            if (!bookmark) return;
+            if (editButton) { event.stopPropagation(); handleEditBookmark(bookmark); } 
+            else if (deleteButton) { event.stopPropagation(); handleDeleteBookmark(bookmark); }
+        }, { signal });
+
+        container.querySelector('#add-new-bookmark-btn').addEventListener('click', handleAddNewBookmark, { signal });
+        container.querySelector('#save-bookmarks-btn').addEventListener('click', handleSaveBookmarks, { signal });
     };
+
     const handleSaveBookmarks = async () => {
         const listItems = document.querySelectorAll('#bookmark-admin-list-container li');
         let hasChanges = false;
@@ -539,6 +479,7 @@ addManagedEventListener(listEl, 'click', (event) => {
             await initializePage('tab-bookmarks');
         } catch (error) { alert(`保存失败: ${error.message}`); }
     };
+
     const handleAddNewBookmark = () => {
         if (!bookmarkEditForm || !bookmarkEditModal) { return; }
         bookmarkEditForm.reset();
@@ -550,6 +491,7 @@ addManagedEventListener(listEl, 'click', (event) => {
         }
         showModal(bookmarkEditModal);
     };
+
     const handleEditBookmark = (bookmark) => {
         if (!bookmarkEditForm || !bookmarkEditModal) { return; }
         bookmarkEditForm.reset();
@@ -562,6 +504,7 @@ addManagedEventListener(listEl, 'click', (event) => {
         populateCategoryDropdown(bookmarkEditForm.querySelector('#bm-edit-category'), allCategories, bookmark.categoryId, null, { allowNoParent: false });
         showModal(bookmarkEditModal);
     };
+
     const handleDeleteBookmark = (bookmark) => {
         showConfirm('删除书签', `确定删除书签 "${bookmark.name}"?`, async () => {
             try {
@@ -571,12 +514,12 @@ addManagedEventListener(listEl, 'click', (event) => {
         });
     };
 
-    const renderSystemSettingsTab = (container) => {
+    const renderSystemSettingsTab = (container, signal) => {
         container.innerHTML = `<div class="system-setting-item"><h3><i class="fas fa-file-import"></i> 导入书签</h3><p>从浏览器导出的HTML文件导入书签。导入操作会合并现有书签，不会清空原有数据。</p><button id="import-bookmarks-btn-admin" class="button">选择HTML文件</button><input type="file" id="import-file-input-admin" accept=".html,.htm" style="display: none;"></div>`;
         const importBtn = container.querySelector('#import-bookmarks-btn-admin');
         const fileInput = container.querySelector('#import-file-input-admin');
-        addManagedEventListener(importBtn, 'click', () => fileInput.click());
-        addManagedEventListener(fileInput, 'change', (e) => {
+        importBtn.addEventListener('click', () => fileInput.click(), { signal });
+        fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
@@ -589,8 +532,9 @@ addManagedEventListener(listEl, 'click', (event) => {
             };
             reader.readAsText(file);
             e.target.value = '';
-        });
+        }, { signal });
     };
+
     const parseAndImport = async (htmlContent) => {
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlContent, 'text/html');
