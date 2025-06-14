@@ -168,7 +168,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 li.innerHTML = `<input type="number" class="cat-order-input" value="${cat.sortOrder || 0}"><div class="cat-name-cell" style="padding-left: ${level * 25}px;"><input type="text" class="cat-name-input" value="${escapeHTML(cat.name)}"></div><select class="cat-parent-select"></select><button class="delete-cat-btn button-icon danger" title="删除"><i class="fas fa-trash-alt"></i></button>`;
                 const parentSelect = li.querySelector('.cat-parent-select');
                 populateCategoryDropdown(parentSelect, allCategories, cat.parentId, cat.id, { allowNoParent: true });
-                li.querySelector('.delete-cat-btn').onclick = () => handleDeleteCategory(cat.id, cat.name);
+
+                // [关键修正] 接收 event 对象并调用 stopPropagation()
+                li.querySelector('.delete-cat-btn').onclick = (event) => {
+                    event.stopPropagation(); // 阻止事件冒泡
+                    handleDeleteCategory(cat.id, cat.name);
+                };
+
                 listEl.appendChild(li);
                 if (cat.children.length > 0) buildList(cat.children, level + 1);
             });
