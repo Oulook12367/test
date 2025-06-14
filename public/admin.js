@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 3. UI Flow & Modals ---
     const showModal = (modal) => {
-        hideAllModals(); // [最终修复] 在显示任何新模态框之前，先隐藏所有已存在的模态框
+        hideAllModals(); // In showing any new modal, first hide all existing ones.
         if (modal) {
             modalBackdrop.style.display = 'flex';
             modal.style.display = 'block';
@@ -38,11 +38,11 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const token = localStorage.getItem('jwt_token');
             const payload = parseJwtPayload(token);
-            if (!payload || !payload.roles || !payload.roles.includes('admin')) throw new Error("Token 无效或用户非管理员。");
+            if (!payload || !payload.roles || !payload.roles.includes('admin')) throw new Error("Token is invalid or user is not an admin.");
             
             const data = await apiRequest('data');
             const currentUserFromServer = data.users.find(u => u.username === payload.sub);
-            if (!currentUserFromServer || !currentUserFromServer.roles.includes('admin')) throw new Error("用户权限可能已被变更。");
+            if (!currentUserFromServer || !currentUserFromServer.roles.includes('admin')) throw new Error("User permissions may have been changed.");
             
             allCategories = data.categories || [];
             allBookmarks = data.bookmarks || [];
@@ -153,17 +153,49 @@ document.addEventListener('DOMContentLoaded', () => {
         buildList(tree, 0);
     };
 
+    /**
+     * [NEW FUNCTION] Renders only the list of bookmarks inside the bookmark management tab.
+     * This allows for partial updates without re-rendering the entire tab.
+     * @param {string} categoryId The category to filter by ('all' for no filter).
+     */
+    const renderBookmarkList = (categoryId) => {
+        const listEl = document.querySelector('#bookmark-admin-list-container ul');
+        if (!listEl) return;
+
+        let bookmarksToDisplay = categoryId === 'all'
+            ? [...allBookmarks]
+            : allBookmarks.filter(bm => bm.categoryId === categoryId);
+        
+        bookmarksToDisplay.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        const categoryNameMap = new Map(allCategories.map(c=>[c.id,c.name]));
+        
+        listEl.innerHTML = bookmarksToDisplay.map(bm => 
+            `<li data-id="${bm.id}">` +
+            `<input type="number" class="bm-sort-order" value="${bm.sortOrder || 0}">` +
+            `<span class="bm-admin-name">${escapeHTML(bm.name)}</span>` +
+            `<span class="bm-admin-cat">${categoryNameMap.get(bm.categoryId) || "无分类"}</span>` +
+            `<div class="bm-admin-actions">` +
+            `<button class="edit-bm-btn button-icon" title="编辑"><i class="fas fa-pencil-alt"></i></button>` +
+            `<button class="delete-bm-btn danger button-icon" title="删除"><i class="fas fa-trash-alt"></i></button>` +
+            `</div></li>`
+        ).join('');
+    };
+
     const renderBookmarkAdminTab = (container) => {
         container.innerHTML = `<p class="admin-panel-tip">通过下拉菜单筛选分类。修改排序数字后，点击下方的“保存”按钮来应用更改。</p><div class="bookmark-admin-controls"><span>筛选分类:</span><select id="bookmark-category-filter"><option value="all">-- 显示全部分类 --</option></select></div><div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div><div id="bookmark-admin-list-container"><ul></ul></div><div class="admin-panel-actions"><button id="save-bookmarks-btn" class="button button-primary"><i class="fas fa-save"></i> 保存书签顺序</button><button id="add-new-bookmark-btn" class="button"><i class="fas fa-plus"></i> 添加新书签</button></div>`;
-        const listEl = container.querySelector('#bookmark-admin-list-container ul');
         const categoryFilter = container.querySelector('#bookmark-category-filter');
-        allCategories.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)).forEach(cat=>{const o=document.createElement('option');o.value=cat.id;o.textContent=cat.name;categoryFilter.appendChild(o)});
-        const lastFilter=sessionStorage.getItem('admin_bookmark_filter');if(lastFilter)categoryFilter.value=lastFilter;
-        const selectedCategoryId=categoryFilter.value;
-        let bookmarksToDisplay=selectedCategoryId==='all'?[...allBookmarks]:allBookmarks.filter(bm=>bm.categoryId===selectedCategoryId);
-        bookmarksToDisplay.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
-        const categoryNameMap=new Map(allCategories.map(c=>[c.id,c.name]));
-        listEl.innerHTML=bookmarksToDisplay.map(bm=>`<li data-id="${bm.id}"><input type="number" class="bm-sort-order" value="${bm.sortOrder||0}"><span class="bm-admin-name">${escapeHTML(bm.name)}</span><span class="bm-admin-cat">${categoryNameMap.get(bm.categoryId)||"无分类"}</span><div class="bm-admin-actions"><button class="edit-bm-btn button-icon" title="编辑"><i class="fas fa-pencil-alt"></i></button><button class="delete-bm-btn danger button-icon" title="删除"><i class="fas fa-trash-alt"></i></button></div></li>`).join('');
+        
+        allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
+            const o=document.createElement('option');
+            o.value=cat.id;
+            o.textContent=cat.name;
+            categoryFilter.appendChild(o)
+        });
+        
+        const lastFilter = sessionStorage.getItem('admin_bookmark_filter') || 'all';
+        categoryFilter.value = lastFilter;
+        
+        renderBookmarkList(lastFilter); // Use the new function for the initial render.
     };
 
     const renderUserAdminTab = (container) => {
@@ -171,7 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const userList = container.querySelector('#user-list');
         const token = localStorage.getItem('jwt_token');
         let currentUsername = '';
-        if (token) { try { currentUsername = parseJwtPayload(token).sub; } catch (e) { console.error("无法解析Token:", e); } }
+        if (token) { try { currentUsername = parseJwtPayload(token).sub; } catch (e) { console.error("Could not parse token:", e); } }
         allUsers.forEach(user => {
             const li = document.createElement('li');
             li.dataset.username = user.username;
