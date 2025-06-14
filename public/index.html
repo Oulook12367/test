@@ -7,8 +7,8 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
-<body>
-    <div id="app-layout">
+<body class="is-loading">
+    <div id="app-layout" style="visibility: hidden;">
         <aside class="sidebar">
             <div class="sidebar-header">
                 <h2><i class="fas fa-rocket"></i> 导航中心</h2>
@@ -18,11 +18,13 @@
         </aside>
 
         <div class="main-content-wrapper">
-            <header style="padding: 1.5rem; display: flex; align-items: center; gap: 1rem;">
-                <button id="sidebar-toggle-btn" class="button-icon" title="切换侧边栏"><i class="fas fa-bars"></i></button>
-                <button id="mobile-sidebar-toggle" class="button-icon" title="打开分类"><i class="fas fa-bars"></i></button>
+            <header class="main-header">
+                <div class="header-group">
+                    <button id="sidebar-toggle-btn" class="button-icon" title="切换侧边栏"><i class="fas fa-bars"></i></button>
+                    <button id="mobile-sidebar-toggle" class="button-icon" title="打开分类"><i class="fas fa-bars"></i></button>
+                </div>
 
-                <div style="flex-grow: 1; max-width: 700px; margin: 0 auto;">
+                <div class="search-form-wrapper">
                     <form id="search-form" class="search-form-container">
                         <select id="search-engine">
                             <option value="https://www.google.com/search?q=">Google</option>
@@ -31,25 +33,24 @@
                         </select>
                         <div class="divider"></div>
                         <input type="search" id="local-search" placeholder="搜索书签或网络...">
-                        <button type="submit" class="button-icon" title="搜索" style="color: var(--color-accent);"><i class="fas fa-search"></i></button>
+                        <button type="submit" class="button-icon search-submit-btn" title="网络搜索">
+                            <i class="fas fa-search"></i>
+                        </button>
                     </form>
                 </div>
 
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <button id="action-btn" class="button-primary" style="display: none;"></button>
+                <div class="header-group">
+                    <button id="action-btn" class="button button-primary" style="display: none;"></button>
                     <button id="theme-toggle" title="切换主题" class="button-icon"></button>
                     <button id="logout-btn" title="退出登录" class="button-icon" style="display: none;"><i class="fas fa-sign-out-alt"></i></button>
                 </div>
             </header>
 
-            <main>
+            <main class="main-content-area">
                 <div id="bookmarks-grid"></div>
             </main>
         </div>
     </div>
-
-    <div id="modal-backdrop" class="modal-backdrop">
-        </div>
 
     <script src="shared.js"></script>
     <script src="main.js"></script>
