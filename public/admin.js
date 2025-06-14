@@ -88,13 +88,19 @@ document.addEventListener('DOMContentLoaded', () => {
         renderAdminTab(tabId);
     });
     
- const renderAdminTab = (tabId) => {
+const renderAdminTab = (tabId) => {
     const container = document.getElementById(tabId);
     if (!container) return;
-    container.innerHTML = ''; // Clear previous content
+    container.innerHTML = ''; // 清空之前的内容
+
+    // 激活正确的标签内容
+    document.querySelectorAll('.admin-tab-content').forEach(c => c.classList.remove('active'));
+    container.classList.add('active');
+
     switch (tabId) {
-        case 'tab-categories':
-            renderCategoryAdminTab(container);
+        case 'tab-users':
+            renderUserAdminTab(container);
+            clearUserForm(); // <-- 关键修复：在渲染后立即清空表单
             break;
         case 'tab-users':
             renderUserAdminTab(container);
