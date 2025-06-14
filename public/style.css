@@ -120,6 +120,11 @@ body.login-page { display: flex; align-items: center; justify-content: center; p
 .auth-box { width: 100%; max-width: 384px; padding: 2rem; text-align: center; }
 .auth-title { font-size: 2.25rem; font-weight: 700; margin-bottom: 1rem; }
 .auth-subtitle { margin-bottom: 1.5rem; opacity: 0.8; }
+/* ---  在此处添加新代码 --- */
+.form-group {
+    margin-bottom: 1.5rem; /* 为每个表单组添加 1.5rem 的下外边距 */
+}
+/* ------------------------- */
 .auth-box .full-width { width: 100%; padding: 14px; }
 
 #app-layout { display: flex; height: 100vh; padding: 1.5rem; gap: 1.5rem; }
