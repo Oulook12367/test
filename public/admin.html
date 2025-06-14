@@ -12,7 +12,7 @@
     <div id="admin-page-container" style="display: none;">
         <header class="admin-header glass-pane">
             <h1><i class="fas fa-cogs"></i> 控制中心</h1>
-            <a href="index.html" class="button secondary"><i class="fas fa-home"></i> 返回主页</a>
+            <a href="index.html" class="button"><i class="fas fa-home"></i> 返回主页</a>
         </header>
         <div class="admin-panel-container glass-pane">
             <nav class="admin-panel-nav">
@@ -22,7 +22,6 @@
                 <a href="#" class="admin-tab-link" data-tab="tab-system"><i class="fas fa-tools fa-fw"></i> 系统工具</a>
             </nav>
             <main class="admin-panel-content">
-                <!-- Content will be rendered by JS now that the crash is fixed -->
                 <div id="tab-categories" class="admin-tab-content active"></div>
                 <div id="tab-users" class="admin-tab-content"></div>
                 <div id="tab-bookmarks" class="admin-tab-content"></div>
@@ -31,7 +30,6 @@
         </div>
     </div>
 
-    <!-- [重要修正] 恢复模态框的完整内部结构 -->
     <div id="modal-backdrop" class="modal-backdrop">
         <div id="bookmark-edit-modal" class="modal glass-pane">
             <div class="modal-content">
@@ -70,7 +68,7 @@
                 <p id="confirm-text"></p>
                 <div class="confirm-buttons">
                     <button id="confirm-btn-yes" class="button button-primary">确认</button>
-                    <button id="confirm-btn-no" class="button secondary">取消</button>
+                    <button id="confirm-btn-no" class="button">取消</button>
                 </div>
             </div>
         </div>
