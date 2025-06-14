@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
     const hideAllModals = () => {
-        if(modalBackdrop) modalBackdrop.style.display = 'none';
+        if (modalBackdrop) modalBackdrop.style.display = 'none';
         document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
     };
     const showConfirm = (title, text, onConfirm) => {
@@ -38,10 +38,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     const cleanupEventListeners = () => {
-        activeEventListeners.forEach(({element, type, handler}) => {
-            if (element) {
-                element.removeEventListener(type, handler);
-            }
+        activeEventListeners.forEach(({ element, type, handler }) => {
+            if (element) element.removeEventListener(type, handler);
         });
         activeEventListeners = [];
     };
@@ -414,7 +412,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const categoryFilter = container.querySelector('#bookmark-category-filter');
         allCategories.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)).forEach(cat=>{const o=document.createElement('option');o.value=cat.id;o.textContent=cat.name;categoryFilter.appendChild(o)});
         const lastFilter=sessionStorage.getItem('admin_bookmark_filter');if(lastFilter)categoryFilter.value=lastFilter;
-        categoryFilter.onchange=()=>{sessionStorage.setItem('admin_bookmark_filter',categoryFilter.value);renderAdminTab('tab-bookmarks')};
+        addManagedEventListener(categoryFilter, 'change', () => {
+            sessionStorage.setItem('admin_bookmark_filter', categoryFilter.value);
+            renderAdminTab('tab-bookmarks');
+        });
         const selectedCategoryId=categoryFilter.value;
         let bookmarksToDisplay=selectedCategoryId==='all'?[...allBookmarks]:allBookmarks.filter(bm=>bm.categoryId===selectedCategoryId);
         bookmarksToDisplay.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
@@ -562,11 +563,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Final Initialization ---
-    if(document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializePage);
-    } else {
-        initializePage();
-    }
     document.querySelectorAll('.close-btn').forEach(btn => btn.addEventListener('click', hideAllModals));
     const confirmNoBtn = document.getElementById('confirm-btn-no');
     if(confirmNoBtn) confirmNoBtn.onclick = hideAllModals;
@@ -591,4 +587,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if(errorEl) errorEl.textContent = error.message;
         }
     };
+
+    initializePage();
 });
