@@ -42,3 +42,28 @@ function debounce(func, wait) {
         timeout = setTimeout(later, wait);
     };
 }
+
+
+
+function parseJwtPayload(token) {
+    if (!token || typeof token !== 'string') {
+        return null;
+    }
+    try {
+        const base64Url = token.split('.')[1];
+        if (!base64Url) {
+            return null;
+        }
+        // 将 Base64Url 编码转换回标准的 Base64 编码
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        // 解码并处理 UTF-8 字符
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+
+        return JSON.parse(jsonPayload);
+    } catch (e) {
+        console.error("解析 Token 失败:", e);
+        return null; // 如果解析失败，返回 null
+    }
+}
