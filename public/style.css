@@ -282,3 +282,13 @@ body.login-page { display: flex; align-items: center; justify-content: center; p
 }
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+
+/* 在代码九(style.css)中添加 */
+.delete-cat-btn:hover { background: rgba(239, 68, 68, 0.2); }
+.delete-bm-btn:hover { background: rgba(239, 68, 68, 0.2); }
+.button-icon.danger:hover { background: rgba(239, 68, 68, 0.2); }
+
+/* 模态框z-index调整 */
+#bookmark-edit-modal { z-index: 1001; }
+#confirm-modal { z-index: 1002; }
