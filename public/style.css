@@ -56,34 +56,37 @@ body:not(.login-page) { overflow: hidden; }
 }
 
 /* 3. GENERIC COMPONENTS */
-.button {
+/* [修正] 统一所有按钮的基础样式为用户期望的样式 */
+.button, button {
     display: inline-flex; align-items: center; justify-content: center;
     gap: 0.5rem; padding: 12px 24px; font-weight: 700;
     border-radius: 12px; cursor: pointer; border: none;
     transition: all 0.3s; color: white;
+    background: rgba(255, 255, 255, 0.1);
 }
-/* [修正] 调整主按钮样式，使其更内敛 */
-.button-primary { background: rgba(255, 255, 255, 0.2); }
-.button-primary:hover { background: rgba(255, 255, 255, 0.3); transform: translateY(-2px); }
+.button:hover, button:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
 
-/* “返回主页”按钮的样式作为参考基准 */
-.button.secondary { background: rgba(255, 255, 255, 0.1); }
-.button.secondary:hover { background: rgba(255, 255, 255, 0.2); }
+/* 如果需要特别突出的主按钮，可以覆盖样式 */
+.button-primary {
+    background: rgba(255, 255, 255, 0.3); /* 稍微亮一点以示区别 */
+}
+.button-primary:hover {
+    background: rgba(255, 255, 255, 0.4);
+}
 
-/* [修正] 统一所有图标按钮的样式，使其拥有玻璃背景 */
+/* 统一所有图标按钮的样式 */
 .button-icon, #action-btn {
-    display: inline-flex; align-items: center; justify-content: center;
-    background: rgba(255, 255, 255, 0.1); /* 匹配 secondary 按钮的背景 */
     padding: 0;
     width: 44px; height: 44px;
     font-size: 1.2rem; border-radius: 50%;
 }
-.button-icon:hover, #action-btn:hover { background: rgba(255, 255, 255, 0.2); }
 
 /* CSS技巧：隐藏 #action-btn 中的文字，仅显示图标 */
 #action-btn {
     font-size: 0;
-    padding: 0;
     gap: 0;
 }
 #action-btn i {
@@ -100,6 +103,7 @@ input, textarea {
 input:focus, textarea:focus { outline: none; border-bottom-color: white; }
 input::placeholder, textarea::placeholder { color: rgba(255, 255, 255, 0.7); }
 
+/* [修正] 修复下拉框样式和下拉列表 */
 select {
     -webkit-appearance: none; -moz-appearance: none; appearance: none;
     width: 100%; background: transparent; border: none;
@@ -140,7 +144,13 @@ body.login-page { display: flex; align-items: center; justify-content: center; p
 .header { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1.5rem; }
 .search-bar { flex-grow: 1; }
 .search-bar form { display: flex; align-items: center; }
-.search-bar select { flex: 0 0 120px; border-radius: 0; border-right: 2px solid rgba(255,255,255,0.5); }
+/* [修正] 修复下拉框宽度问题 */
+.search-bar select {
+    flex-shrink: 0; /* 防止被压缩 */
+    min-width: 120px; /* 保证最小宽度 */
+    border-radius: 0;
+    border-right: 2px solid rgba(255,255,255,0.5);
+}
 .search-bar input { padding-left: 1rem; }
 
 #bookmarks-grid {
