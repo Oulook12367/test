@@ -158,29 +158,49 @@ async function initializePage(activeTabId = 'tab-categories') {
         buildOptions(tree, 0);
     };
 
+
+ // [!!!] 核心修复：替换整个 renderCategoryAdminTab 函数
     const renderCategoryAdminTab = (container) => {
         container.innerHTML = `<p class="admin-panel-tip">通过修改表单来调整分类，完成后请点击下方的“保存”按钮。</p><div class="category-admin-header"><span>排序</span><span>分类名称</span><span>上级分类</span><span>操作</span></div><ul id="category-admin-list"></ul><div class="admin-panel-actions"><button id="save-categories-btn" class="button button-primary"><i class="fas fa-save"></i> 保存全部分类</button><button id="add-new-category-btn" class="button"><i class="fas fa-plus"></i> 添加新分类</button></div>`;
         const listEl = container.querySelector('#category-admin-list');
+        
+        // 1. Create a map where each category object is enhanced with a `children` array.
         const categoryMap = new Map(allCategories.map(c => [c.id, {...c, children: []}]));
+        
+        // 2. This array will hold the root-level category nodes.
         const tree = [];
-        allCategories.forEach(c => {
-            if (c.parentId && categoryMap.has(c.parentId)) {
-                categoryMap.get(c.parentId).children.push(c);
+        
+        // 3. Iterate over the original categories to build the tree structure.
+        allCategories.forEach(cat => {
+            const node = categoryMap.get(cat.id); // Get the enhanced object from the map.
+            if (cat.parentId && categoryMap.has(cat.parentId)) {
+                // If it has a parent, find the parent's enhanced object and push this node into its children array.
+                categoryMap.get(cat.parentId).children.push(node);
             } else {
-                tree.push(c);
+                // If it's a root node (no parentId or parent not found), push it to the tree.
+                tree.push(node);
             }
         });
+
+        // 4. This function now receives nodes that are GUARANTEED to have a 'children' property.
         const buildList = (nodes, level) => {
+            // Sort children within the current level before rendering.
             nodes.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
                 const li = document.createElement('li');
                 li.dataset.id = cat.id;
                 li.innerHTML = `<input type="number" class="cat-order-input" value="${cat.sortOrder || 0}"><div class="cat-name-cell" style="padding-left: ${level * 25}px;"><input type="text" class="cat-name-input" value="${escapeHTML(cat.name)}"></div><select class="cat-parent-select"></select><button class="delete-cat-btn button-icon danger" title="删除"><i class="fas fa-trash-alt"></i></button>`;
                 populateCategoryDropdown(li.querySelector('.cat-parent-select'), allCategories, cat.parentId, cat.id);
                 listEl.appendChild(li);
-                if (cat.children.length > 0) buildList(cat.children, level + 1);
+                
+                // This check is now safe.
+                if (cat.children && cat.children.length > 0) {
+                    buildList(cat.children, level + 1);
+                }
             });
         };
+
         buildList(tree, 0);
+
         addManagedEventListener(listEl, 'click', (event) => {
             const deleteButton = event.target.closest('.delete-cat-btn');
             if (deleteButton) {
@@ -196,9 +216,14 @@ async function initializePage(activeTabId = 'tab-categories') {
                 }
             }
         });
+
         addManagedEventListener(container.querySelector('#add-new-category-btn'), 'click', handleAddNewCategory);
         addManagedEventListener(container.querySelector('#save-categories-btn'), 'click', handleSaveCategories);
     };
+
+    // The rest of the functions in admin.js remain the same.
+    // Make sure to copy them from your original file if they are not present below.
+    
     const handleAddNewCategory = () => {
         const listEl = document.getElementById('category-admin-list');
         if (!listEl) return;
