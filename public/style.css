@@ -1,4 +1,4 @@
-/* --- Sci-Fi UI Overhaul --- */
+/* --- Sci-Fi UI Overhaul (Revised) --- */
 
 /* 1. FONT & ROOT VARIABLES */
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&display=swap');
@@ -9,7 +9,7 @@
     --sidebar-width: 260px;
     --transition-speed: 0.3s;
     
-    /* Light Sci-Fi Theme (Toggleable) */
+    /* Light Sci-Fi Theme */
     --bg-light: #e8f1f2;
     --surface-light: #ffffff;
     --border-light: #b0c4de;
@@ -19,7 +19,7 @@
     --accent-glow-light: rgba(0, 119, 182, 0.5);
     --star-color-light: #ffc300;
 
-    /* Dark Sci-Fi Theme (Default) */
+    /* Dark Sci-Fi Theme */
     --bg-dark: #0d1b2a;
     --surface-dark: #1b263b;
     --border-dark: #415a77;
@@ -42,18 +42,11 @@ body {
     color: var(--text-primary-dark);
     transition: background-color var(--transition-speed), color var(--transition-speed);
     overflow-x: hidden;
-    background-image: 
-        linear-gradient(var(--border-dark) 1px, transparent 1px),
-        linear-gradient(90deg, var(--border-dark) 1px, transparent 1px);
-    background-size: 40px 40px;
+    /* --- [修正] 移除背景网格线 --- */
 }
 body.light-theme {
     background-color: var(--bg-light);
     color: var(--text-primary-light);
-    background-image: 
-        linear-gradient(rgba(0, 0, 0, 0.07) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0, 0, 0, 0.07) 1px, transparent 1px);
-    background-size: 30px 30px;
 }
 body.is-loading { visibility: hidden; }
 
@@ -93,6 +86,16 @@ header {
     margin-bottom: 2rem;
     flex-shrink: 0;
 }
+/* --- [修正] 修复主页顶部栏布局 --- */
+header > div:first-of-type { flex-shrink: 0; }
+header .search-bar { flex-grow: 1; }
+header .search-bar form { display: flex; border: 1px solid var(--border-dark); background-color: var(--surface-dark); border-radius: 2px; }
+.light-theme header .search-bar form { border-color: var(--border-light); background-color: var(--surface-light); }
+header .search-bar #local-search { border: none; background: transparent; }
+header .search-bar #search-engine { border: none; border-right: 1px solid var(--border-dark); background: transparent; border-radius: 0;}
+.light-theme header .search-bar #search-engine { border-right-color: var(--border-light); }
+header .header-buttons { flex-shrink: 0; display: flex; align-items: center; gap: 0.5rem; }
+
 
 #mobile-sidebar-toggle { display: none; }
 #sidebar-toggle-btn { display: inline-flex; }
@@ -153,13 +156,6 @@ input:focus, textarea:focus, select:focus {
     border-color: var(--accent-light);
     box-shadow: 0 0 10px var(--accent-glow-light);
 }
-.dark-theme select, .dark-theme option, .dark-theme select:focus {
-    background-color: var(--surface-dark) !important;
-}
-.light-theme .dark-theme select, .light-theme .dark-theme option, .light-theme .dark-theme select:focus {
-    background-color: var(--surface-light) !important;
-}
-
 
 /* 5. PAGE SPECIFIC STYLES */
 
@@ -306,10 +302,49 @@ input:focus, textarea:focus, select:focus {
 }
 .light-theme .admin-panel-actions { border-top-color: var(--border-light); }
 
+/* --- [修正] 开始: 修复管理后台列表布局问题 --- */
 #category-admin-list, #bookmark-admin-list-container ul {
     list-style: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1;
 }
-/* ... etc ... */
+
+/* 分类管理布局 */
+.category-admin-header, #category-admin-list li {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--border-dark);
+}
+.light-theme .category-admin-header, .light-theme #category-admin-list li {
+    border-bottom-color: var(--border-light);
+}
+.category-admin-header { font-weight: bold; }
+.category-admin-header span:nth-child(1), .cat-order-input { flex: 0 0 70px; text-align: center; }
+.category-admin-header span:nth-child(2), .cat-name-cell { flex-grow: 1; }
+.category-admin-header span:nth-child(3), .cat-parent-select { flex: 0 0 220px; }
+.category-admin-header span:nth-child(4), #category-admin-list li .delete-cat-btn { flex: 0 0 40px; }
+#category-admin-list li .delete-cat-btn { padding: 0; height: 36px; width: 36px; font-size: 1rem; }
+
+/* 书签管理布局 */
+.bookmark-admin-header, #bookmark-admin-list-container li {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--border-dark);
+}
+.light-theme .bookmark-admin-header, .light-theme #bookmark-admin-list-container li {
+    border-bottom-color: var(--border-light);
+}
+.bookmark-admin-header { font-weight: bold; }
+.bookmark-admin-header span:nth-child(1), .bm-sort-order { flex: 0 0 70px; text-align: center; }
+.bookmark-admin-header span:nth-child(2), .bm-admin-name { flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+.bookmark-admin-header span:nth-child(3), .bm-admin-cat { flex: 0 0 200px; color: var(--text-secondary-dark); }
+.light-theme .bm-admin-cat { color: var(--text-secondary-light); }
+.bookmark-admin-header span:nth-child(4), .bm-admin-actions { flex: 0 0 100px; display: flex; justify-content: flex-end; gap: 0.5rem;}
+.bm-admin-actions button { padding: 0; height: 36px; width: 36px; font-size: 0.9rem;}
+/* --- [修正] 结束: 修复管理后台列表布局问题 --- */
+
 
 /* --- Admin User Management Layout Fix --- */
 #user-management-container {
@@ -339,6 +374,7 @@ input:focus, textarea:focus, select:focus {
     flex-grow: 1; display: flex;
     flex-direction: column; overflow: hidden;
 }
+/* ... (user management styles remain the same) ... */
 .user-form-static-fields {
     flex-shrink: 0;
     padding-bottom: 1rem;
@@ -411,12 +447,10 @@ input:focus, textarea:focus, select:focus {
         position: relative;
         padding-left: 0 !important; /* Override desktop sidebar collapse style */
     }
-    .search-bar { width: 100%; order: 2; }
+    header .search-bar { width: 100%; order: 2; margin-top: 1rem; }
     
     .header-buttons {
-        position: absolute;
-        right: 0;
-        top: 0.5rem; /* Adjust position */
+        margin-left: auto;
     }
 
     .sidebar {
