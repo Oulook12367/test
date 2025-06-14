@@ -105,7 +105,7 @@ select {
 }
 select:focus { outline: none; border-bottom-color: white; }
 select option {
-    background: rgba(30, 41, 59, 0.95);
+    background: transparent;
     color: #f1f5f9;      
     padding: 12px 8px;   
 }
