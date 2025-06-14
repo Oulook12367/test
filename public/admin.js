@@ -201,21 +201,36 @@ async function initializePage(activeTabId = 'tab-categories') {
 
         buildList(tree, 0);
 
-        addManagedEventListener(listEl, 'click', (event) => {
-            const deleteButton = event.target.closest('.delete-cat-btn');
-            if (deleteButton) {
-                event.stopPropagation();
-                const listItem = deleteButton.closest('li[data-id]');
-                if (!listItem) return;
-                const catId = listItem.dataset.id;
-                if (catId.startsWith('new-')) {
-                    listItem.remove();
-                } else {
-                    const catName = listItem.querySelector('.cat-name-input').value;
-                    handleDeleteCategory(catId, catName);
-                }
-            }
-        });
+      // 在 renderCategoryAdminTab 函数的末尾，找到 addManagedEventListener，并用下面的代码替换它
+
+addManagedEventListener(listEl, 'click', (event) => {
+    // 寻找点击目标最近的 .delete-cat-btn 按钮
+    const deleteButton = event.target.closest('.delete-cat-btn');
+
+    // --- 关键逻辑 ---
+    // 只有当删除按钮确实被点击时，才执行后续操作。
+    if (deleteButton) {
+        // 阻止事件继续向上冒泡，防止触发父元素上可能存在的其他监听器
+        event.stopPropagation(); 
+        
+        const listItem = deleteButton.closest('li[data-id]');
+        if (!listItem) return; // 如果找不到父级 li 元素，则不执行任何操作
+
+        const catId = listItem.dataset.id;
+        
+        // 如果是还未保存的新分类，直接从 DOM 中移除
+        if (catId.startsWith('new-')) {
+            listItem.remove();
+        } else {
+            // 如果是已存在的分类，调用删除处理函数
+            const catName = listItem.querySelector('.cat-name-input').value;
+            handleDeleteCategory(catId, catName); // 这个函数会正确地弹出“确认删除”窗口
+        }
+    }
+    
+    // 注意：这里没有 'else' 或其他逻辑。如果点击的不是删除按钮，这个监听器不会做任何事，
+    // 从而避免了错误地触发其他弹窗。
+});
 
         addManagedEventListener(container.querySelector('#add-new-category-btn'), 'click', handleAddNewCategory);
         addManagedEventListener(container.querySelector('#save-categories-btn'), 'click', handleSaveCategories);
