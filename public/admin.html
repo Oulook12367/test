@@ -8,18 +8,17 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body class="is-loading">
-    <div id="admin-page-container">
+    <div id="admin-page-container" style="display: none;">
         <header class="admin-header">
             <h1><i class="fas fa-cogs"></i> 管理后台</h1>
             <a href="index.html" class="button secondary"><i class="fas fa-home"></i> 回到主页面</a>
         </header>
-
         <div class="admin-panel-container">
             <nav class="admin-panel-nav">
-                <a href="#" class="admin-tab-link active" data-tab="tab-categories"><i class="fas fa-folder-tree fa-fw"></i> <span>分类管理</span></a>
-                <a href="#" class="admin-tab-link" data-tab="tab-users"><i class="fas fa-users fa-fw"></i> <span>用户管理</span></a>
-                <a href="#" class="admin-tab-link" data-tab="tab-bookmarks"><i class="fas fa-bookmark fa-fw"></i> <span>书签管理</span></a>
-                <a href="#" class="admin-tab-link" data-tab="tab-system"><i class="fas fa-tools fa-fw"></i> <span>导入书签</span></a>
+                <a href="#" class="admin-tab-link active" data-tab="tab-categories"><i class="fas fa-folder-tree fa-fw"></i> 分类管理</a>
+                <a href="#" class="admin-tab-link" data-tab="tab-users"><i class="fas fa-users fa-fw"></i> 用户管理</a>
+                <a href="#" class="admin-tab-link" data-tab="tab-bookmarks"><i class="fas fa-bookmark fa-fw"></i> 书签管理</a>
+                <a href="#" class="admin-tab-link" data-tab="tab-system"><i class="fas fa-tools fa-fw"></i> 导入书签</a>
             </nav>
             <main class="admin-panel-content">
                 <div id="tab-categories" class="admin-tab-content active"></div>
@@ -33,7 +32,7 @@
     <div id="modal-backdrop" class="modal-backdrop">
         <div id="bookmark-edit-modal" class="modal">
             <div class="modal-content">
-                <button class="button-icon close-btn">&times;</button>
+                <span class="close-btn">&times;</span>
                 <h2 id="bookmark-modal-title">编辑书签</h2>
                 <form id="bookmark-edit-form">
                     <input type="hidden" id="bm-edit-id">
@@ -58,21 +57,21 @@
                         <select id="bm-edit-category" required></select>
                     </div>
                     <p class="modal-error-message"></p>
-                    <button type="submit" class="button button-primary full-width">确认</button>
+                    <button type="submit" class="button-primary full-width">确认</button>
                 </form>
             </div>
         </div>
-        <div id="confirm-modal" class="modal">
+        <div id="confirm-modal" class="modal no-animation">
             <div class="modal-content small">
                 <h3 id="confirm-title"></h3>
                 <p id="confirm-text"></p>
                 <div class="confirm-buttons">
-                    <button id="confirm-btn-yes" class="button button-primary">确认</button>
+                    <button id="confirm-btn-yes" class="button-primary">确认</button>
                     <button id="confirm-btn-no" class="button secondary">取消</button>
                 </div>
             </div>
         </div>
-    </div>
+     </div>
 
     <script src="shared.js"></script>
     <script src="admin.js"></script>
