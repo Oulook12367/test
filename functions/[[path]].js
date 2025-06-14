@@ -252,7 +252,7 @@ export async function onRequest(context) {
         );
     }
 
-    const url = new URL(request.url);
+    
     const path = url.pathname;
     
     if (!path.startsWith('/api/')) {
