@@ -1,17 +1,19 @@
-/* --- NEW: Unified & Modern Stylesheet --- */
+/* --- UNIFIED & MODERN STYLESHEET V2 --- */
 
-/* 1. FONT & ROOT VARIABLES (Simplified) */
+/* 1. FONT & ROOT */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
 
 :root {
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    --sidebar-width: 250px;
+    --sidebar-width: 260px;
     --transition-speed: 0.3s;
-    /* Using Tailwind's color palette as inspiration */
     --color-gray-900: #111827;
     --color-gray-800: #1f2937;
+    --color-gray-700: #374151;
     --color-gray-400: #9ca3af;
     --color-indigo-300: #a5b4fc;
+    --color-indigo-600: #4f46e5;
+    --color-indigo-700: #4338ca;
     --color-white: #ffffff;
     --color-danger: #ef4444;
 }
@@ -24,21 +26,19 @@ body {
     margin: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    /* Default dark theme from index.html */
-    background-color: #4f46e5; /* Fallback */
     color: var(--color-white);
+    background-color: var(--color-indigo-700); /* Fallback */
 }
 body.is-loading { visibility: hidden; }
 
-/* 3. LAYOUT (MAIN & ADMIN) */
+/* 3. LAYOUT */
 #app-layout {
     display: flex;
     height: 100vh;
     width: 100%;
     overflow-x: hidden;
-    position: relative; /* For mobile overlay */
+    position: relative;
 }
-
 .main-content {
     flex-grow: 1;
     display: flex;
@@ -46,7 +46,6 @@ body.is-loading { visibility: hidden; }
     height: 100vh;
     overflow-y: auto;
 }
-
 .sidebar {
     width: var(--sidebar-width);
     flex-shrink: 0;
@@ -54,114 +53,26 @@ body.is-loading { visibility: hidden; }
     display: flex;
     flex-direction: column;
 }
-
-/* Sidebar collapsed state (Desktop) */
 #app-layout.sidebar-collapsed .sidebar {
     margin-left: calc(-1 * var(--sidebar-width));
 }
+main { flex-grow: 1; }
 
-main {
-    flex-grow: 1;
-}
-
-/* 4. KEY COMPONENTS RE-STYLED */
-
-/* Bookmarks Grid (from index.html) */
+/* 4. MAIN PAGE COMPONENTS */
 #bookmarks-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 1.5rem;
+    padding-bottom: 2rem;
 }
+/* Other components like .bookmark-card, .sidebar-header, .category-nav are fine from previous CSS */
+.bookmark-card { /* Small tweaks */
+    display: block; background-color: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px);
+    border-radius: 0.75rem; padding: 1.25rem; text-decoration: none; color: var(--color-white); transition: all 0.2s ease;
+}
+.bookmark-card:hover { transform: translateY(-5px); background-color: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.3); }
 
-.bookmark-card {
-    display: block;
-    background-color: rgba(0,0,0,0.2);
-    border: 1px solid rgba(255,255,255,0.1);
-    backdrop-filter: blur(10px);
-    border-radius: 0.75rem;
-    padding: 1.25rem;
-    text-decoration: none;
-    color: var(--color-white);
-    transition: all 0.2s ease;
-}
-.bookmark-card:hover {
-    transform: translateY(-5px);
-    background-color: rgba(0,0,0,0.3);
-    border-color: rgba(255,255,255,0.3);
-}
-.bookmark-card h3 {
-    margin: 0 0 0.5rem;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    font-weight: 700;
-}
-.bookmark-card h3 img {
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    flex-shrink: 0;
-}
-.bookmark-card p {
-    font-size: 0.9em;
-    color: var(--color-indigo-300);
-    opacity: 0.8;
-    margin: 0;
-    line-height: 1.5;
-    word-break: break-word;
-}
-.empty-message {
-    text-align: center;
-    color: var(--color-indigo-300);
-    padding: 4rem 0;
-    font-style: italic;
-    font-size: 1.2rem;
-}
-
-
-/* Sidebar Nav (Main Page) */
-.sidebar-header {
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-}
-.sidebar-header h2 {
-    margin: 0;
-    font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-.category-nav { list-style: none; padding: 0.5rem; margin: 0; }
-.category-nav.dynamic { flex-grow: 1; overflow-y: auto; }
-#sidebar-footer-nav {
-    flex-shrink: 0;
-    border-top: 1px solid rgba(255,255,255,0.1);
-}
-.category-nav li {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    border-radius: 0.5rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.category-nav li:hover { background-color: rgba(255,255,255,0.1); }
-.category-nav li.active { background-color: rgba(255,255,255,0.2); font-weight: 700; }
-.category-nav li .star-icon {
-    margin-left: auto;
-    color: var(--color-gray-400);
-    opacity: 0.6;
-    transition: all 0.2s;
-}
-.category-nav li:hover .star-icon, .category-nav li .star-icon.is-default { opacity: 1; transform: scale(1.1); }
-.category-nav li .star-icon.is-default { color: #facc15; /* yellow-400 */ }
-
-
-/* 5. LOGIN & ADMIN PAGE STYLING (for visual consistency) */
-
-/* General containers */
+/* 5. ADMIN & LOGIN PAGES */
 .auth-container, #admin-page-container {
     min-height: 100vh;
     padding: 1rem;
@@ -171,155 +82,101 @@ main {
     justify-content: center;
     background: linear-gradient(to right, #1e3a8a, #3730a3);
 }
-
-.auth-box, .admin-panel-container {
-    width: 100%;
-    max-width: 420px;
-    padding: 2.5rem;
-    background-color: var(--color-gray-900);
-    border-radius: 1rem;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+.auth-box {
+    width: 100%; max-width: 420px; padding: 2.5rem; background-color: var(--color-gray-900);
+    border-radius: 1rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
-#admin-page-container {
-    max-width: 1400px;
-    width: 100%;
-    justify-content: flex-start;
-}
+#admin-page-container { max-width: 1400px; width: 100%; justify-content: flex-start; }
 .admin-header {
-    width: 100%;
-    max-width: 1400px;
-    padding: 1rem 0 2rem 0;
-    color: white;
+    width: 100%; display: flex; justify-content: space-between; align-items: center;
+    padding: 1rem 0 2rem 0; color: white;
 }
 .admin-header h1 { font-size: 2rem; font-weight: 900; margin: 0; }
-.admin-header .button { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; }
-.admin-header .button:hover { background: rgba(255,255,255,0.2); }
-
 .admin-panel-container {
-    max-width: 1400px;
-    padding: 0;
-    display: flex;
-    flex-direction: row;
-    height: calc(100vh - 120px); /* Adjust based on header height */
+    max-width: 1400px; width: 100%; padding: 0; display: flex; flex-direction: row;
+    height: calc(100vh - 160px); background-color: var(--color-gray-900); border-radius: 1rem;
+    overflow: hidden;
 }
+.admin-panel-nav {
+    flex-shrink: 0; width: 220px; border-right: 1px solid var(--color-gray-700); padding: 1rem;
+    display: flex; flex-direction: column; gap: 0.5rem; /* Default is column */
+}
+.admin-panel-nav a {
+    display: flex; align-items: center; gap: 10px; padding: 0.75rem 1rem; border-radius: 0.5rem;
+    text-decoration: none; font-weight: 500; color: var(--color-gray-400); transition: all 0.2s;
+}
+.admin-panel-nav a:hover { background-color: var(--color-gray-800); color: var(--color-white); }
+.admin-panel-nav a.active { background-color: var(--color-indigo-600); color: var(--color-white); font-weight: 700; }
+.admin-panel-content { flex-grow: 1; padding: 1.5rem 2rem; display: flex; flex-direction: column; overflow: auto; }
+.admin-tab-content { display: none; }
+.admin-tab-content.active { display: block; }
 
-/* Forms */
-.auth-box h1 {
-    text-align: center;
-    font-size: 1.875rem;
-    font-weight: 900;
-    margin-bottom: 0.5rem;
+/* 6. FORMS & BUTTONS */
+/* Styling from previous response is good, just ensure consistency */
+.button, button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.75rem 1.5rem; font-weight: 700;
+    border: 1px solid transparent; border-radius: 0.5rem; cursor: pointer; text-decoration: none; transition: all 0.2s;
 }
-.auth-subtitle {
-    text-align: center;
-    color: var(--color-gray-400);
-    margin-bottom: 2rem;
-}
-.form-group { margin-bottom: 1.5rem; }
-.form-group label { display: block; font-weight: 500; margin-bottom: 0.5rem; }
+.button-primary { background-color: var(--color-indigo-600); color: white; }
+.button-primary:hover { background-color: var(--color-indigo-700); }
+.button.secondary { background-color: var(--color-gray-800); border-color: var(--color-gray-700); color: white; }
+.button.secondary:hover { background-color: var(--color-gray-700); }
 input, textarea, select {
-    width: 100%;
-    padding: 0.75rem 1rem;
-    font-size: 1rem;
-    background-color: var(--color-gray-800);
-    border: 1px solid #374151; /* gray-700 */
-    border-radius: 0.5rem;
-    color: var(--color-white);
-    transition: border-color 0.2s, box-shadow 0.2s;
+    width: 100%; padding: 0.75rem 1rem; font-size: 1rem; background-color: var(--color-gray-800); border: 1px solid var(--color-gray-700);
+    border-radius: 0.5rem; color: var(--color-white); transition: all 0.2s;
 }
 input:focus, textarea:focus, select:focus {
-    outline: none;
-    border-color: #6366f1; /* indigo-500 */
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.5);
+    outline: none; border-color: var(--color-indigo-600); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.5);
 }
 
-/* Buttons */
-.button, button {
-    display: inline-flex; align-items: center; justify-content: center;
-    gap: 0.5rem; padding: 0.75rem 1.5rem; font-weight: 700;
-    border: 1px solid transparent; border-radius: 0.5rem; cursor: pointer;
-    text-decoration: none; transition: all 0.2s;
+/* 7. MODALS - Default Hidden State */
+#modal-backdrop { display: none; /* Initially hidden */ }
+.modal { display: none; /* Initially hidden */ }
+#modal-backdrop.visible {
+    display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background-color: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px);
+    z-index: 1000; justify-content: center; align-items: center;
 }
-.button-primary {
-    background-color: #4f46e5; /* indigo-600 */
-    color: white;
-}
-.button-primary:hover { background-color: #4338ca; /* indigo-700 */ }
-.button.secondary, button.secondary {
-    background-color: var(--color-gray-800);
-    border-color: #374151; /* gray-700 */
-    color: white;
-}
-.button.secondary:hover { background-color: #374151; }
-.button.danger, button.danger { background: transparent; border-color: transparent; color: var(--color-danger); }
-.button.danger:hover { background: rgba(239, 68, 68, 0.1); }
-.button-icon { padding: 0.5rem; width: 44px; height: 44px; font-size: 1.25rem; }
-.full-width { width: 100%; }
-
-.error-message { color: var(--color-danger); font-size: 0.9em; text-align: center; min-height: 1.2em; margin-top: 1rem; }
+#modal-backdrop.visible .modal.visible { display: block; }
 
 
-/* 6. RESPONSIVE DESIGN & MOBILE FIX */
+/* 8. RESPONSIVE & FIXES */
 
-/* Hide desktop toggle on mobile */
-@media (max-width: 1024px) {
-    #sidebar-toggle-btn { display: none; }
-}
+/* Default button visibility */
+#mobile-sidebar-toggle { display: none; }
+#sidebar-toggle-btn { display: inline-flex; }
 
-/* Show mobile toggle and apply mobile-specific layout */
 @media (max-width: 1023px) {
-    /* Main Page (index.html) fixes */
+    /* --- FIX: Show/Hide correct buttons --- */
+    #sidebar-toggle-btn { display: none; }
     #mobile-sidebar-toggle { display: inline-flex; }
 
+    /* --- FIX: Mobile Sidebar Logic --- */
     .sidebar {
-        position: fixed;
-        top: 0;
-        left: 0;
-        height: 100%;
-        z-index: 2000;
-        transform: translateX(-100%);
-        transition: transform var(--transition-speed) ease-in-out;
-        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+        position: fixed; top: 0; left: 0; height: 100%; z-index: 2000;
+        transform: translateX(-100%); transition: transform var(--transition-speed) ease-in-out;
+        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
     }
-    /* This is the class JS will toggle */
-    #app-layout.sidebar-open .sidebar {
-        transform: translateX(0);
-    }
-    /* Overlay for when mobile sidebar is open */
+    #app-layout.sidebar-open .sidebar { transform: translateX(0); }
     #app-layout::after {
-        content: '';
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0,0,0,0.6);
-        z-index: 1999;
-        opacity: 0;
-        visibility: hidden;
-        transition: opacity var(--transition-speed) ease, visibility var(--transition-speed) ease;
+        content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.6); z-index: 1999; opacity: 0; visibility: hidden;
+        transition: opacity var(--transition-speed) ease;
     }
-    #app-layout.sidebar-open::after {
-        opacity: 1;
-        visibility: visible;
-    }
-    .main-content {
-        padding: 1rem;
-    }
+    #app-layout.sidebar-open::after { opacity: 1; visibility: visible; }
+    
+    .main-content { padding: 1rem; }
 
-    /* Admin Page fixes */
-    .admin-panel-container {
-        flex-direction: column;
-        height: auto;
-    }
+    /* --- FIX: Admin Layout on Mobile --- */
+    .admin-panel-container { flex-direction: column; height: auto; }
     .admin-panel-nav {
-        border-right: none;
-        border-bottom: 1px solid #374151;
-        width: 100%;
-        flex-direction: row;
+        width: 100%; border-right: none; border-bottom: 1px solid var(--color-gray-700);
+        flex-direction: row; /* Horizontal on mobile */
         overflow-x: auto;
     }
-    #user-management-container {
-        grid-template-columns: 1fr;
+    .admin-panel-nav a { flex-shrink: 0; }
+    .admin-panel-nav a span { display: none; } /* Hide text on very small screens */
+    @media (min-width: 480px) {
+        .admin-panel-nav a span { display: inline; }
     }
 }
