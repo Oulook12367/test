@@ -15,16 +15,16 @@ document.addEventListener('DOMContentLoaded', () => {
     let allBookmarks = [], allCategories = [], allUsers = [];
 
     // --- 3. UI Flow & Modals ---
-    const showModal = (modal) => {
-        if (modal) {
-            modalBackdrop.style.display = 'flex';
-            modal.style.display = 'block';
-        }
-    };
+  const showModal = (modal) => {
+    if (modal) {
+        modalBackdrop.classList.add('visible');
+        modal.classList.add('visible');
+    }
+};
     const hideAllModals = () => {
-        modalBackdrop.style.display = 'none';
-        document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
-    };
+    modalBackdrop.classList.remove('visible');
+    document.querySelectorAll('.modal').forEach(m => m.classList.remove('visible'));
+};
     const showConfirm = (title, text, onConfirm) => {
         confirmTitle.textContent = title;
         confirmText.textContent = text;
@@ -88,25 +88,27 @@ document.addEventListener('DOMContentLoaded', () => {
         renderAdminTab(tabId);
     });
     
-    const renderAdminTab = (tabId) => {
-        const container = document.getElementById(tabId);
-        if (!container) return;
-        container.innerHTML = '';
-        switch (tabId) {
-            case 'tab-categories':
-                renderCategoryAdminTab(container);
-                break;
-            case 'tab-users':
-                renderUserAdminTab(container);
-                break;
-            case 'tab-bookmarks':
-                renderBookmarkAdminTab(container);
-                break;
-            case 'tab-system':
-                renderSystemSettingsTab(container);
-                break;
-        }
-    };
+ const renderAdminTab = (tabId) => {
+    const container = document.getElementById(tabId);
+    if (!container) return;
+    container.innerHTML = ''; // Clear previous content
+    switch (tabId) {
+        case 'tab-categories':
+            renderCategoryAdminTab(container);
+            break;
+        case 'tab-users':
+            renderUserAdminTab(container);
+            // --- FIX: Add this line ---
+            clearUserForm(); // Always clear the form when tab is activated
+            break;
+        case 'tab-bookmarks':
+            renderBookmarkAdminTab(container);
+            break;
+        case 'tab-system':
+            renderSystemSettingsTab(container);
+            break;
+    }
+};
     
     const populateCategoryDropdown = (selectElement, categories, selectedId = null, ignoreId = null, options = { allowNoParent: true }) => {
         selectElement.innerHTML = '';
