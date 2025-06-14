@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify } from 'jose';
-import { HTMLRewriter } from 'html-rewriter-wasm'; // 确保您环境中已安装或支持
+
 
 // --- Security & Hashing Helpers --- 
 const JWT_SECRET = () => new TextEncoder().encode(globalThis.JWT_SECRET_STRING);
