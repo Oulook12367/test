@@ -1,4 +1,4 @@
-/* --- Glassmorphism UI - Final Polished Version by Gemini --- */
+/* --- Glassmorphism UI - Final Fixed Version by Gemini --- */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
 
 :root {
@@ -56,7 +56,6 @@ body:not(.login-page) { overflow: hidden; }
 }
 
 /* 3. GENERIC COMPONENTS */
-/* [修正] 统一所有按钮的基础样式为用户期望的样式 */
 .button, button {
     display: inline-flex; align-items: center; justify-content: center;
     gap: 0.5rem; padding: 12px 24px; font-weight: 700;
@@ -68,31 +67,16 @@ body:not(.login-page) { overflow: hidden; }
     background: rgba(255, 255, 255, 0.2);
     transform: translateY(-2px);
 }
+.button-primary { background: rgba(255, 255, 255, 0.3); }
+.button-primary:hover { background: rgba(255, 255, 255, 0.4); }
 
-/* 如果需要特别突出的主按钮，可以覆盖样式 */
-.button-primary {
-    background: rgba(255, 255, 255, 0.3); /* 稍微亮一点以示区别 */
-}
-.button-primary:hover {
-    background: rgba(255, 255, 255, 0.4);
-}
-
-/* 统一所有图标按钮的样式 */
 .button-icon, #action-btn {
     padding: 0;
     width: 44px; height: 44px;
     font-size: 1.2rem; border-radius: 50%;
 }
-
-/* CSS技巧：隐藏 #action-btn 中的文字，仅显示图标 */
-#action-btn {
-    font-size: 0;
-    gap: 0;
-}
-#action-btn i {
-    font-size: 1.2rem;
-    margin: 0;
-}
+#action-btn { font-size: 0; gap: 0; }
+#action-btn i { font-size: 1.2rem; margin: 0; }
 
 input, textarea {
     width: 100%; background: transparent; border: none;
@@ -103,10 +87,9 @@ input, textarea {
 input:focus, textarea:focus { outline: none; border-bottom-color: white; }
 input::placeholder, textarea::placeholder { color: rgba(255, 255, 255, 0.7); }
 
-/* [修正] 修复下拉框样式和下拉列表 */
 select {
     -webkit-appearance: none; -moz-appearance: none; appearance: none;
-    width: 100%; background: transparent; border: none;
+    width: 20%; background: transparent; border: none;
     border-bottom: 2px solid rgba(255, 255, 255, 0.5);
     padding: 10px 4px; color: white; font-size: 1rem;
     transition: border-color 0.3s;
@@ -117,17 +100,31 @@ select {
     padding-right: 2rem;
 }
 select:focus { outline: none; border-bottom-color: white; }
-select option { background-color: #111827; color: white; }
+
+/* [关键修正] 强制为下拉选项设置可见的样式 */
+select option {
+    background: #1e293b; /* 一个明确的、不透明的深色背景 */
+    color: #f1f5f9;      /* 一个明亮的文字颜色 */
+    padding: 12px 8px;   /* 增加内边距，确保选项有高度 */
+}
+
+label { display: block; margin-bottom: 0.5rem; font-weight: 700; }
+.form-group { margin-bottom: 1rem; }
+.error-message { color: #f87171; text-align: center; min-height: 1.2em; font-weight: 700;}
+.empty-message { text-align: center; padding: 4rem 0; font-size: 1.2rem; opacity: 0.7; }
 
 /* 4. LAYOUTS */
-/* Login Page */
 body.login-page { display: flex; align-items: center; justify-content: center; padding: 1rem; }
 .auth-box { width: 100%; max-width: 384px; padding: 2rem; text-align: center; }
 .auth-title { font-size: 2.25rem; font-weight: 700; margin-bottom: 1rem; }
 .auth-subtitle { margin-bottom: 1.5rem; opacity: 0.8; }
+/* ---  在此处添加新代码 --- */
+.form-group {
+    margin-bottom: 1.5rem; /* 为每个表单组添加 1.5rem 的下外边距 */
+}
+/* ------------------------- */
 .auth-box .full-width { width: 100%; padding: 14px; }
 
-/* Main App */
 #app-layout { display: flex; height: 100vh; padding: 1.5rem; gap: 1.5rem; }
 .sidebar { width: var(--sidebar-width); flex-shrink: 0; padding: 1.5rem; display: flex; flex-direction: column; }
 .sidebar-header { padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.2); }
@@ -144,13 +141,7 @@ body.login-page { display: flex; align-items: center; justify-content: center; p
 .header { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1.5rem; }
 .search-bar { flex-grow: 1; }
 .search-bar form { display: flex; align-items: center; }
-/* [修正] 修复下拉框宽度问题 */
-.search-bar select {
-    flex-shrink: 0; /* 防止被压缩 */
-    min-width: 120px; /* 保证最小宽度 */
-    border-radius: 0;
-    border-right: 2px solid rgba(255,255,255,0.5);
-}
+.search-bar select { flex-shrink: 0; min-width: 120px; border-radius: 0; border-right: 2px solid rgba(255,255,255,0.5); }
 .search-bar input { padding-left: 1rem; }
 
 #bookmarks-grid {
@@ -175,7 +166,6 @@ body.login-page { display: flex; align-items: center; justify-content: center; p
     -webkit-box-orient: vertical;
 }
 
-/* Admin Page & Modals & Responsive Styles... */
 #admin-page-container { display: flex; flex-direction: column; height: 100vh; padding: 1.5rem; gap: 1.5rem; }
 .admin-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; flex-shrink: 0; }
 .admin-panel-container { flex-grow: 1; display: flex; overflow: hidden; }
