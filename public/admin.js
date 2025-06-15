@@ -126,9 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         buildOptions(tree, 0);
     };
     
-    // --- Render functions for each tab ---
     const renderCategoryAdminTab = (container) => {
-        // [修复] 为提示段落添加下外边距
         container.innerHTML = `<p class="admin-panel-tip" style="margin-bottom: 1rem;">通过修改表单来调整分类，完成后请点击下方的“保存”按钮。</p><div class="category-admin-header"><span>排序</span><span>分类名称</span><span>上级分类</span><span>操作</span></div><div style="flex-grow: 1; overflow-y: auto; min-height: 0;"><ul id="category-admin-list"></ul></div><div class="admin-panel-actions"><button id="save-categories-btn" class="button button-primary"><i class="fas fa-save"></i> 保存全部分类</button><button id="add-new-category-btn" class="button"><i class="fas fa-plus"></i> 添加新分类</button></div>`;
         const listEl = container.querySelector('#category-admin-list');
         const categoryMap = new Map(allCategories.map(c => [c.id, {...c, children: []}]));
@@ -157,13 +155,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderBookmarkList = (categoryId) => {
         const listEl = document.querySelector('#bookmark-admin-list-container ul');
         if (!listEl) return;
-
-        let bookmarksToDisplay = categoryId === 'all'
-            ? [...allBookmarks]
-            : allBookmarks.filter(bm => bm.categoryId === categoryId);
-        
+        let bookmarksToDisplay = categoryId === 'all' ? [...allBookmarks] : allBookmarks.filter(bm => bm.categoryId === categoryId);
         const categorySortMap = new Map(allCategories.map(cat => [cat.id, cat.sortOrder || 0]));
-
         bookmarksToDisplay.sort((a, b) => {
             const catA_sort = categorySortMap.get(a.categoryId) || 0;
             const catB_sort = categorySortMap.get(b.categoryId) || 0;
@@ -172,41 +165,27 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return (a.sortOrder || 0) - (b.sortOrder || 0);
         });
-        
         const categoryNameMap = new Map(allCategories.map(c=>[c.id,c.name]));
-        
         listEl.innerHTML = bookmarksToDisplay.map(bm => 
-            `<li data-id="${bm.id}">` +
-            `<input type="number" class="bm-sort-order" value="${bm.sortOrder || 0}">` +
-            `<span class="bm-admin-name">${escapeHTML(bm.name)}</span>` +
-            `<span class="bm-admin-cat">${categoryNameMap.get(bm.categoryId) || "无分类"}</span>` +
-            `<div class="bm-admin-actions">` +
-            `<button class="edit-bm-btn button-icon" title="编辑"><i class="fas fa-pencil-alt"></i></button>` +
-            `<button class="delete-bm-btn danger button-icon" title="删除"><i class="fas fa-trash-alt"></i></button>` +
-            `</div></li>`
+            `<li data-id="${bm.id}"><input type="number" class="bm-sort-order" value="${bm.sortOrder || 0}"><span class="bm-admin-name">${escapeHTML(bm.name)}</span><span class="bm-admin-cat">${categoryNameMap.get(bm.categoryId) || "无分类"}</span><div class="bm-admin-actions"><button class="edit-bm-btn button-icon" title="编辑"><i class="fas fa-pencil-alt"></i></button><button class="delete-bm-btn danger button-icon" title="删除"><i class="fas fa-trash-alt"></i></button></div></li>`
         ).join('');
     };
 
     const renderBookmarkAdminTab = (container) => {
-        // [修复] 为提示段落添加下外边距
         container.innerHTML = `<p class="admin-panel-tip" style="margin-bottom: 1rem;">通过修改表单来调整分类。修改排序数字后，点击下方的“保存”按钮来应用更改。</p><div class="bookmark-admin-controls" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;"><span>筛选分类:</span><select id="bookmark-category-filter" style="width: auto; max-width: 350px; flex-grow: 1;"><option value="all">-- 显示全部分类 --</option></select></div><div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div><div style="flex-grow: 1; overflow-y: auto; min-height: 0;"><div id="bookmark-admin-list-container"><ul></ul></div></div><div class="admin-panel-actions"><button id="save-bookmarks-btn" class="button button-primary"><i class="fas fa-save"></i> 保存书签顺序</button><button id="add-new-bookmark-btn" class="button"><i class="fas fa-plus"></i> 添加新书签</button></div>`;
         const categoryFilter = container.querySelector('#bookmark-category-filter');
-        
         allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
             const o=document.createElement('option');
             o.value=cat.id;
             o.textContent=cat.name;
             categoryFilter.appendChild(o)
         });
-        
         const lastFilter = sessionStorage.getItem('admin_bookmark_filter') || 'all';
         categoryFilter.value = lastFilter;
-        
         renderBookmarkList(lastFilter);
     };
 
     const renderUserAdminTab = (container) => {
-        // [修复] 为用户列表的标题添加下外边距
         container.innerHTML = `<div id="user-management-container"><div class="user-list-container"><h3 style="margin-bottom: 1rem;">用户列表</h3><ul id="user-list"></ul></div><div class="user-form-container"><form id="user-form"><h3 id="user-form-title">添加新用户</h3><div class="user-form-static-fields"><input type="hidden" id="user-form-username-hidden"><div class="form-group-inline"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required></div><div class="form-group-inline"><label for="user-form-password">密码:</label><input type="password" id="user-form-password"></div><div class="form-group-inline"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div><div class="form-group-inline"><label for="user-form-default-cat">默认显示分类:</label><select id="user-form-default-cat"></select></div></div><div class="form-group flex-grow"><label>可见分类:</label><div id="user-form-categories" class="checkbox-group"></div></div><div class="user-form-buttons"><button type="submit" class="button button-primary">保存用户</button><button type="button" id="user-form-clear-btn" class="button">新增/清空</button></div><p class="modal-error-message"></p></form></div></div>`;
         const userList = container.querySelector('#user-list');
         const token = localStorage.getItem('jwt_token');
@@ -229,14 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     const renderSystemSettingsTab = (container) => {
-        // [修复] 调整系统工具页的布局和间距
-        container.innerHTML = `<div class="system-setting-item">` +
-            `<p style="margin-bottom: 1.5rem;">从浏览器导出的HTML文件导入书签。导入操作会合并现有书签，不会清空原有数据。</p>` +
-            `<div style="display: flex; align-items: center; gap: 1rem;">` +
-            `<h3><i class="fas fa-file-import"></i> 导入书签</h3>`+
-            `<button id="import-bookmarks-btn-admin" class="button">选择HTML文件</button>` +
-            `<input type="file" id="import-file-input-admin" accept=".html,.htm" style="display: none;">` +
-            `</div></div>`;
+        container.innerHTML = `<div class="system-setting-item"><p style="margin-bottom: 1.5rem;">从浏览器导出的HTML文件导入书签。导入操作会合并现有书签，不会清空原有数据。</p><div style="display: flex; align-items: center; gap: 1rem;"><h3><i class="fas fa-file-import"></i> 导入书签</h3><button id="import-bookmarks-btn-admin" class="button">选择HTML文件</button><input type="file" id="import-file-input-admin" accept=".html,.htm" style="display: none;"></div></div>`;
     };
 
     const handleAddNewCategory = () => {
@@ -536,13 +508,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- [THE NEW CORE] The Master Event Listener ---
     if (adminContentPanel) {
-        // --- MASTER CLICK LISTENER ---
         adminContentPanel.addEventListener('click', (event) => {
             const target = event.target;
             const activeTab = document.querySelector('.admin-tab-content.active');
             if (!activeTab) return;
-
-            // Use a switch statement for clarity and to prevent fall-through
             switch (activeTab.id) {
                 case 'tab-categories':
                     if (target.closest('.delete-cat-btn')) {
@@ -562,13 +531,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         handleSaveCategories();
                     }
                     break;
-
                 case 'tab-bookmarks':
                     const bmListItem = target.closest('li[data-id]');
                     if (bmListItem) {
                         const bookmark = allBookmarks.find(bm => bm.id === bmListItem.dataset.id);
                         if (!bookmark) return;
-
                         if (target.closest('.edit-bm-btn')) {
                             event.stopPropagation();
                             handleEditBookmark(bookmark);
@@ -576,7 +543,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             event.stopPropagation();
                             handleDeleteBookmark(bookmark);
                         }
-                    } else { // Buttons outside the list
+                    } else {
                         if (target.closest('#add-new-bookmark-btn')) {
                             handleAddNewBookmark();
                         } else if (target.closest('#save-bookmarks-btn')) {
@@ -584,10 +551,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                     break;
-
                 case 'tab-users':
                     const userListItem = target.closest('li[data-username]');
-                    if (target.closest('.button-icon.danger')) { // Delete button
+                    if (target.closest('.button-icon.danger')) {
                         event.stopPropagation();
                         if (!userListItem) return;
                         const username = userListItem.dataset.username;
@@ -597,14 +563,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                 await initializePage('tab-users');
                             } catch (error) { alert(error.message); }
                         });
-                    } else if (userListItem) { // Click on the list item itself
+                    } else if (userListItem) {
                         const user = allUsers.find(u => u.username === userListItem.dataset.username);
                         if (user) populateUserForm(user);
                     } else if (target.closest('#user-form-clear-btn')) {
                         clearUserForm();
                     }
                     break;
-
                 case 'tab-system':
                     if (target.closest('#import-bookmarks-btn-admin')) {
                         document.getElementById('import-file-input-admin')?.click();
@@ -613,7 +578,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // --- MASTER SUBMIT & CHANGE LISTENERS ---
         adminContentPanel.addEventListener('submit', (event) => {
             if (document.getElementById('tab-users')?.classList.contains('active')) {
                 if (event.target.id === 'user-form') {
@@ -627,7 +591,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (event.target.id === 'bookmark-category-filter') {
                     const newCategoryId = event.target.value;
                     sessionStorage.setItem('admin_bookmark_filter', newCategoryId);
-                    renderBookmarkList(newCategoryId); // Only re-render the list
+                    renderBookmarkList(newCategoryId);
                 }
             }
             if (document.getElementById('tab-users')?.classList.contains('active')) {
@@ -665,6 +629,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const descInput = document.getElementById('bm-edit-desc');
                 const iconInput = document.getElementById('bm-edit-icon');
                 const originalPlaceholder = urlInput.placeholder;
+                const errorEl = bookmarkEditForm.querySelector('.modal-error-message');
+                if(errorEl) errorEl.textContent = '';
 
                 try {
                     urlInput.placeholder = '正在获取网站信息...';
@@ -684,7 +650,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 } catch (error) {
                     console.error('网址信息获取失败:', error);
-                    const errorEl = bookmarkEditForm.querySelector('.modal-error-message');
                     if (errorEl) errorEl.textContent = `网址信息获取失败: ${error.message}`;
                 } finally {
                     urlInput.placeholder = originalPlaceholder;
