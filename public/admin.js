@@ -267,9 +267,9 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const handleSaveCategories = async () => {
-        const listItems = document.querySelectorAll('#category-admin-list li');
-        let hasError = false;
-        const finalCategories = Array.from(listItems).map(li => {
+    const listItems = document.querySelectorAll('#category-admin-list li');
+    let hasError = false;
+    const finalCategories = Array.from(listItems).map(li => {
             const name = li.querySelector('.cat-name-input').value.trim();
             if (!name) hasError = true;
             const idVal = li.dataset.id;
@@ -285,15 +285,29 @@ document.addEventListener('DOMContentLoaded', () => {
         const oldCategories = JSON.parse(JSON.stringify(allCategories));
         allCategories = finalCategories;
         // No success alert
-        try {
-            const result = await apiRequest('data', 'PATCH', { categories: finalCategories });
-            dataVersion = result.version;
-        } catch (error) {
-            allCategories = oldCategories;
-            renderAdminTab('tab-categories');
-            alert('保存失败: ' + error.message);
-        }
-    };
+       try {
+        // --- 修改部分 ---
+        // 将 allBookmarks 也包含在请求体中
+        const result = await apiRequest('data', 'PATCH', { 
+            categories: finalCategories, 
+            bookmarks: allBookmarks 
+        });
+        // --- 修改部分结束 ---
+
+        dataVersion = result.version;
+
+        // --- 新增部分 ---
+        // 成功后强制刷新UI，确保ID等状态正确显示
+        alert('分类已成功保存！'); // 给予用户明确反馈
+        renderAdminTab('tab-categories');
+        // --- 新增部分结束 ---
+
+    } catch (error) {
+        allCategories = oldCategories;
+        renderAdminTab('tab-categories');
+        alert('保存失败: ' + error.message);
+    }
+};
 
     const handleDeleteCategory = (catIdToDelete, catName) => {
         showConfirm('确认删除', `您确定要删除分类 "${catName}" 吗？这也会删除其下所有的子分类和书签。`, async () => {
@@ -485,16 +499,30 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (hasError) { alert('书签名称不能为空！'); return; }
+ try {
+        // --- 修改部分 ---
+        // 将 allCategories 也包含在请求体中
+        const result = await apiRequest('data', 'PATCH', { 
+            bookmarks: allBookmarks, 
+            categories: allCategories 
+        });
+        // --- 修改部分结束 ---
 
-        try {
-            const result = await apiRequest('data', 'PATCH', { bookmarks: allBookmarks });
-            dataVersion = result.version;
-        } catch (error) { 
-            allBookmarks = oldBookmarks;
-            renderBookmarkList(document.getElementById('bookmark-category-filter').value);
-            alert(`保存失败: ${error.message}`);
-        }
-    };
+        dataVersion = result.version;
+
+        // --- 新增部分 ---
+        alert('书签已成功保存！');
+        // 不需要刷新整个Tab，只刷新列表即可
+        renderBookmarkList(document.getElementById('bookmark-category-filter').value);
+        // --- 新增部分结束 ---
+
+    } catch (error) { 
+        allBookmarks = oldBookmarks;
+        renderBookmarkList(document.getElementById('bookmark-category-filter').value);
+        alert(`保存失败: ${error.message}`);
+    }
+};
+     
 
     const handleAddNewBookmark = () => { /* ... */ };
     const handleEditBookmark = (bookmark) => { /* ... */ };
