@@ -190,7 +190,11 @@ document.addEventListener('click', event => {
                     await apiRequest(`users/${encodeURIComponent(username)}`, 'DELETE');
                     showToast("用户删除成功！");
                     invalidateCache();
-                    await initializePage('tab-users');
+                    
+                    // 【修复】直接在前端更新数据并重新渲染，而不是调用 initializePage
+                    allUsers = allUsers.filter(u => u.username !== username);
+                    renderUserAdminTab(document.getElementById('tab-users'));
+
                 } catch (error) { showToast(`删除失败: ${error.message}`, true); }
             });
         } 
