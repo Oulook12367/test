@@ -1,123 +1,101 @@
-// admin-categories.js
+// admin-bookmarks.js
 
-/**
- * 渲染“分类管理”标签页的全部内容。
- * @param {HTMLElement} container - 用于承载标签页内容的DOM元素。
- */
-function renderCategoryAdminTab(container) {
+function renderBookmarkAdminTab(container) {
     container.innerHTML = `
-        <p class="admin-panel-tip" style="margin-bottom: 1rem;">所有更改（名称、父级、排序）都将自动保存。</p>
-        <div class="category-admin-header">
-            <span>排序</span>
-            <span>分类名称</span>
-            <span>上级分类</span>
+        <p class="admin-panel-tip" style="margin-bottom: 1rem;">排序、名称和分类的更改将自动保存。网址、描述和图标需点击编辑按钮修改。</p>
+        <div class="bookmark-admin-controls" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+            <span>筛选分类:</span>
+            <select id="bookmark-category-filter" style="width: auto; max-width: 350px; flex-grow: 1;"></select>
+        </div>
+        <div class="bookmark-admin-header">
+            <span class="sort-col">排序</span>
+            <span>书签名称</span>
+            <span>所属分类</span>
             <span>操作</span>
         </div>
         <div style="flex-grow: 1; overflow-y: auto; min-height: 0;">
-            <ul id="category-admin-list"></ul>
+            <div id="bookmark-admin-list-container"><ul></ul></div>
         </div>
         <div class="admin-panel-actions">
-            <button id="add-new-category-btn" class="button"><i class="fas fa-plus"></i> 添加新分类</button>
+            <button id="add-new-bookmark-btn" class="button"><i class="fas fa-plus"></i> 添加新书签</button>
         </div>`;
+    
+    const categoryFilter = container.querySelector('#bookmark-category-filter');
+    populateCategoryDropdown(categoryFilter, allCategories, null, null, { allowNoParent: true });
+    const firstOption = categoryFilter.querySelector('option[value=""]');
+    if (firstOption) {
+        firstOption.textContent = '显示全部分类';
+        firstOption.value = 'all';
+    }
 
-    const listEl = container.querySelector('#category-admin-list');
-    const sortedCategories = getHierarchicalSortedCategories(allCategories);
+    const lastFilter = sessionStorage.getItem('admin_bookmark_filter') || 'all';
+    categoryFilter.value = lastFilter;
+    renderBookmarkList(lastFilter);
+}
+
+function renderBookmarkList(categoryId) {
+    const listEl = document.querySelector('#bookmark-admin-list-container ul');
+    if (!listEl) return;
+    
+    let bookmarksToDisplay = categoryId === 'all' 
+        ? [...allBookmarks] 
+        : allBookmarks.filter(bm => bm.categoryId === categoryId);
+    
+    bookmarksToDisplay.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
     
     listEl.innerHTML = '';
-    sortedCategories.forEach(cat => {
-        if (!cat) return;
+    bookmarksToDisplay.forEach(bm => {
         const li = document.createElement('li');
-        li.dataset.id = cat.id;
-        if (String(cat.id).startsWith('new-')) {
-            li.classList.add('new-item-row');
-        }
+        li.dataset.id = bm.id;
         li.innerHTML = `
-            <input type="number" class="cat-order-input" value="${cat.sortOrder || 0}" min="0">
-            <div class="cat-name-cell" style="padding-left: ${(cat.level || 0) * 25}px;">
-                <input type="text" class="cat-name-input" value="${escapeHTML(cat.name)}">
-            </div>
-            <select class="cat-parent-select"></select>
-            <div class="cat-actions" style="display: flex; align-items: center; justify-content: flex-end; gap: 5px;">
-                 <span class="item-status" style="display:inline-block; width: 20px;"></span>
-                 <button class="delete-cat-btn button-icon danger" title="删除"><i class="fas fa-trash-alt"></i></button>
+            <input type="number" class="bm-sort-order" value="${bm.sortOrder || 0}" min="0">
+            <input type="text" class="bm-name-input" value="${escapeHTML(bm.name)}">
+            <select class="bm-category-select"></select>
+            <div class="bm-admin-actions">
+                <span class="item-status" style="display:inline-block; width: 20px;"></span>
+                <button class="edit-bm-btn button-icon" title="编辑网址、描述、图标"><i class="fas fa-pencil-alt"></i></button>
+                <button class="delete-bm-btn danger button-icon" title="删除"><i class="fas fa-trash-alt"></i></button>
             </div>`;
-        populateCategoryDropdown(li.querySelector('.cat-parent-select'), allCategories, cat.parentId, cat.id);
+        const categorySelect = li.querySelector('.bm-category-select');
+        populateCategoryDropdown(categorySelect, allCategories, bm.categoryId, null, { allowNoParent: false });
         listEl.appendChild(li);
     });
 }
 
-/**
- * 带有防抖功能的自动保存函数，用于处理分类的新增和更新。
- * @param {HTMLElement} listItem - 被修改的列表项DOM元素。
- */
-const handleCategoryAutoSave = debounce(async (listItem) => {
+// 【修复】函数名已从 handleCategoryAutoSave 改为 handleBookmarkAutoSave
+const handleBookmarkAutoSave = debounce(async (listItem) => {
     const id = listItem.dataset.id;
-    if (!id) return;
-
-    const isNew = id.startsWith('new-');
-    const category = allCategories.find(c => c.id.toString() === id);
-    if (!category) return;
+    const bookmark = allBookmarks.find(bm => bm.id === id);
+    if (!bookmark) return;
 
     const statusEl = listItem.querySelector('.item-status');
-    const nameInput = listItem.querySelector('.cat-name-input');
+    const nameInput = listItem.querySelector('.bm-name-input');
     const newName = nameInput.value.trim();
-    const newSortOrder = parseInt(listItem.querySelector('.cat-order-input').value) || 0;
-    const newParentId = listItem.querySelector('.cat-parent-select').value || null;
-
-    if (!isNew && category.name === newName && category.sortOrder === newSortOrder && category.parentId === newParentId) {
-        return;
+    const newSortOrder = parseInt(listItem.querySelector('.bm-sort-order').value) || 0;
+    const newCategoryId = listItem.querySelector('.bm-category-select').value;
+    
+    if (bookmark.name === newName && (bookmark.sortOrder||0) === newSortOrder && bookmark.categoryId === newCategoryId) {
+        return; 
     }
     
     if (!newName) {
-        showToast("分类名称不能为空！", true);
-        if(!isNew) nameInput.value = category.name;
+        showToast("书签名称不能为空！", true);
+        nameInput.value = bookmark.name;
         return;
     }
 
-    const categoryData = {
-        name: newName,
-        sortOrder: newSortOrder,
-        parentId: newParentId,
-    };
-    
-    if (!isNew) {
-        categoryData.id = id;
-    }
+    bookmark.name = newName;
+    bookmark.sortOrder = newSortOrder;
+    bookmark.categoryId = newCategoryId;
 
     try {
         if (statusEl) statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        
-        let savedCategory;
-        if (isNew) {
-            savedCategory = await apiRequest('categories', 'POST', {name: newName, parentId: newParentId, sortOrder: newSortOrder});
-            const tempIndex = allCategories.findIndex(c => c.id === id);
-            if (tempIndex > -1) {
-                allCategories[tempIndex] = savedCategory;
-            } else {
-                 allCategories.push(savedCategory);
-            }
-            listItem.dataset.id = savedCategory.id;
-            listItem.classList.remove('new-item-row');
-        } else {
-            savedCategory = await apiRequest(`categories/${id}`, 'PUT', categoryData);
-            category.name = newName;
-            category.sortOrder = newSortOrder;
-            category.parentId = newParentId;
-        }
-
+        await apiRequest(`bookmarks/${id}`, 'PUT', bookmark);
         if (statusEl) statusEl.innerHTML = '<i class="fas fa-check" style="color: #34d399;"></i>';
         invalidateCache();
-        if (isNew || category.parentId !== newParentId) {
-            renderCategoryAdminTab(document.getElementById('tab-categories'));
-        }
-
     } catch (error) {
-        console.error(`保存分类 ${id} 失败:`, error);
+        console.error(`自动保存书签 ${id} 失败:`, error);
         if (statusEl) statusEl.innerHTML = `<i class="fas fa-times" title="${error.message}" style="color: #f87171;"></i>`;
-        if (isNew) {
-            allCategories = allCategories.filter(c => c.id !== id);
-            listItem.remove();
-        }
     } finally {
         setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 2000);
     }
@@ -127,64 +105,164 @@ const handleCategoryAutoSave = debounce(async (listItem) => {
 // --- 事件监听器 ---
 
 document.addEventListener('input', event => {
-    if (document.getElementById('tab-categories')?.classList.contains('active')) {
+    if (document.getElementById('tab-bookmarks')?.classList.contains('active')) {
         const listItem = event.target.closest('li[data-id]');
         if (listItem) {
-            handleCategoryAutoSave(listItem);
+            // 【修复】调用正确的函数名
+            handleBookmarkAutoSave(listItem);
+        }
+    }
+});
+
+document.addEventListener('change', event => {
+    if (document.getElementById('tab-bookmarks')?.classList.contains('active')) {
+        if (event.target.id === 'bookmark-category-filter') {
+            const newCategoryId = event.target.value;
+            sessionStorage.setItem('admin_bookmark_filter', newCategoryId);
+            renderBookmarkList(newCategoryId);
         }
     }
 });
 
 document.addEventListener('click', event => {
-    if (document.getElementById('tab-categories')?.classList.contains('active')) {
+    if (document.getElementById('tab-bookmarks')?.classList.contains('active')) {
         const target = event.target;
-        
-        if (target.closest('#add-new-category-btn')) {
-            if(document.querySelector('.new-item-row')){
-                showToast("请先保存当前新增的分类。", true);
-                document.querySelector('.new-item-row .cat-name-input')?.focus();
-                return;
-            }
-            const newTempCategory = {
-                id: `new-${Date.now()}`,
-                name: "新分类",
-                sortOrder: 0,
-                parentId: null,
-                level: 0,
-            };
-            allCategories.unshift(newTempCategory);
-            renderCategoryAdminTab(document.getElementById('tab-categories'));
-            const newRowInput = document.querySelector(`li[data-id="${newTempCategory.id}"] .cat-name-input`);
-            if(newRowInput) {
-                newRowInput.focus();
-                newRowInput.select();
+        const listItem = target.closest('li[data-id]');
+
+        if (target.closest('#add-new-bookmark-btn')) {
+            openBookmarkEditModal();
+        } else if (listItem) {
+            const bookmarkId = listItem.dataset.id;
+            const bookmark = allBookmarks.find(bm => bm.id === bookmarkId);
+            if (!bookmark) return;
+
+            if (target.closest('.edit-bm-btn')) {
+                openBookmarkEditModal(bookmark);
+            } else if (target.closest('.delete-bm-btn')) {
+                showConfirm('删除书签', `确定删除书签 "${bookmark.name}"?`, async () => {
+                    try {
+                        await apiRequest(`bookmarks/${bookmark.id}`, 'DELETE');
+                        showToast("书签删除成功！");
+                        invalidateCache();
+                        allBookmarks = allBookmarks.filter(bm => bm.id !== bookmarkId);
+                        renderBookmarkList(document.getElementById('bookmark-category-filter').value);
+                    } catch (error) {
+                        showToast(`删除失败: ${error.message}`, true);
+                    }
+                });
             }
         }
+    }
+});
+
+function openBookmarkEditModal(bookmark = null) {
+    const modal = document.getElementById('bookmark-edit-modal');
+    const form = document.getElementById('bookmark-edit-form');
+    if (!modal || !form) return;
+    
+    form.reset();
+    form.querySelector('.modal-error-message').textContent = '';
+    document.getElementById('bookmark-modal-title').textContent = bookmark ? '编辑书签' : '添加新书签';
+    form.querySelector('#bm-edit-id').value = bookmark ? bookmark.id : '';
+    form.querySelector('#bm-edit-name').value = bookmark ? bookmark.name : '';
+    form.querySelector('#bm-edit-url').value = bookmark ? bookmark.url : '';
+    form.querySelector('#bm-edit-desc').value = bookmark ? (bookmark.description || '') : '';
+    form.querySelector('#bm-edit-icon').value = bookmark ? (bookmark.icon || '') : '';
+    
+    const categorySelect = form.querySelector('#bm-edit-category');
+    const filterValue = document.getElementById('bookmark-category-filter').value;
+    const selectedCatId = bookmark ? bookmark.categoryId : (filterValue !== 'all' ? filterValue : allCategories[0]?.id);
+    populateCategoryDropdown(categorySelect, allCategories, selectedCatId, null, { allowNoParent: false });
+
+    showModal(modal);
+}
+
+document.getElementById('bookmark-edit-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    const id = form.querySelector('#bm-edit-id').value;
+    const data = {
+        name: form.querySelector('#bm-edit-name').value.trim(),
+        url: form.querySelector('#bm-edit-url').value.trim(),
+        description: form.querySelector('#bm-edit-desc').value.trim(),
+        icon: form.querySelector('#bm-edit-icon').value.trim(),
+        categoryId: form.querySelector('#bm-edit-category').value,
+    };
+    if(id) data.id = id;
+
+    if (!data.name || !data.url || !data.categoryId) {
+        form.querySelector('.modal-error-message').textContent = '名称、网址和分类为必填项。';
+        return;
+    }
+
+    const endpoint = id ? `bookmarks/${id}` : 'bookmarks';
+    const method = id ? 'PUT' : 'POST';
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+    try {
+        const savedBookmark = await apiRequest(endpoint, method, data);
+        showToast(`书签${id ? '更新' : '添加'}成功！`);
+        hideAllModals();
+        invalidateCache();
         
-        if (target.closest('.delete-cat-btn')) {
-            const listItem = target.closest('li[data-id]');
-            const catId = listItem.dataset.id;
-            if (catId.startsWith('new-')) {
-                allCategories = allCategories.filter(c => c.id !== catId);
-                renderCategoryAdminTab(document.getElementById('tab-categories'));
-                return;
+        if (id) {
+            const index = allBookmarks.findIndex(bm => bm.id === id);
+            if (index > -1) allBookmarks[index] = savedBookmark;
+        } else {
+            allBookmarks.push(savedBookmark);
+        }
+        renderBookmarkList(document.getElementById('bookmark-category-filter').value);
+
+    } catch (error) {
+        form.querySelector('.modal-error-message').textContent = error.message;
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    }
+});
+
+document.addEventListener('focusout', async (event) => {
+    if (event.target.id === 'bm-edit-url') {
+        const urlInput = event.target;
+        const url = urlInput.value.trim();
+        const form = urlInput.closest('form');
+        
+        if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) return;
+
+        const nameInput = form.querySelector('#bm-edit-name');
+        if (nameInput.value) return;
+
+        const originalPlaceholder = urlInput.placeholder;
+        const errorEl = form.querySelector('.modal-error-message');
+        if(errorEl) errorEl.textContent = '';
+        
+        try {
+            urlInput.placeholder = '正在获取网站信息...';
+            urlInput.disabled = true;
+            
+            const data = await apiRequest(`scrape-url?url=${encodeURIComponent(url)}`);
+
+            if (data.title && !nameInput.value) {
+                nameInput.value = data.title;
             }
-            const catName = listItem.querySelector('.cat-name-input').value;
-            showConfirm('确认删除', `您确定要删除分类 "${catName}" 吗？其下所有子分类和书签都将被删除。`, async () => {
-                try {
-                    await apiRequest(`categories/${catId}`, 'DELETE');
-                    showToast("分类及相关书签删除成功！");
-                    invalidateCache();
-                    // 【修复】不再调用 initializePage，而是手动更新状态并重绘
-                    // 后端会级联删除，所以我们需要重新获取数据以同步 allBookmarks
-                    const data = await apiRequest('data');
-                    allCategories = data.categories || [];
-                    allBookmarks = data.bookmarks || [];
-                    renderCategoryAdminTab(document.getElementById('tab-categories'));
-                } catch(error) {
-                    showToast(`删除失败: ${error.message}`, true);
-                }
-            });
+            const descInput = form.querySelector('#bm-edit-desc');
+            if (data.description && !descInput.value) {
+                descInput.value = data.description;
+            }
+            const iconInput = form.querySelector('#bm-edit-icon');
+            if (data.icon && !iconInput.value) {
+                iconInput.value = data.icon;
+            }
+        } catch (error) {
+            console.error('网址信息获取失败:', error);
+            if (errorEl) errorEl.textContent = `网址信息获取失败: ${error.message}`;
+        } finally {
+            urlInput.placeholder = originalPlaceholder;
+            urlInput.disabled = false;
         }
     }
 });
