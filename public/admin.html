@@ -7,9 +7,8 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
-<body class="is-loading">
+<body>
     <div class="page-background"></div>
-    
     <div id="admin-page-container" style="display: none;">
         <header class="admin-header glass-pane">
             <h1><i class="fas fa-cogs"></i> 控制中心</h1>
@@ -22,53 +21,54 @@
                 <a href="#" class="admin-tab-link" data-tab="tab-bookmarks"><i class="fas fa-bookmark fa-fw"></i> 书签管理</a>
                 <a href="#" class="admin-tab-link" data-tab="tab-system"><i class="fas fa-tools fa-fw"></i> 系统工具</a>
             </nav>
-            <main id="admin-panel-content" class="admin-panel-content">
-                <!-- Content is dynamically rendered by admin.js -->
+            <main class="admin-panel-content">
+                <div id="tab-categories" class="admin-tab-content active"></div>
+                <div id="tab-users" class="admin-tab-content"></div>
+                <div id="tab-bookmarks" class="admin-tab-content"></div>
+                <div id="tab-system" class="admin-tab-content"></div>
             </main>
         </div>
     </div>
 
-    <!-- Modals -->
     <div id="modal-backdrop" class="modal-backdrop">
         <div id="bookmark-edit-modal" class="modal glass-pane">
             <div class="modal-content">
-                <button class="close-btn" data-action="close-modal">&times;</button>
+                <span class="close-btn">&times;</span>
                 <h2 id="bookmark-modal-title">编辑书签</h2>
-                <form id="bookmark-edit-form" novalidate>
+                <form id="bookmark-edit-form">
                     <input type="hidden" id="bm-edit-id">
                     <div class="form-group">
                         <label for="bm-edit-name">名称:</label>
                         <input type="text" id="bm-edit-name" required>
                     </div>
-                    <div class="form-group">
+                     <div class="form-group">
                         <label for="bm-edit-url">网址 (URL):</label>
                         <input type="url" id="bm-edit-url" required>
                     </div>
-                    <div class="form-group">
+                     <div class="form-group">
                         <label for="bm-edit-desc">描述:</label>
                         <textarea id="bm-edit-desc" rows="2"></textarea>
                     </div>
-                    <div class="form-group">
+                     <div class="form-group">
                         <label for="bm-edit-icon">图标 URL (可选):</label>
                         <input type="url" id="bm-edit-icon">
                     </div>
-                    <div class="form-group">
+                     <div class="form-group">
                         <label for="bm-edit-category">分类:</label>
                         <select id="bm-edit-category" required></select>
                     </div>
-                    <p id="modal-error-message" class="error-message" style="min-height: 1.2em;"></p>
+                    <p class="modal-error-message"></p>
                     <button type="submit" class="button button-primary full-width">确认</button>
                 </form>
             </div>
         </div>
         <div id="confirm-modal" class="modal glass-pane">
-            <div class="modal-content small">
-                 <button class="close-btn" data-action="close-modal">&times;</button>
+             <div class="modal-content small">
                 <h3 id="confirm-title"></h3>
                 <p id="confirm-text"></p>
                 <div class="confirm-buttons">
                     <button id="confirm-btn-yes" class="button button-primary">确认</button>
-                    <button id="confirm-btn-no" class="button" data-action="close-modal">取消</button>
+                    <button id="confirm-btn-no" class="button">取消</button>
                 </div>
             </div>
         </div>
