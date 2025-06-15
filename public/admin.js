@@ -96,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const populateCategoryDropdown = (selectElement, categories, selectedId = null, ignoreId = null, options = { allowNoParent: true }) => {
         selectElement.innerHTML = '';
-        if (options.allowNoParent) selectElement.innerHTML = '<option value="">-- 顶级分类 --</option>';
+        if (options.allowNoParent) selectElement.innerHTML = '<option value=""> 顶级分类 </option>';
         const categoryMap = new Map(categories.map(cat => [cat.id, { ...cat, children: [] }]));
         const tree = [];
         const sortedCategories = [...categories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
@@ -186,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const renderBookmarkAdminTab = (container) => {
-        container.innerHTML = `<p class="admin-panel-tip" style="margin-bottom: 1rem;">通过直接修改表单来调整书签，书签描述或图标请点击编辑按钮。修改完成后，点击下方的“保存全部书签”按钮来应用更改。</p><div class="bookmark-admin-controls" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;"><span>筛选分类:</span><select id="bookmark-category-filter" style="width: auto; max-width: 350px; flex-grow: 1;"><option value="all">-- 显示全部分类 --</option></select></div><div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div><div style="flex-grow: 1; overflow-y: auto; min-height: 0;"><div id="bookmark-admin-list-container"><ul></ul></div></div><div class="admin-panel-actions"><button id="save-bookmarks-btn" class="button button-primary"><i class="fas fa-save"></i> 保存全部书签</button><button id="add-new-bookmark-btn" class="button"><i class="fas fa-plus"></i> 添加新书签</button></div>`;
+        container.innerHTML = `<p class="admin-panel-tip" style="margin-bottom: 1rem;">通过直接修改表单来调整书签，书签描述或图标请点击编辑按钮。修改完成后，点击下方的“保存全部书签”按钮来应用更改。</p><div class="bookmark-admin-controls" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;"><span>筛选分类:</span><select id="bookmark-category-filter" style="width: auto; max-width: 350px; flex-grow: 1;"><option value="all"> 显示全部分类 </option></select></div><div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div><div style="flex-grow: 1; overflow-y: auto; min-height: 0;"><div id="bookmark-admin-list-container"><ul></ul></div></div><div class="admin-panel-actions"><button id="save-bookmarks-btn" class="button button-primary"><i class="fas fa-save"></i> 保存全部书签</button><button id="add-new-bookmark-btn" class="button"><i class="fas fa-plus"></i> 添加新书签</button></div>`;
         const categoryFilter = container.querySelector('#bookmark-category-filter');
         allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
             const o=document.createElement('option');
