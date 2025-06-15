@@ -93,12 +93,10 @@ const getSiteData = async (env) => {
 };
 
 const saveSiteData = async (env, data) => {
-    // Create a backup before saving
-    const currentData = await env.NAVI_DATA.get('data');
-    if (currentData) {
+    const currentDataStr = await env.NAVI_DATA.get('data');
+    if (currentDataStr) {
         const timestamp = new Date().toISOString();
-        await env.NAVI_BACKUPS.put(`backup-${timestamp}`, currentData);
-        // Prune old backups
+        await env.NAVI_BACKUPS.put(`backup-${timestamp}`, currentDataStr);
         const backups = await env.NAVI_BACKUPS.list({ prefix: "backup-" });
         if (backups.keys.length > 100) {
             const sortedKeys = backups.keys.sort((a, b) => a.name.localeCompare(b.name));
@@ -107,7 +105,6 @@ const saveSiteData = async (env, data) => {
             }
         }
     }
-    // Save the new data
     await env.NAVI_DATA.put('data', JSON.stringify(data));
 };
 
@@ -157,7 +154,7 @@ export async function onRequest(context) {
         apiPath = apiPath.slice(0, -1);
     }
     
-    // --- 3. Handle Public/Unauthenticated Endpoints ---
+    // --- 3. Handle public/unauthenticated endpoints ---
     if (apiPath === 'login' && request.method === 'POST') {
         const siteData = await getSiteData(env);
         globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteData.jwtSecret;
@@ -184,19 +181,19 @@ export async function onRequest(context) {
         return jsonResponse({ isPublic: true, categories: publicCategories, bookmarks: publicBookmarks, users: [], publicModeEnabled: true, defaultCategoryId: publicUser.defaultCategoryId });
     }
     
-    // --- 4. All subsequent requests require authentication ---
-    const siteDataForAuth = await getSiteData(env);
-    globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteDataForAuth.jwtSecret;
+    // --- 4. Authenticate all subsequent requests ---
+    // Fetch data once for authentication and as a base for GET requests
+    const siteData = await getSiteData(env);
+    globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteData.jwtSecret;
     if (!globalThis.JWT_SECRET_STRING) return jsonResponse({ error: 'Critical Configuration Error: JWT_SECRET is missing.' }, 500);
 
-    const authResult = await authenticateRequest(request, siteDataForAuth);
+    const authResult = await authenticateRequest(request, siteData);
     if (authResult.error) return jsonResponse(authResult, authResult.status);
     const currentUser = authResult.user;
 
     // --- 5. Handle Authenticated GET requests ---
     if (request.method === 'GET') {
         if (apiPath === 'data') {
-            const siteData = await getSiteData(env); // Re-fetch for freshness, although not strictly necessary for GET
             siteData.publicModeEnabled = env.PUBLIC_MODE_ENABLED === 'true';
             if (currentUser.roles.includes('admin')) {
                 const usersForAdmin = Object.values(siteData.users).map(({ passwordHash, salt, ...u }) => u);
@@ -208,17 +205,47 @@ export async function onRequest(context) {
             const { passwordHash, salt, ...safeUser } = currentUser;
             return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks, users: [safeUser], publicModeEnabled: siteData.publicModeEnabled });
         }
-        // Other GET endpoints can be added here
+        // Scraper is also authenticated
+        if (apiPath === 'scrape-url') {
+            const targetUrl = url.searchParams.get('url');
+            if (!targetUrl) return jsonResponse({ error: 'URL parameter is missing' }, 400);
+            try {
+                const response = await fetch(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+                if (!response.ok) throw new Error(`Fetch failed with status: ${response.status}`);
+                let title = '', description = '', icon = '';
+                const rewriter = new HTMLRewriter()
+                    .on('title', { text(text) { title += text.text; }})
+                    .on('meta[name="description"]', { element(element) { description = element.getAttribute('content'); }})
+                    .on('link[rel*="icon"]', {
+                        element(element) {
+                            if (!icon) {
+                               let href = element.getAttribute('href');
+                               if (href) icon = new URL(href, targetUrl).toString();
+                            }
+                        },
+                    });
+                await rewriter.transform(response).arrayBuffer();
+                if (!icon) {
+                     try {
+                        const iconUrl = new URL('/favicon.ico', targetUrl);
+                        const iconCheck = await fetch(iconUrl.toString(), { method: 'HEAD' });
+                        if(iconCheck.ok) icon = iconUrl.toString();
+                     } catch (e) { /* ignore */ }
+                }
+                return jsonResponse({ title: cleanTitle(title), description: description || '', icon: icon || '' });
+            } catch (error) {
+                console.error(`Scraping failed for ${targetUrl}:`, error);
+                return jsonResponse({ error: `Could not fetch or parse URL: ${error.message}` }, 500);
+            }
+        }
     }
 
     // --- 6. Handle Authenticated POST/PUT/DELETE requests with Read-Modify-Write pattern ---
     if (request.method === 'POST' || request.method === 'PUT' || request.method === 'DELETE') {
         
-        // [核心修复] 对所有写操作，都先从 KV 获取最新的数据副本
         const dataToModify = await env.NAVI_DATA.get('data', { type: 'json' });
-        if (!dataToModify) return jsonResponse({ error: "数据存储未初始化，无法保存。" }, 500);
+        if (!dataToModify) return jsonResponse({ error: "Data store not initialized, cannot save." }, 500);
 
-        // A. Handle /api/data PUT
         if (apiPath === 'data' && request.method === 'PUT') {
             if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
             const dataToUpdate = await request.json();
@@ -228,7 +255,6 @@ export async function onRequest(context) {
             return jsonResponse({ success: true });
         }
         
-        // B. Handle /api/bookmarks POST
         if (apiPath === 'bookmarks' && request.method === 'POST') {
             if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
             const bookmark = await request.json();
@@ -244,7 +270,6 @@ export async function onRequest(context) {
             return jsonResponse(bookmark, 201);
         }
 
-        // C. Handle /api/bookmarks/:id PUT/DELETE
         if (apiPath.startsWith('bookmarks/')) {
             const id = apiPath.split('/')[1];
             const bookmarkIndex = dataToModify.bookmarks.findIndex(bm => bm.id === id);
@@ -265,63 +290,73 @@ export async function onRequest(context) {
                 return jsonResponse(null);
             }
         }
-        
-        // D. Handle /api/users... POST/PUT/DELETE
-        if (apiPath.startsWith('users')) {
-            if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
-            
-            if (request.method === 'POST' && apiPath === 'users') {
-                const { username: newUsername, password, roles, permissions } = await request.json();
-                if (!newUsername || !password || dataToModify.users[newUsername]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
-                const salt = generateSalt();
-                const passwordHash = await hashPassword(password, salt);
-                dataToModify.users[newUsername] = { username: newUsername, passwordHash, salt, roles, permissions, defaultCategoryId: 'all' };
+
+        // [核心修复] users/self 路径现在正确处理
+        if (apiPath === 'users/self' && request.method === 'PUT') {
+            const { defaultCategoryId } = await request.json();
+            if (typeof defaultCategoryId === 'undefined') return jsonResponse({ error: '未提供更新数据' }, 400);
+            const userToUpdate = dataToModify.users[currentUser.username];
+            if (userToUpdate) {
+                userToUpdate.defaultCategoryId = defaultCategoryId;
                 await saveSiteData(env, dataToModify);
-                const { passwordHash: p, salt: s, ...newUser } = dataToModify.users[newUsername];
-                return jsonResponse(newUser, 201);
+                const { passwordHash, salt, ...safeUser } = userToUpdate;
+                return jsonResponse(safeUser);
+            }
+            return jsonResponse({ error: '用户未找到'}, 404);
+        }
+        
+        if (apiPath.startsWith('users/')) { // This will now correctly skip 'users/self'
+            if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
+            let username = apiPath.substring('users/'.length);
+            try { username = decodeURIComponent(username); } 
+            catch (e) { return jsonResponse({ error: '用户名编码无效' }, 400); }
+            if (!username) return jsonResponse({ error: '未提供用户名' }, 400);
+            
+            const userToManage = dataToModify.users[username];
+            if (!userToManage) return jsonResponse({ error: `用户 '${username}' 未找到` }, 404);
+
+            if (request.method === 'PUT') {
+                const { roles, permissions, password, defaultCategoryId } = await request.json();
+                if (username === 'public') {
+                    if (permissions && typeof permissions.visibleCategories !== 'undefined') userToManage.permissions.visibleCategories = permissions.visibleCategories;
+                    userToManage.roles = ['viewer'];
+                } else {
+                    if (roles) userToManage.roles = roles;
+                    if (permissions) userToManage.permissions.visibleCategories = permissions.visibleCategories;
+                    if (typeof defaultCategoryId !== 'undefined') userToManage.defaultCategoryId = defaultCategoryId;
+                    if (password) {
+                        userToManage.salt = generateSalt();
+                        userToManage.passwordHash = await hashPassword(password, userToManage.salt);
+                    }
+                }
+                await saveSiteData(env, dataToModify);
+                const { passwordHash, salt, ...updatedUser } = userToManage;
+                return jsonResponse(updatedUser);
             }
 
-            if (apiPath.startsWith('users/')) {
-                let username = apiPath.substring('users/'.length);
-                try { username = decodeURIComponent(username); } 
-                catch (e) { return jsonResponse({ error: '用户名编码无效' }, 400); }
-
-                if (!username) return jsonResponse({ error: '未提供用户名' }, 400);
-                
-                const userToManage = dataToModify.users[username];
-                if (!userToManage) return jsonResponse({ error: `用户 '${username}' 未找到` }, 404);
-
-                if (request.method === 'PUT') {
-                    const { roles, permissions, password, defaultCategoryId } = await request.json();
-                    if (username === 'public') {
-                        if (permissions && typeof permissions.visibleCategories !== 'undefined') userToManage.permissions.visibleCategories = permissions.visibleCategories;
-                        userToManage.roles = ['viewer'];
-                    } else {
-                        if (roles) userToManage.roles = roles;
-                        if (permissions) userToManage.permissions.visibleCategories = permissions.visibleCategories;
-                        if (typeof defaultCategoryId !== 'undefined') userToManage.defaultCategoryId = defaultCategoryId;
-                        if (password) {
-                            userToManage.salt = generateSalt();
-                            userToManage.passwordHash = await hashPassword(password, userToManage.salt);
-                        }
-                    }
-                    await saveSiteData(env, dataToModify);
-                    const { passwordHash, salt, ...updatedUser } = userToManage;
-                    return jsonResponse(updatedUser);
+            if (request.method === 'DELETE') {
+                if (username === 'public') return jsonResponse({ error: '公共账户为系统保留账户，禁止删除。' }, 403);
+                if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
+                if (userToManage.roles.includes('admin')) {
+                    const adminCount = Object.values(dataToModify.users).filter(u => u.roles.includes('admin')).length;
+                    if (adminCount <= 1) return jsonResponse({ error: '无法删除最后一个管理员账户' }, 403);
                 }
-
-                if (request.method === 'DELETE') {
-                    if (username === 'public') return jsonResponse({ error: '公共账户为系统保留账户，禁止删除。' }, 403);
-                    if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
-                    if (userToManage.roles.includes('admin')) {
-                        const adminCount = Object.values(dataToModify.users).filter(u => u.roles.includes('admin')).length;
-                        if (adminCount <= 1) return jsonResponse({ error: '无法删除最后一个管理员账户' }, 403);
-                    }
-                    delete dataToModify.users[username];
-                    await saveSiteData(env, dataToModify);
-                    return jsonResponse(null);
-                }
+                delete dataToModify.users[username];
+                await saveSiteData(env, dataToModify);
+                return jsonResponse(null);
             }
+        }
+        
+        if (apiPath === 'users' && request.method === 'POST') {
+             if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
+            const { username: newUsername, password, roles, permissions } = await request.json();
+            if (!newUsername || !password || dataToModify.users[newUsername]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
+            const salt = generateSalt();
+            const passwordHash = await hashPassword(password, salt);
+            dataToModify.users[newUsername] = { username: newUsername, passwordHash, salt, roles, permissions, defaultCategoryId: 'all' };
+            await saveSiteData(env, dataToModify);
+            const { passwordHash: p, salt: s, ...newUser } = dataToModify.users[newUsername];
+            return jsonResponse(newUser, 201);
         }
     }
 
