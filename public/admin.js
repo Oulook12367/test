@@ -271,48 +271,31 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
   const handleSaveCategories = async () => {
-    const listItems = document.querySelectorAll('#category-admin-list li');
-    let hasError = false;
-    const finalCategories = Array.from(listItems).map(li => {
-            const name = li.querySelector('.cat-name-input').value.trim();
-            if (!name) hasError = true;
-            const idVal = li.dataset.id;
-            return {
-                id: idVal.startsWith('new-') ? `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` : idVal,
-                name: name,
-                parentId: li.querySelector('.cat-parent-select').value || null,
-                sortOrder: parseInt(li.querySelector('.cat-order-input').value) || 0,
-            };
-        });
-        if (hasError) { alert('分类名称不能为空！'); return; }
-        
-        const oldCategories = JSON.parse(JSON.stringify(allCategories));
-        allCategories = finalCategories;
-        // No success alert
-       try {
-        // --- 修改 START ---
-        // 遵循注释的指示，将 allBookmarks 也包含在请求体中
-        const result = await apiRequest('data', 'PATCH', { 
-            categories: finalCategories, 
-            bookmarks: allBookmarks // <--- 添加此行
-        });
-        // --- 修改 END ---
-
-        dataVersion = result.version;
-
-        // --- 新增部分 ---
-        // 成功后强制刷新UI，确保ID等状态正确显示
-        alert('分类已成功保存！'); // 给予用户明确反馈
-      // 使用 initializePage 重新加载数据和UI，确保状态完全同步
-      await initializePage('tab-categories');
-        // --- 新增部分结束 ---
-
-    } catch (error) {
-        allCategories = oldCategories;
-        renderAdminTab('tab-categories');
-        alert('保存失败: ' + error.message);
-    }
-};
+        const listItems = document.querySelectorAll('#category-admin-list li');
+        let hasError = false;
+        const finalCategories = Array.from(listItems).map(li => {
+            const name = li.querySelector('.cat-name-input').value.trim();
+            if (!name) { hasError = true; }
+            return {
+                id: li.dataset.id, // 直接发送ID，无论是临时的 "new-..." 还是永久的 "cat-..."
+                name: name,
+                parentId: li.querySelector('.cat-parent-select').value || null,
+                sortOrder: parseInt(li.querySelector('.cat-order-input').value) || 0,
+            };
+        });
+        if (hasError) { alert('分类名称不能为空！'); return; }
+        try {
+            const result = await apiRequest('data', 'PATCH', { categories: finalCategories, bookmarks: allBookmarks });
+            allCategories = result.categories;
+            allBookmarks = result.bookmarks;
+            dataVersion = result.version;
+            alert('分类已成功保存！');
+            renderAdminTab('tab-categories');
+        } catch (error) {
+            alert('保存失败: ' + error.message);
+            await initializePage('tab-categories');
+        }
+    };
 
     const handleDeleteCategory = (catIdToDelete, catName) => {
         showConfirm('确认删除', `您确定要删除分类 "${catName}" 吗？这也会删除其下所有的子分类和书签。`, async () => {
@@ -492,132 +475,253 @@ if (!updatedUser) {
     };
     
 const handleSaveBookmarks = async () => {
-        const listItems = document.querySelectorAll('#bookmark-admin-list-container li');
-        let hasError = false;
-        
-        const oldBookmarks = JSON.parse(JSON.stringify(allBookmarks));
+        const listItems = document.querySelectorAll('#bookmark-admin-list-container li');
+        let hasError = false;
+        const currentlyVisibleIds = new Set(Array.from(listItems).map(li => li.dataset.id));
+        const finalBookmarks = allBookmarks.map(bookmark => {
+            if (!currentlyVisibleIds.has(bookmark.id)) return bookmark;
+            const li = document.querySelector(`#bookmark-admin-list-container li[data-id="${bookmark.id}"]`);
+            if (!li) return bookmark;
+            const newName = li.querySelector('.bm-name-input').value.trim();
+            if (!newName) { hasError = true; }
+            return { ...bookmark, name: newName, sortOrder: parseInt(li.querySelector('.bm-sort-order').value) || 0, categoryId: li.querySelector('.bm-category-select').value };
+        });
+        if (hasError) { alert('书签名称不能为空！'); return; }
+        try {
+            const result = await apiRequest('data', 'PATCH', { bookmarks: finalBookmarks, categories: allCategories });
+            allBookmarks = result.bookmarks;
+            allCategories = result.categories;
+            dataVersion = result.version;
+            alert('书签已成功保存！');
+            renderBookmarkList(document.getElementById('bookmark-category-filter').value);
+        } catch (error) {
+            alert(`保存失败: ${error.message}`);
+            await initializePage('tab-bookmarks');
+        }
+    };
 
-        listItems.forEach(li => {
-            const id = li.dataset.id;
-            const bookmark = allBookmarks.find(bm => bm.id === id);
-            if (!bookmark) return;
-            const newName = li.querySelector('.bm-name-input').value.trim();
-            if(!newName) hasError = true;
-            bookmark.sortOrder = parseInt(li.querySelector('.bm-sort-order').value) || 0;
-            bookmark.name = newName;
-            bookmark.categoryId = li.querySelector('.bm-category-select').value;
-        });
+    // 补全缺失的函数定义，避免引用错误
+    const handleAddNewBookmark = () => { 
+        const defaultCat = allCategories.length > 0 ? allCategories[0].id : null;
+        if (!defaultCat) {
+            alert("请先创建至少一个分类！");
+            return;
+        }
+        handleEditBookmark({ name: '', url: '', description: '', icon: '', categoryId: defaultCat });
+    };
+ 
 
-        if (hasError) { alert('书签名称不能为空！'); return; }
- try {
-        // --- 修改 START ---
-        // 遵循注释的指示，将 allCategories 也包含在请求体中
-        const result = await apiRequest('data', 'PATCH', { 
-            bookmarks: allBookmarks,
-            categories: allCategories // <--- 添加此行
-        });
-        // --- 修改 END ---
+     const handleEditBookmark = (bookmark) => {
+        if (!bookmarkEditModal || !bookmarkEditForm) return;
+        bookmarkEditForm.reset();
+        bookmarkEditForm.querySelector('#bm-edit-id').value = bookmark.id || '';
+        bookmarkEditForm.querySelector('#bookmark-modal-title').textContent = bookmark.id ? '编辑书签' : '添加新书签';
+        bookmarkEditForm.querySelector('#bm-edit-name').value = bookmark.name;
+        bookmarkEditForm.querySelector('#bm-edit-url').value = bookmark.url;
+        bookmarkEditForm.querySelector('#bm-edit-desc').value = bookmark.description || '';
+        bookmarkEditForm.querySelector('#bm-edit-icon').value = bookmark.icon || '';
+        const categorySelect = bookmarkEditForm.querySelector('#bm-edit-category');
+        populateCategoryDropdown(categorySelect, allCategories, bookmark.categoryId, null, { allowNoParent: false });
+        showModal(bookmarkEditModal);
+    };
 
-        dataVersion = result.version;
-
-        // --- 新增部分 ---
-        alert('书签已成功保存！');
-      // 使用 initializePage 重新加载数据和UI，确保状态完全同步
-      await initializePage('tab-bookmarks');
-        // --- 新增部分结束 ---
-
-    } catch (error) { 
-        allBookmarks = oldBookmarks;
-        renderBookmarkList(document.getElementById('bookmark-category-filter').value);
-        alert(`保存失败: ${error.message}`);
-    }
-};
-     
-
-    const handleAddNewBookmark = () => { /* ... */ };
-    const handleEditBookmark = (bookmark) => { /* ... */ };
-    const handleDeleteBookmark = (bookmark) => { /* ... */ };
-    const parseAndImport = async (htmlContent) => { /* ... */ };
+    const handleDeleteBookmark = (bookmark) => {
+        if (!bookmark) return;
+        showConfirm('确认删除', `您确定要删除书签 "${bookmark.name}" 吗？`, async () => {
+            try {
+                const newBookmarks = allBookmarks.filter(bm => bm.id !== bookmark.id);
+                const result = await apiRequest('data', 'PATCH', { bookmarks: newBookmarks, categories: allCategories });
+                allBookmarks = result.bookmarks;
+                dataVersion = result.version;
+                renderBookmarkList(document.getElementById('bookmark-category-filter').value);
+            } catch (error) {
+                alert('删除失败: ' + error.message);
+            }
+        });
+    };
+    
+    const parseAndImport = async (htmlContent) => { 
+        alert("导入功能暂未实现");
+    };
 
     // --- Master Event Listeners ---
-    if (adminContentPanel) {
-        adminContentPanel.addEventListener('click', (event) => { /* ... */ });
-        adminContentPanel.addEventListener('submit', (event) => { /* ... */ });
+     if (adminContentPanel) {
+        adminContentPanel.addEventListener('click', (event) => {
+            const target = event.target;
+            const activeTabId = document.querySelector('.admin-tab-content.active')?.id;
+    
+            // --- 分类管理页点击事件 ---
+            if (activeTabId === 'tab-categories') {
+                if (target.closest('#save-categories-btn')) { handleSaveCategories(); return; }
+                if (target.closest('#add-new-category-btn')) { handleAddNewCategory(); return; }
+                const deleteCatBtn = target.closest('.delete-cat-btn');
+                if (deleteCatBtn) {
+                    const li = deleteCatBtn.closest('li[data-id]');
+                    if (li.dataset.id.startsWith('new-')) {
+                        li.remove();
+                    } else {
+                        handleDeleteCategory(li.dataset.id, li.querySelector('.cat-name-input').value);
+                    }
+                    return;
+                }
+            }
+    
+            // --- 用户管理页点击事件 ---
+            else if (activeTabId === 'tab-users') {
+                if (target.closest('#user-form-clear-btn')) { clearUserForm(); return; }
+                const userLi = target.closest('#user-list li[data-username]');
+                if (userLi) {
+                    const username = userLi.dataset.username;
+                    if (target.closest('.button-icon.danger')) {
+                        // 此处应有 handleDeleteUser 函数，这里仅作示例
+                        showConfirm('确认删除', `确定要删除用户 "${username}" 吗?`, () => alert(`删除 ${username} 的逻辑未实现`));
+                    } else {
+                        const user = allUsers.find(u => u.username === username);
+                        if (user) populateUserForm(user);
+                    }
+                    return;
+                }
+            }
+    
+            // --- 书签管理页点击事件 ---
+            else if (activeTabId === 'tab-bookmarks') {
+                if (target.closest('#save-bookmarks-btn')) { handleSaveBookmarks(); return; }
+                if (target.closest('#add-new-bookmark-btn')) { handleAddNewBookmark(); return; }
+                const editBtn = target.closest('.edit-bm-btn');
+                if (editBtn) {
+                    const bookmark = allBookmarks.find(bm => bm.id === editBtn.closest('li[data-id]')?.dataset.id);
+                    if (bookmark) handleEditBookmark(bookmark);
+                    return;
+                }
+                const deleteBtn = target.closest('.delete-bm-btn');
+                if (deleteBtn) {
+                    const bookmark = allBookmarks.find(bm => bm.id === deleteBtn.closest('li[data-id]')?.dataset.id);
+                    if (bookmark) handleDeleteBookmark(bookmark);
+                    return;
+                }
+            }
+    
+            // --- 系统工具页点击事件 ---
+            else if (activeTabId === 'tab-system') {
+                if (target.closest('#import-bookmarks-btn-admin')) {
+                    document.getElementById('import-file-input-admin').click();
+                    return;
+                }
+            }
+        });
+    
+        // 表单提交事件
+        adminContentPanel.addEventListener('submit', (event) => {
+            if (event.target.id === 'user-form') {
+                event.preventDefault();
+                handleUserFormSubmit(event);
+            }
+        });
+    
+        // Change事件 (从您原代码中保留)
         adminContentPanel.addEventListener('change', (event) => {
             const target = event.target;
             const activeTabId = document.querySelector('.admin-tab-content.active')?.id;
-            
-            if (activeTabId === 'tab-bookmarks') {
-                if (target.id === 'bookmark-category-filter') {
-                    const newCategoryId = target.value;
-                    sessionStorage.setItem('admin_bookmark_filter', newCategoryId);
-                    renderBookmarkList(newCategoryId);
-                }
-                if (target.classList.contains('bm-category-select')) {
-                    const listItem = target.closest('li[data-id]');
-                    if (!listItem) return;
-                    const bookmarkId = listItem.dataset.id;
-                    const newCategoryId = target.value;
-                    const bookmark = allBookmarks.find(bm => bm.id === bookmarkId);
-                    if (bookmark) {
-                        bookmark.categoryId = newCategoryId;
-                    }
-                    renderBookmarkList(document.getElementById('bookmark-category-filter').value);
-                }
-            } else if (activeTabId === 'tab-categories') {
-                 if (target.classList.contains('cat-parent-select')) {
-                    const listItem = target.closest('li[data-id]');
-                    if (!listItem) return;
-                    const categoryId = listItem.dataset.id;
-                    const newParentId = target.value;
-                    const category = allCategories.find(c => c.id === categoryId);
-                    if(category) {
-                        category.parentId = newParentId || null;
-                    }
-                    renderAdminTab('tab-categories');
-                 }
-            } else if (activeTabId === 'tab-users') { /* ... */ }
-              else if (activeTabId === 'tab-system') { /* ... */ }
-        });
-        document.addEventListener('focusout', async (event) => { /* ... (URL Scraping logic) ... */ });
-    }
+            if (activeTabId === 'tab-bookmarks' && target.id === 'bookmark-category-filter') {
+                const newCategoryId = target.value;
+                sessionStorage.setItem('admin_bookmark_filter', newCategoryId);
+                 renderBookmarkList(newCategoryId);
+
+                }
+
+                if (target.classList.contains('bm-category-select')) {
+
+                    const listItem = target.closest('li[data-id]');
+
+                    if (!listItem) return;
+
+                    const bookmarkId = listItem.dataset.id;
+
+                    const newCategoryId = target.value;
+
+                    const bookmark = allBookmarks.find(bm => bm.id === bookmarkId);
+
+                    if (bookmark) {
+
+                        bookmark.categoryId = newCategoryId;
+
+                    }
+
+                    renderBookmarkList(document.getElementById('bookmark-category-filter').value);
+
+                }
+
+            } else if (activeTabId === 'tab-categories') {
+
+                 if (target.classList.contains('cat-parent-select')) {
+
+                    const listItem = target.closest('li[data-id]');
+
+                    if (!listItem) return;
+
+                    const categoryId = listItem.dataset.id;
+
+                    const newParentId = target.value;
+
+                    const category = allCategories.find(c => c.id === categoryId);
+
+                    if(category) {
+
+                        category.parentId = newParentId || null;
+
+                    }
+
+                    renderAdminTab('tab-categories');
+
+                 }
+
+            } else if (activeTabId === 'tab-users') { /* ... */ }
+
+              else if (activeTabId === 'tab-system') { /* ... */ }
+
+        });
+
+        document.addEventListener('focusout', async (event) => { /* ... (URL Scraping logic) ... */ });
+
+    }
     
     // --- Final Initialization & Modal Handlers ---
-    document.querySelectorAll('.close-btn').forEach(btn => btn.addEventListener('click', hideAllModals));
-    if(document.getElementById('confirm-btn-no')) document.getElementById('confirm-btn-no').onclick = hideAllModals;
-    if(bookmarkEditForm) bookmarkEditForm.onsubmit = async (e) => {
-        e.preventDefault();
+    // --- Final Initialization & Modal Handlers ---
+    document.querySelectorAll('.close-btn').forEach(btn => btn.addEventListener('click', hideAllModals));
+    if(document.getElementById('confirm-btn-no')) document.getElementById('confirm-btn-no').onclick = hideAllModals;
+    if(bookmarkEditForm) bookmarkEditForm.onsubmit = async (e) => {
+        e.preventDefault();
         const id = bookmarkEditForm.querySelector('#bm-edit-id').value;
-        const data = {
+        const bookmarkData = {
+            id: id,
             name: bookmarkEditForm.querySelector('#bm-edit-name').value,
             url: bookmarkEditForm.querySelector('#bm-edit-url').value,
             description: bookmarkEditForm.querySelector('#bm-edit-desc').value,
             icon: bookmarkEditForm.querySelector('#bm-edit-icon').value,
             categoryId: bookmarkEditForm.querySelector('#bm-edit-category').value,
         };
-        const endpoint = id ? `bookmarks/${id}` : 'bookmarks';
-        const method = id ? 'PUT' : 'POST';
         
-        const oldBookmarks = JSON.parse(JSON.stringify(allBookmarks));
+        // optimistic update
+        let newBookmarks;
+        if (id) { // Edit
+            newBookmarks = allBookmarks.map(bm => bm.id === id ? { ...bm, ...bookmarkData } : bm);
+        } else { // Add
+            bookmarkData.id = `bm-${Date.now()}`;
+            newBookmarks = [...allBookmarks, bookmarkData];
+        }
         
         try {
-            const savedBookmark = await apiRequest(endpoint, method, data);
-            dataVersion = savedBookmark.version || dataVersion;
+            const result = await apiRequest('data', 'PATCH', { bookmarks: newBookmarks, categories: allCategories });
+            allBookmarks = result.bookmarks;
+            allCategories = result.categories;
+            dataVersion = result.version;
             hideAllModals();
-            if (id) {
-                const index = allBookmarks.findIndex(bm => bm.id === id);
-                if (index > -1) allBookmarks[index] = { ...allBookmarks[index], ...savedBookmark };
-            } else {
-                allBookmarks.push(savedBookmark);
-            }
             renderBookmarkList(document.getElementById('bookmark-category-filter').value);
         } catch (error) {
-            allBookmarks = oldBookmarks;
-            renderBookmarkList(document.getElementById('bookmark-category-filter').value);
             const errorEl = bookmarkEditForm.querySelector('.modal-error-message');
-            if(errorEl) errorEl.textContent = error.message;
+            if (errorEl) errorEl.textContent = error.message;
         }
-    };
-    
-    initializePage();
+    };
+    
+    initializePage();
 });
