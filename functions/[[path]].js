@@ -240,7 +240,7 @@ export async function onRequest(context) {
         const newCategory = {
             id: `cat-${Date.now()}`,
             name: name,
-            parentId: null, // For simplicity, new categories are top-level. UI can be adapted.
+            parentId: null, // 默认新分类是顶级分类
             sortOrder: (siteData.categories.length > 0 ? Math.max(...siteData.categories.map(c => c.sortOrder || 0)) : -1) + 1
         };
         await env.NAVI_DATA.put(`category:${newCategory.id}`, JSON.stringify(newCategory));
@@ -308,7 +308,10 @@ export async function onRequest(context) {
         userIndex.push(username);
         await env.NAVI_DATA.put('_index:users', JSON.stringify(userIndex));
         const { passwordHash: p, salt: s, ...safeUser } = newUser;
-        return jsonResponse(safeUser, 201);
+        // 【修正】返回完整的安全用户对象，包含权限等信息
+        const hydratedUser = { ...safeUser };
+        Object.assign(hydratedUser, { permissions: { canEditBookmarks: hydratedUser.roles.includes('editor') || hydratedUser.roles.includes('admin'), canEditCategories: hydratedUser.roles.includes('editor') || hydratedUser.roles.includes('admin'), canEditUsers: hydratedUser.roles.includes('admin'), visibleCategories: permissions.visibleCategories }});
+        return jsonResponse(hydratedUser, 201);
     }
     if (apiPath.startsWith('users/')) {
         const username = decodeURIComponent(apiPath.substring('users/'.length));
@@ -320,7 +323,7 @@ export async function onRequest(context) {
             const { roles, permissions, password, defaultCategoryId } = await request.json();
             if (roles) userToManage.roles = roles;
             if (permissions) userToManage.permissions = permissions;
-            if (defaultCategoryId) userToManage.defaultCategoryId = defaultCategoryId;
+            if (defaultCategoryId !== undefined) userToManage.defaultCategoryId = defaultCategoryId;
             if (password) {
                 userToManage.salt = generateSalt();
                 userToManage.passwordHash = await hashPassword(password, userToManage.salt);
@@ -356,16 +359,19 @@ export async function onRequest(context) {
         if (!currentUser.permissions.canEditCategories || !currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
         const { newCategories, newBookmarks } = await request.json();
 
-        const categoryPuts = newCategories.map(c => env.NAVI_DATA.put(`category:${c.id}`, JSON.stringify(c)));
-        const bookmarkPuts = newBookmarks.map(b => env.NAVI_DATA.put(`bookmark:${b.id}`, JSON.stringify(b)));
+        if (newCategories && newCategories.length > 0) {
+            const categoryPuts = newCategories.map(c => env.NAVI_DATA.put(`category:${c.id}`, JSON.stringify(c)));
+            await Promise.all(categoryPuts);
+            const newCategoryIndex = [...siteData.categories.map(c => c.id), ...newCategories.map(c => c.id)];
+            await env.NAVI_DATA.put('_index:categories', JSON.stringify(newCategoryIndex));
+        }
         
-        await Promise.all([...categoryPuts, ...bookmarkPuts]);
-
-        const newCategoryIndex = [...siteData.categories.map(c => c.id), ...newCategories.map(c => c.id)];
-        const newBookmarkIndex = [...siteData.bookmarks.map(b => b.id), ...newBookmarks.map(b => b.id)];
-
-        await env.NAVI_DATA.put('_index:categories', JSON.stringify(newCategoryIndex));
-        await env.NAVI_DATA.put('_index:bookmarks', JSON.stringify(newBookmarkIndex));
+        if (newBookmarks && newBookmarks.length > 0) {
+            const bookmarkPuts = newBookmarks.map(b => env.NAVI_DATA.put(`bookmark:${b.id}`, JSON.stringify(b)));
+            await Promise.all(bookmarkPuts);
+            const newBookmarkIndex = [...siteData.bookmarks.map(b => b.id), ...newBookmarks.map(b => b.id)];
+            await env.NAVI_DATA.put('_index:bookmarks', JSON.stringify(newBookmarkIndex));
+        }
 
         return jsonResponse({ success: true, importedCategories: newCategories.length, importedBookmarks: newBookmarks.length });
     }
