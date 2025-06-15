@@ -1,9 +1,7 @@
 import { SignJWT, jwtVerify } from 'jose';
 
-
-// --- Security & Hashing Helpers --- 
+// --- Security & Hashing Helpers ---
 const JWT_SECRET = () => new TextEncoder().encode(globalThis.JWT_SECRET_STRING);
-
 
 const generateSalt = (length = 16) => {
     const array = new Uint8Array(length);
@@ -17,6 +15,12 @@ const hashPassword = async (password, salt) => {
     const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: encoder.encode(salt), iterations: 100000, hash: 'SHA-256' }, keyMaterial, 256);
     const hash = new Uint8Array(bits);
     return Array.from(hash).map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+const cleanTitle = (fullTitle) => {
+    if (!fullTitle) return '';
+    const cleaned = fullTitle.split(/ \| | - /)[0].trim();
+    return cleaned || fullTitle;
 };
 
 // --- Data Fetching & Permission Hydration ---
@@ -54,10 +58,8 @@ const getSiteData = async (env) => {
             bookmarks: []
         };
         
-        // [新增] 如果环境中未提供 JWT_SECRET，则自动生成并保存
         if (!env.JWT_SECRET) {
             console.log("JWT_SECRET not found in environment. Generating and saving a new one.");
-            // 使用 crypto.randomUUID() 生成一个足够随机的密钥
             data.jwtSecret = crypto.randomUUID() + '-' + crypto.randomUUID();
         }
 
@@ -129,10 +131,6 @@ const authenticateRequest = async (request, siteData) => {
     }
 };
 
-
-
-
-
 const jsonResponse = (data, status = 200, headers = {}) => {
     const defaultHeaders = { 'Content-Type': 'application/json;charset=UTF-8' };
     if (data === null) {
@@ -141,86 +139,59 @@ const jsonResponse = (data, status = 200, headers = {}) => {
     return new Response(JSON.stringify(data), { status, headers: { ...defaultHeaders, ...headers } });
 };
 
-
-/**
- * [新增] 清洗并提取网页标题的核心部分
- * @param {string} fullTitle - 完整的网页标题
- * @returns {string} 清洗后的标题
- */
-const cleanTitle = (fullTitle) => {
-    if (!fullTitle) return '';
-    // 移除常见的分割符及其后面的内容，例如 "页面标题 | 网站名称" 或 "页面标题 - 网站名称"
-    const cleaned = fullTitle.split(/ \| | - /)[0].trim();
-    return cleaned || fullTitle; // 如果分割后为空，则返回原标题
-};
-
-
 // --- Main onRequest Entrypoint ---
 export async function onRequest(context) {
     const { request, env, next } = context;
-
-  // --- [新增] URL Scraper API Endpoint ---
     const url = new URL(request.url);
-    if (url.pathname === '/api/scrape-url') {
-        // 此端点需要认证
+    
+    // 1. Environment Variable Check
+    const publicModeValue = env.PUBLIC_MODE_ENABLED;
+    if (publicModeValue !== 'true' && publicModeValue !== 'false') {
+        return new Response(
+            '<h1>Configuration Error</h1><p>The <code>PUBLIC_MODE_ENABLED</code> environment variable must be explicitly set to either <code>"true"</code> or <code>"false"</code>.</p>',
+            { status: 500, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+        );
+    }
+
+    const path = url.pathname;
+
+    // 2. Handle URL Scraper API Endpoint
+    if (path === '/api/scrape-url') {
         const siteDataForAuth = await getSiteData(env);
         globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteDataForAuth.jwtSecret;
         if (!globalThis.JWT_SECRET_STRING) return jsonResponse({ error: 'JWT Secret not configured' }, 500);
+        
         const authResult = await authenticateRequest(request, siteDataForAuth);
         if (authResult.error) return jsonResponse(authResult, authResult.status);
 
         const targetUrl = url.searchParams.get('url');
-        if (!targetUrl) {
-            return jsonResponse({ error: 'URL parameter is missing' }, 400);
-        }
+        if (!targetUrl) return jsonResponse({ error: 'URL parameter is missing' }, 400);
 
         try {
-            const response = await fetch(targetUrl, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
-            });
+            const response = await fetch(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+            if (!response.ok) throw new Error(`Fetch failed with status: ${response.status}`);
 
-            if (!response.ok) {
-                throw new Error(`Failed to fetch URL with status: ${response.status}`);
-            }
-
-            let title = '';
-            let description = '';
-            let icon = '';
+            let title = '', description = '', icon = '';
 
             const rewriter = new HTMLRewriter()
-                .on('title', {
-                    text(text) {
-                        title += text.text;
-                    },
-                })
-                .on('meta[name="description"]', {
-                    element(element) {
-                        description = element.getAttribute('content');
-                    },
-                })
+                .on('title', { text(text) { title += text.text; }})
+                .on('meta[name="description"]', { element(element) { description = element.getAttribute('content'); }})
                 .on('link[rel*="icon"]', {
                     element(element) {
-                        // 优先选择尺寸最大的或最合适的图标
-                        if (!icon) { // 只取第一个找到的
+                        if (!icon) {
                            let href = element.getAttribute('href');
-                           if (href) {
-                               // 将相对路径转换为绝对路径
-                               icon = new URL(href, targetUrl).toString();
-                           }
+                           if (href) icon = new URL(href, targetUrl).toString();
                         }
                     },
                 });
 
             await rewriter.transform(response).arrayBuffer();
             
-            // 如果没有找到<link>标签的图标，尝试获取根目录的 favicon.ico
             if (!icon) {
                  try {
                     const iconUrl = new URL('/favicon.ico', targetUrl);
                     const iconCheck = await fetch(iconUrl.toString(), { method: 'HEAD' });
-                    if(iconCheck.ok) {
-                        icon = iconUrl.toString();
-                    }
+                    if(iconCheck.ok) icon = iconUrl.toString();
                  } catch (e) { /* ignore */ }
             }
 
@@ -229,43 +200,23 @@ export async function onRequest(context) {
                 description: description || '',
                 icon: icon || '',
             });
-
         } catch (error) {
             console.error(`Scraping failed for ${targetUrl}:`, error);
             return jsonResponse({ error: `Could not fetch or parse URL: ${error.message}` }, 500);
         }
     }
 
-
-    
-    
-
-    // [新增] 严格校验 PUBLIC_MODE_ENABLED 环境变量
-    const publicModeValue = env.PUBLIC_MODE_ENABLED;
-    if (publicModeValue !== 'true' && publicModeValue !== 'false') {
-        return new Response(
-            '<h1>Configuration Error</h1><p>The <code>PUBLIC_MODE_ENABLED</code> environment variable is not set correctly. It must be explicitly set to either the string <code>"true"</code> or <code>"false"</code>.</p>',
-            { 
-                status: 500,
-                headers: { 'Content-Type': 'text/html; charset=utf-8' }
-            }
-        );
-    }
-
-    
-    const path = url.pathname;
-    
+    // 3. Pass non-API requests to the next handler
     if (!path.startsWith('/api/')) {
         return next();
     }
     
-    // [重构] 预先获取数据并设置密钥
+    // 4. Main API logic for all other endpoints
     const siteData = await getSiteData(env);
     globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteData.jwtSecret;
 
-    // 检查密钥最终是否存在
     if (!globalThis.JWT_SECRET_STRING) {
-        return jsonResponse({ error: 'Critical Configuration Error: JWT_SECRET is missing and could not be generated. Please check your environment or KV store.' }, 500);
+        return jsonResponse({ error: 'Critical Configuration Error: JWT_SECRET is missing.' }, 500);
     }
     
     let apiPath = path.substring(5);
@@ -316,7 +267,6 @@ export async function onRequest(context) {
     if (apiPath === 'data' && request.method === 'PUT') {
         if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
         const dataToUpdate = await request.json();
-        // [安全更新] 确保不会意外地修改 jwtSecret
         delete dataToUpdate.jwtSecret;
         if (dataToUpdate.categories) siteData.categories = dataToUpdate.categories;
         if (dataToUpdate.bookmarks) siteData.bookmarks = dataToUpdate.bookmarks;
@@ -329,10 +279,12 @@ export async function onRequest(context) {
         const bookmark = await request.json();
         if (!currentUser.roles.includes('admin') && !currentUser.permissions.visibleCategories.includes(bookmark.categoryId)) return jsonResponse({ error: '无权在此分类下添加书签' }, 403);
         bookmark.id = `bm-${Date.now()}`;
+        
+        // [修复] 默认排序增量改为 1
         if (typeof bookmark.sortOrder === 'undefined' || bookmark.sortOrder === null) {
             const bookmarksInCategory = siteData.bookmarks.filter(b => b.categoryId === bookmark.categoryId);
             const maxOrder = bookmarksInCategory.length > 0 ? Math.max(...bookmarksInCategory.map(b => b.sortOrder || 0)) : -1;
-            bookmark.sortOrder = maxOrder + 10;
+            bookmark.sortOrder = maxOrder + 1;
         }
         siteData.bookmarks.push(bookmark);
         await saveSiteData(env, siteData);
@@ -391,20 +343,13 @@ export async function onRequest(context) {
 
         if (apiPath.startsWith('users/')) {
             let username = apiPath.substring('users/'.length);
-            try {
-                username = decodeURIComponent(username);
-            } catch (e) {
-                return jsonResponse({ error: '用户名编码无效' }, 400);
-            }
+            try { username = decodeURIComponent(username); } 
+            catch (e) { return jsonResponse({ error: '用户名编码无效' }, 400); }
 
-            if (!username) {
-                return jsonResponse({ error: '未提供用户名' }, 400);
-            }
+            if (!username) return jsonResponse({ error: '未提供用户名' }, 400);
             
             const userToManage = siteData.users[username];
-            if (!userToManage) {
-                return jsonResponse({ error: `用户 '${username}' 未找到` }, 404);
-            }
+            if (!userToManage) return jsonResponse({ error: `用户 '${username}' 未找到` }, 404);
 
             if (request.method === 'PUT') {
                 const { roles, permissions, password, defaultCategoryId } = await request.json();
