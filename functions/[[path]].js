@@ -297,35 +297,37 @@ export async function onRequest(context) {
         }
 
         // --- [核心修复] 补全用户管理的所有逻辑 ---
-        if (apiPath === 'users/self' && request.method === 'PUT') {
-            const { defaultCategoryId } = await request.json();
-            if (typeof defaultCategoryId === 'undefined') return jsonResponse({ error: '未提供更新数据' }, 400);
-            const userToUpdate = dataToModify.users[currentUser.username];
-            if (userToUpdate) {
-                userToUpdate.defaultCategoryId = defaultCategoryId;
-                const newVersion = await saveSiteData(env, dataToModify);
-                const { passwordHash, salt, ...safeUser } = userToUpdate;
-                return jsonResponse(safeUser, 200, { 'ETag': newVersion });
-            }
-            return jsonResponse({ error: '用户未找到'}, 404);
-        }
+         if (apiPath === 'users/self' && request.method === 'PUT') {
+            const { defaultCategoryId } = await request.json();
+            if (typeof defaultCategoryId === 'undefined') return jsonResponse({ error: '未提供更新数据' }, 400);
+            const userToUpdate = dataToModify.users[currentUser.username];
+            if (userToUpdate) {
+                userToUpdate.defaultCategoryId = defaultCategoryId;
+                const newVersion = await saveSiteData(env, dataToModify);
+                const { passwordHash, salt, ...safeUser } = userToUpdate;
+              // --- 修改 START ---
+              // 确保返回格式一致
+                return jsonResponse({ user: safeUser, version: newVersion }, 200, { 'ETag': newVersion });
+              // --- 修改 END ---
+            }
+            return jsonResponse({ error: '用户未找到'}, 404);
+        }
         
-        if (apiPath.startsWith('users')) {
-            if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
-            
-            if (request.method === 'POST' && apiPath === 'users') {
-                const { username: newUsername, password, roles, permissions } = await request.json();
-                if (!newUsername || !password || dataToModify.users[newUsername]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
-                const salt = generateSalt();
-                const passwordHash = await hashPassword(password, salt);
-                dataToModify.users[newUsername] = { username: newUsername, passwordHash, salt, roles, permissions, defaultCategoryId: 'all' };
-                const newVersion = await saveSiteData(env, dataToModify);
+        if (apiPath.startsWith('users')) {
+            if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
+            
+            if (request.method === 'POST' && apiPath === 'users') {
+                const { username: newUsername, password, roles, permissions, defaultCategoryId } = await request.json();
+                if (!newUsername || !password || dataToModify.users[newUsername]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
+                const salt = generateSalt();
+                const passwordHash = await hashPassword(password, salt);
+                dataToModify.users[newUsername] = { username: newUsername, passwordHash, salt, roles, permissions, defaultCategoryId: defaultCategoryId || 'all' };
+                const newVersion = await saveSiteData(env, dataToModify);
 
-const { passwordHash: p, salt: s, ...newUser } = dataToModify.users[newUsername];
-// 将 newUser 和 newVersion 一起放入返回的 JSON 中
-const responsePayload = { user: newUser, version: newVersion };
-return jsonResponse(responsePayload, 201, { 'ETag': newVersion });
-            }
+                const { passwordHash: p, salt: s, ...newUser } = dataToModify.users[newUsername];
+                const responsePayload = { user: newUser, version: newVersion };
+                return jsonResponse(responsePayload, 201, { 'ETag': newVersion });
+            }
 
             const userPathMatch = apiPath.match(/^users\/(.+)$/);
             if (userPathMatch) {
@@ -350,7 +352,9 @@ return jsonResponse(responsePayload, 201, { 'ETag': newVersion });
                         }
                         const newVersion = await saveSiteData(env, dataToModify);
                         const { passwordHash, salt, ...updatedUser } = userToManage;
-                        return jsonResponse(updatedUser, 200, { 'ETag': newVersion });
+                      // 修正此处返回格式，使其与前端预期一致
+                        return jsonResponse({ user: updatedUser, version: newVersion }, 200, { 'ETag': newVersion });
+                        // --- 修改 END ---
                     }
 
                     if (request.method === 'DELETE') {
