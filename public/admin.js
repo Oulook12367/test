@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 3. UI Flow & Modals ---
     const showModal = (modal) => {
-        hideAllModals(); // In showing any new modal, first hide all existing ones.
+        hideAllModals(); // [最终修复] 在显示任何新模态框之前，先隐藏所有已存在的模态框
         if (modal) {
             modalBackdrop.style.display = 'flex';
             modal.style.display = 'block';
@@ -126,7 +126,6 @@ document.addEventListener('DOMContentLoaded', () => {
         buildOptions(tree, 0);
     };
     
-    // --- Render functions for each tab ---
     const renderCategoryAdminTab = (container) => {
         container.innerHTML = `<p class="admin-panel-tip">通过修改表单来调整分类，完成后请点击下方的“保存”按钮。</p><div class="category-admin-header"><span>排序</span><span>分类名称</span><span>上级分类</span><span>操作</span></div><ul id="category-admin-list"></ul><div class="admin-panel-actions"><button id="save-categories-btn" class="button button-primary"><i class="fas fa-save"></i> 保存全部分类</button><button id="add-new-category-btn" class="button"><i class="fas fa-plus"></i> 添加新分类</button></div>`;
         const listEl = container.querySelector('#category-admin-list');
@@ -153,11 +152,6 @@ document.addEventListener('DOMContentLoaded', () => {
         buildList(tree, 0);
     };
 
-    /**
-     * [NEW FUNCTION] Renders only the list of bookmarks inside the bookmark management tab.
-     * This allows for partial updates without re-rendering the entire tab.
-     * @param {string} categoryId The category to filter by ('all' for no filter).
-     */
     const renderBookmarkList = (categoryId) => {
         const listEl = document.querySelector('#bookmark-admin-list-container ul');
         if (!listEl) return;
@@ -195,7 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const lastFilter = sessionStorage.getItem('admin_bookmark_filter') || 'all';
         categoryFilter.value = lastFilter;
         
-        renderBookmarkList(lastFilter); // Use the new function for the initial render.
+        renderBookmarkList(lastFilter);
     };
 
     const renderUserAdminTab = (container) => {
@@ -224,7 +218,6 @@ document.addEventListener('DOMContentLoaded', () => {
         container.innerHTML = `<div class="system-setting-item"><h3><i class="fas fa-file-import"></i> 导入书签</h3><p>从浏览器导出的HTML文件导入书签。导入操作会合并现有书签，不会清空原有数据。</p><button id="import-bookmarks-btn-admin" class="button">选择HTML文件</button><input type="file" id="import-file-input-admin" accept=".html,.htm" style="display: none;"></div>`;
     };
 
-    // --- All Helper Functions ---
     const handleAddNewCategory = () => {
         const listEl = document.getElementById('category-admin-list');
         if (!listEl) return;
@@ -522,13 +515,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- [THE NEW CORE] The Master Event Listener ---
     if (adminContentPanel) {
-        // --- MASTER CLICK LISTENER ---
         adminContentPanel.addEventListener('click', (event) => {
             const target = event.target;
             const activeTab = document.querySelector('.admin-tab-content.active');
             if (!activeTab) return;
 
-            // Use a switch statement for clarity and to prevent fall-through
             switch (activeTab.id) {
                 case 'tab-categories':
                     if (target.closest('.delete-cat-btn')) {
@@ -599,7 +590,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // --- MASTER SUBMIT & CHANGE LISTENERS ---
         adminContentPanel.addEventListener('submit', (event) => {
             if (document.getElementById('tab-users')?.classList.contains('active')) {
                 if (event.target.id === 'user-form') {
@@ -638,36 +628,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
-    }
-
- // --- [新增] MASTER FOCUSOUT LISTENER for URL Scraping ---
+        
         adminContentPanel.addEventListener('focusout', async (event) => {
-            // 仅当事件发生在书签编辑模态框中的 URL 输入框时触发
             if (event.target.id === 'bm-edit-url' && bookmarkEditModal.style.display === 'block') {
                 const urlInput = event.target;
                 const url = urlInput.value.trim();
-
-                // 简单的URL验证
                 if (!url || !url.startsWith('http')) {
                     return;
                 }
                 
-                // 查找表单中的其他字段
                 const nameInput = document.getElementById('bm-edit-name');
                 const descInput = document.getElementById('bm-edit-desc');
                 const iconInput = document.getElementById('bm-edit-icon');
                 const originalPlaceholder = urlInput.placeholder;
 
                 try {
-                    // 提供视觉反馈：正在获取信息...
                     urlInput.placeholder = '正在获取网站信息...';
                     urlInput.disabled = true;
                     nameInput.disabled = true;
 
-                    // 调用新的API端点
                     const data = await apiRequest(`scrape-url?url=${encodeURIComponent(url)}`);
 
-                    // 如果名称、描述、图标字段为空，则用获取到的数据填充
                     if (data.title && !nameInput.value) {
                         nameInput.value = data.title;
                     }
@@ -679,11 +660,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 } catch (error) {
                     console.error('网址信息获取失败:', error);
-                    // 可以在这里给用户一个提示，例如在模态框的错误消息区
                     const errorEl = bookmarkEditForm.querySelector('.modal-error-message');
                     if (errorEl) errorEl.textContent = `网址信息获取失败: ${error.message}`;
                 } finally {
-                    // 恢复输入框状态
                     urlInput.placeholder = originalPlaceholder;
                     urlInput.disabled = false;
                     nameInput.disabled = false;
@@ -691,10 +670,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
-
     
-    // --- Final Initialization & Modal Handlers ---
     document.querySelectorAll('.close-btn').forEach(btn => btn.addEventListener('click', hideAllModals));
     const confirmNoBtn = document.getElementById('confirm-btn-no');
     if(confirmNoBtn) confirmNoBtn.onclick = hideAllModals;
