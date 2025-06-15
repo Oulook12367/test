@@ -32,6 +32,45 @@ document.addEventListener('DOMContentLoaded', () => {
             onConfirm();
         };
     };
+
+// --- 1. 新增：一个非阻塞的消息提示工具 (用它来代替所有 alert) ---
+function showToast(message, isError = false) {
+    let toast = document.querySelector('.toast-message');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.className = 'toast-message';
+        // 为 toast 添加一些基本样式
+        Object.assign(toast.style, {
+            position: 'fixed',
+            bottom: '30px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '12px 25px',
+            borderRadius: '12px',
+            color: 'white',
+            background: isError ? 'rgba(239, 68, 68, 0.8)' : 'rgba(34, 197, 94, 0.8)', // 红色或绿色背景
+            backdropFilter: 'blur(10px)',
+            webkitBackdropFilter: 'blur(10px)',
+            zIndex: '9999',
+            opacity: '0',
+            transition: 'opacity 0.3s ease-in-out',
+            fontWeight: '700',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.2)'
+        });
+        document.body.appendChild(toast);
+    }
+
+    toast.textContent = message;
+    toast.style.background = isError ? 'rgba(239, 68, 68, 0.8)' : 'rgba(34, 197, 94, 0.8)';
+    toast.style.opacity = '1';
+
+    // 3秒后自动消失
+    setTimeout(() => {
+        toast.style.opacity = '0';
+    }, 3000);
+}
+
+
     
     // --- 4. Core Logic ---
     async function initializePage(activeTabId = 'tab-categories') {
@@ -243,28 +282,84 @@ document.addEventListener('DOMContentLoaded', () => {
         li.querySelector('.cat-name-input').focus();
     };
 
-    const handleSaveCategories = async () => {
-        const listItems = document.querySelectorAll('#category-admin-list li');
-        let finalCategories = [];
-        let hasError = false;
-        listItems.forEach(li => {
-            const idVal = li.dataset.id;
-            const name = li.querySelector('.cat-name-input').value.trim();
-            if (!name) { hasError = true; }
-            finalCategories.push({
-                id: idVal.startsWith('new-') ? `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` : idVal,
-                name: name,
-                parentId: li.querySelector('.cat-parent-select').value || null,
-                sortOrder: parseInt(li.querySelector('.cat-order-input').value) || 0,
-            });
+   // --- 2. 替换 handleSaveCategories 函数 ---
+const handleSaveCategories = async () => {
+    const saveBtn = document.getElementById('save-categories-btn');
+    if (!saveBtn || saveBtn.disabled) return;
+    const originalBtnHTML = saveBtn.innerHTML;
+
+    // 步骤 1: 暂存旧数据，用于失败时回滚
+    const originalCategories = JSON.parse(JSON.stringify(allCategories));
+
+    // 步骤 2: 收集新数据
+    const listItems = document.querySelectorAll('#category-admin-list li');
+    let finalCategories = [];
+    let hasError = false;
+    const newIdMap = new Map();
+    listItems.forEach((li, index) => {
+        const idVal = li.dataset.id;
+        const name = li.querySelector('.cat-name-input').value.trim();
+        if (!name) { hasError = true; }
+        
+        let newId = idVal;
+        if (idVal.startsWith('new-')) {
+            newId = `cat-${Date.now()}-${index}`; // 确保ID唯一
+            newIdMap.set(idVal, newId);
+        }
+
+        finalCategories.push({
+            id: newId,
+            name: name,
+            parentId: li.querySelector('.cat-parent-select').value || null,
+            sortOrder: parseInt(li.querySelector('.cat-order-input').value) || 0,
         });
-        if (hasError) { alert('分类名称不能为空！'); return; }
-        try {
-            await apiRequest('data', 'PUT', { categories: finalCategories });
-            alert('分类保存成功！');
-            await initializePage('tab-categories');
-        } catch (error) { alert('保存失败: ' + error.message); }
-    };
+    });
+    
+    // 如果有子分类的父ID是临时的'new-'ID，也需要更新
+    finalCategories.forEach(cat => {
+        if (cat.parentId && newIdMap.has(cat.parentId)) {
+            cat.parentId = newIdMap.get(cat.parentId);
+        }
+    });
+
+    if (hasError) {
+        showToast('错误：分类名称不能为空！', true);
+        return;
+    }
+
+    // 步骤 3: 乐观更新 - 立即更新本地状态和UI
+    allCategories = finalCategories;
+    renderAdminTab('tab-categories'); // 使用新数据重新渲染分类UI
+    showToast("分类已更新，正在后台同步...");
+
+    // 步骤 4: 后台发送API请求，并处理UI反馈
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步中...';
+    saveBtn.disabled = true;
+
+    try {
+        // 后端将负责处理ID的最终确认
+        await apiRequest('data', 'PUT', { categories: finalCategories });
+        saveBtn.innerHTML = '<i class="fas fa-check"></i> 同步成功';
+        // 成功后，为了获取后端可能生成的新ID，需要重新初始化数据
+        // 但为了更好的体验，我们可以只更新ID，而不是整个页面刷新
+        await initializePage('tab-categories');
+
+    } catch (error) {
+        // 步骤 5: 失败回滚 - 恢复数据和UI
+        showToast('同步失败，已撤销更改: ' + error.message, true);
+        allCategories = originalCategories; // 恢复JS数据
+        renderAdminTab('tab-categories'); // 用旧数据恢复UI
+        saveBtn.innerHTML = '<i class="fas fa-times"></i> 同步失败';
+    } finally {
+        // 步骤 6: 无论成功失败，2秒后恢复按钮
+        setTimeout(() => {
+            if (saveBtn) {
+                saveBtn.innerHTML = originalBtnHTML;
+                saveBtn.disabled = false;
+            }
+        }, 2000);
+    }
+};
 
     const handleDeleteCategory = (catIdToDelete, catName) => {
         showConfirm('确认删除', `您确定要删除分类 "${catName}" 吗？这也会删除其下所有的子分类和书签。`, async () => {
@@ -372,76 +467,150 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
     
-    const handleUserFormSubmit = async (e) => {
-        e.preventDefault();
-        const form = e.target;
-        const hiddenUsername = form.querySelector('#user-form-username-hidden').value;
-        const isEditing = !!hiddenUsername;
-        const username = form.querySelector('#user-form-username').value.trim();
-        const password = form.querySelector('#user-form-password').value;
-        const errorEl = form.querySelector('.modal-error-message');
-        errorEl.textContent = '';
-        if (!username) { errorEl.textContent = '用户名不能为空'; return; }
-        if (!isEditing && !password) { errorEl.textContent = '新用户必须设置密码'; return; }
-        const selectedRole = form.querySelector('input[name="role-selection"]:checked').value;
-        const userData = {
-            roles: [selectedRole],
-            permissions: { visibleCategories: Array.from(form.querySelectorAll('#user-form-categories input:checked')).map(cb => cb.value) },
-            defaultCategoryId: form.querySelector('#user-form-default-cat').value
-        };
-        if (password) userData.password = password;
-        if (!isEditing) userData.username = username;
-        const endpoint = isEditing ? `users/${encodeURIComponent(hiddenUsername)}` : 'users';
-        const method = isEditing ? 'PUT' : 'POST';
-        try {
-            const updatedUser = await apiRequest(endpoint, method, userData);
-            alert('用户保存成功！');
-            const token = localStorage.getItem('jwt_token');
-            if (token) {
-                const payload = parseJwtPayload(token);
-                if (payload.sub === updatedUser.username && !updatedUser.roles.includes('admin')) {
-                    alert('您的管理员权限已被移除，将退出管理后台并返回主页。');
-                    localStorage.removeItem('jwt_token');
-                    window.location.href = 'index.html';
-                    return;
-                }
-            }
-            await initializePage('tab-users');
-        } catch (error) { errorEl.textContent = error.message; }
-    };
+  const handleUserFormSubmit = async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (!submitBtn || submitBtn.disabled) return;
+    const originalBtnHTML = submitBtn.innerHTML;
+    const errorEl = form.querySelector('.modal-error-message');
+    errorEl.textContent = '';
+
+    // 步骤 1: 暂存旧数据
+    const originalUsers = JSON.parse(JSON.stringify(allUsers));
     
- const handleSaveBookmarks = async () => {
-        const listItems = document.querySelectorAll('#bookmark-admin-list-container li');
-        let hasChanges = false;
-        
-        listItems.forEach(li => {
-            const id = li.dataset.id;
-            const bookmark = allBookmarks.find(bm => bm.id === id);
-            if (!bookmark) return;
+    // 步骤 2: 收集新数据
+    const hiddenUsername = form.querySelector('#user-form-username-hidden').value;
+    const isEditing = !!hiddenUsername;
+    const username = form.querySelector('#user-form-username').value.trim();
+    const password = form.querySelector('#user-form-password').value;
 
-            // [新功能] 从新的输入框和下拉菜单中获取值
-            const newSortOrder = parseInt(li.querySelector('.bm-sort-order').value) || 0;
-            const newName = li.querySelector('.bm-name-input').value.trim();
-            const newCategoryId = li.querySelector('.bm-category-select').value;
+    if (!username) { errorEl.textContent = '用户名不能为空'; return; }
+    if (!isEditing && !password) { errorEl.textContent = '新用户必须设置密码'; return; }
 
-            if ((bookmark.sortOrder || 0) !== newSortOrder || bookmark.name !== newName || bookmark.categoryId !== newCategoryId) {
-                bookmark.sortOrder = newSortOrder;
-                bookmark.name = newName;
-                bookmark.categoryId = newCategoryId;
-                hasChanges = true;
-            }
-        });
-
-        if (!hasChanges) { return; }
-        
-        try {
-            await apiRequest('data', 'PUT', { bookmarks: allBookmarks });
-            // 无需刷新，因为本地状态已是最新
-        } catch (error) { 
-            alert(`保存失败: ${error.message}`);
-            initializePage('tab-bookmarks');
-        }
+    const selectedRole = form.querySelector('input[name="role-selection"]:checked').value;
+    const userData = {
+        roles: [selectedRole],
+        permissions: { visibleCategories: Array.from(form.querySelectorAll('#user-form-categories input:checked')).map(cb => cb.value) },
+        defaultCategoryId: form.querySelector('#user-form-default-cat').value
     };
+    if (password) userData.password = password;
+    if (!isEditing) userData.username = username;
+
+    const endpoint = isEditing ? `users/${encodeURIComponent(hiddenUsername)}` : 'users';
+    const method = isEditing ? 'PUT' : 'POST';
+
+    // 步骤 3: 乐观更新UI
+    // 为了简化，我们直接重新初始化整个用户标签页，因为它也包含了表单状态
+    // 这里可以先不更新allUsers，等待API成功后再做，因为涉及密码哈希等后端逻辑
+    showToast("正在提交用户数据...");
+
+    // 步骤 4: 后台请求
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
+    submitBtn.disabled = true;
+
+    try {
+        const savedUser = await apiRequest(endpoint, method, userData);
+        submitBtn.innerHTML = '<i class="fas fa-check"></i> 保存成功!';
+        
+        // 操作成功后，再更新前端数据并刷新UI
+        showToast("用户保存成功！");
+        
+        // 检查当前登录用户是否被降权
+        const token = localStorage.getItem('jwt_token');
+        if (token) {
+            const payload = parseJwtPayload(token);
+            if (payload.sub === savedUser.username && !savedUser.roles.includes('admin')) {
+                showToast('您的管理员权限已被移除，将退出管理后台。', true);
+                localStorage.removeItem('jwt_token');
+                setTimeout(() => window.location.href = 'index.html', 2000);
+                return;
+            }
+        }
+        
+        // 重新加载页面数据以确保完全同步
+        await initializePage('tab-users');
+        clearUserForm(); // 清空并重置表单
+
+    } catch (error) {
+        // 步骤 5: 失败回滚（对于用户表单，主要是UI上的回滚）
+        errorEl.textContent = error.message;
+        submitBtn.innerHTML = '<i class="fas fa-times"></i> 保存失败';
+        // 因为我们没有预先修改allUsers，所以不需要JS数据回滚
+    } finally {
+        // 步骤 6: 恢复按钮
+        setTimeout(() => {
+            if (submitBtn) {
+                submitBtn.innerHTML = originalBtnHTML;
+                submitBtn.disabled = false;
+            }
+        }, 2000);
+    }
+};
+
+    
+// --- 3. 替换 handleSaveBookmarks 函数 ---
+const handleSaveBookmarks = async () => {
+    const saveBtn = document.getElementById('save-bookmarks-btn');
+    if (!saveBtn || saveBtn.disabled) return;
+    const originalBtnHTML = saveBtn.innerHTML;
+
+    // 步骤 1: 暂存旧数据
+    const originalBookmarks = JSON.parse(JSON.stringify(allBookmarks));
+
+    // 步骤 2: 收集新数据
+    const listItems = document.querySelectorAll('#bookmark-admin-list-container li');
+    let hasChanges = false;
+    listItems.forEach(li => {
+        const id = li.dataset.id;
+        const bookmark = allBookmarks.find(bm => bm.id === id);
+        if (!bookmark) return;
+
+        const newSortOrder = parseInt(li.querySelector('.bm-sort-order').value) || 0;
+        const newName = li.querySelector('.bm-name-input').value.trim();
+        const newCategoryId = li.querySelector('.bm-category-select').value;
+
+        if ((bookmark.sortOrder || 0) !== newSortOrder || bookmark.name !== newName || bookmark.categoryId !== newCategoryId) {
+            bookmark.sortOrder = newSortOrder;
+            bookmark.name = newName;
+            bookmark.categoryId = newCategoryId;
+            hasChanges = true;
+        }
+    });
+
+    if (!hasChanges) {
+        showToast("没有检测到任何更改。");
+        return;
+    }
+
+    // 步骤 3: 乐观更新UI
+    const currentFilter = document.getElementById('bookmark-category-filter').value;
+    renderBookmarkList(currentFilter); // 使用已修改的allBookmarks数组重新渲染
+    showToast("书签已更新，正在后台同步...");
+
+    // 步骤 4: 后台请求
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步中...';
+    saveBtn.disabled = true;
+    
+    try {
+        await apiRequest('data', 'PUT', { bookmarks: allBookmarks });
+        saveBtn.innerHTML = '<i class="fas fa-check"></i> 同步成功';
+    } catch (error) {
+        // 步骤 5: 失败回滚
+        showToast(`保存失败，已撤销更改: ${error.message}`, true);
+        allBookmarks = originalBookmarks; // 恢复JS数据
+        renderBookmarkList(currentFilter); // 用旧数据恢复UI
+        saveBtn.innerHTML = '<i class="fas fa-times"></i> 同步失败';
+    } finally {
+        // 步骤 6: 恢复按钮
+        setTimeout(() => {
+            if (saveBtn) {
+                saveBtn.innerHTML = originalBtnHTML;
+                saveBtn.disabled = false;
+            }
+        }, 2000);
+    }
+};
 
     const handleAddNewBookmark = () => {
         if (!bookmarkEditForm || !bookmarkEditModal) { return; }
