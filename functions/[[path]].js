@@ -115,7 +115,7 @@ const getSiteData = async (context) => {
     }
     
     const responseToCache = new Response(JSON.stringify(siteData), { headers: { 'Content-Type': 'application/json' } });
-    context.waitUntil(cache.put(cacheKey, responseToCache.clone(), { expirationTtl: 600 }));
+    context.waitUntil(cache.put(cacheKey, responseToCache.clone(), { expirationTtl: 600000000000000 }));
     
     return siteData;
 };
