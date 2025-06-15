@@ -263,7 +263,14 @@ export async function onRequest(context) {
         }
 
         if (apiPath === 'data' && (request.method === 'PUT' || request.method === 'PATCH')) {
-            if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
+
+
+    if (!currentUser.permissions.canEditCategories && !currentUser.permissions.canEditBookmarks) {
+        return jsonResponse({ error: '权限不足' }, 403);
+    }
+ 
+
+            
             const dataToUpdate = await request.json();
             if(request.method === 'PATCH'){
                  if (dataToUpdate.categories) dataToModify.categories = dataToUpdate.categories;
