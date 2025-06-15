@@ -99,20 +99,37 @@ const getSiteData = async (env) => {
     return data;
 };
 
-const saveSiteData = async (env, data) => {
-    const currentData = await env.NAVI_DATA.get('data');
-    if (currentData) {
-        const timestamp = new Date().toISOString();
-        await env.NAVI_BACKUPS.put(`backup-${timestamp}`, currentData);
-        const backups = await env.NAVI_BACKUPS.list({ prefix: "backup-" });
-        if (backups.keys.length > 100) {
-            const sortedKeys = backups.keys.sort((a, b) => a.name.localeCompare(b.name));
-            for (let i = 0; i < sortedKeys.length - 100; i++) {
-                await env.NAVI_BACKUPS.delete(sortedKeys[i].name);
+const saveSiteData = async (context, data) => {
+    const { env } = context;
+
+    // 1. 立即执行关键的数据保存
+    const mainSavePromise = env.NAVI_DATA.put('data', JSON.stringify(data));
+    
+    // 2. 将备份任务放入 waitUntil，让它在后台执行
+    context.waitUntil((async () => {
+        try {
+            // 首先要拿到旧数据用于备份
+            const currentData = await env.NAVI_DATA.get('data'); 
+            if (currentData) {
+                const timestamp = new Date().toISOString();
+                await env.NAVI_BACKUPS.put(`backup-${timestamp}`, currentData);
+                
+                const backups = await env.NAVI_BACKUPS.list({ prefix: "backup-" });
+                if (backups.keys.length > 10) {
+                    const sortedKeys = backups.keys.sort((a, b) => a.name.localeCompare(b.name));
+                    const keysToDelete = sortedKeys.slice(0, sortedKeys.length - 10);
+                    // Cloudflare KV 推荐批量删除
+                    await env.NAVI_BACKUPS.delete(keysToDelete.map(k => k.name));
+                }
             }
+        } catch (e) {
+            console.error("Backup failed:", e);
+            // 这里可以添加错误上报逻辑，比如 Sentry
         }
-    }
-    await env.NAVI_DATA.put('data', JSON.stringify(data));
+    })());
+
+    // 3. 等待关键保存完成，然后立即返回
+    await mainSavePromise;
 };
 
 const authenticateRequest = async (request, siteData) => {
@@ -270,7 +287,7 @@ export async function onRequest(context) {
         delete dataToUpdate.jwtSecret;
         if (dataToUpdate.categories) siteData.categories = dataToUpdate.categories;
         if (dataToUpdate.bookmarks) siteData.bookmarks = dataToUpdate.bookmarks;
-        await saveSiteData(env, siteData);
+        await saveSiteData(context, siteData);
         return jsonResponse({ success: true });
     }
     
@@ -287,7 +304,7 @@ export async function onRequest(context) {
             bookmark.sortOrder = maxOrder + 1;
         }
         siteData.bookmarks.push(bookmark);
-        await saveSiteData(env, siteData);
+       await saveSiteData(context, siteData);
         return jsonResponse(bookmark, 201);
     }
 
@@ -301,13 +318,13 @@ export async function onRequest(context) {
             if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
             const updatedBookmarkData = await request.json();
             siteData.bookmarks[bookmarkIndex] = { ...bookmarkToAccess, ...updatedBookmarkData };
-            await saveSiteData(env, siteData);
+           await saveSiteData(context, siteData);
             return jsonResponse(siteData.bookmarks[bookmarkIndex]);
         }
         if (request.method === 'DELETE') {
             if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
             siteData.bookmarks.splice(bookmarkIndex, 1);
-            await saveSiteData(env, siteData);
+            await saveSiteData(context, siteData);
             return jsonResponse(null);
         }
     }
@@ -320,7 +337,7 @@ export async function onRequest(context) {
         const userToUpdate = siteData.users[currentUser.username];
         if (userToUpdate) {
             userToUpdate.defaultCategoryId = defaultCategoryId;
-            await saveSiteData(env, siteData);
+           await saveSiteData(context, siteData);
             const { passwordHash, salt, ...safeUser } = userToUpdate;
             return jsonResponse(safeUser);
         }
@@ -336,7 +353,7 @@ export async function onRequest(context) {
             const salt = generateSalt();
             const passwordHash = await hashPassword(password, salt);
             siteData.users[newUsername] = { username: newUsername, passwordHash, salt, roles, permissions, defaultCategoryId: 'all' };
-            await saveSiteData(env, siteData);
+          await saveSiteData(context, siteData);
             const { passwordHash: p, salt: s, ...newUser } = siteData.users[newUsername];
             return jsonResponse(newUser, 201);
         }
@@ -367,7 +384,7 @@ export async function onRequest(context) {
                         userToManage.passwordHash = await hashPassword(password, userToManage.salt);
                     }
                 }
-                await saveSiteData(env, siteData);
+                await saveSiteData(context, siteData);
                 const { passwordHash, salt, ...updatedUser } = userToManage;
                 return jsonResponse(updatedUser);
             }
@@ -380,7 +397,7 @@ export async function onRequest(context) {
                     if (adminCount <= 1) return jsonResponse({ error: '无法删除最后一个管理员账户' }, 403);
                 }
                 delete siteData.users[username];
-                await saveSiteData(env, siteData);
+                await saveSiteData(context, siteData);
                 return jsonResponse(null);
             }
         }
