@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
-<body>
+<body class="is-loading">
     <div class="page-background"></div>
     <div id="admin-page-container" style="display: none;">
         <header class="admin-header glass-pane">
@@ -19,7 +19,7 @@
                 <a href="#" class="admin-tab-link active" data-tab="tab-categories"><i class="fas fa-folder-tree fa-fw"></i> 分类管理</a>
                 <a href="#" class="admin-tab-link" data-tab="tab-users"><i class="fas fa-users fa-fw"></i> 用户管理</a>
                 <a href="#" class="admin-tab-link" data-tab="tab-bookmarks"><i class="fas fa-bookmark fa-fw"></i> 书签管理</a>
-                <a href="#" class="admin-tab-link" data-tab="tab-system"><i class="fas fa-tools fa-fw"></i> 系统工具</a>
+                <a href="#" class="admin-tab-link" data-tab="tab-system"><i class="fas fa-tools fa-fw"></i> 导入书签</a>
             </nav>
             <main class="admin-panel-content">
                 <div id="tab-categories" class="admin-tab-content active"></div>
@@ -73,13 +73,15 @@
             </div>
         </div>
     </div>
+
+    <!-- 【修复】调整脚本加载顺序 -->
     <script src="shared.js"></script>
-   <!-- 替换 admin.html 中原有的 admin.js 引用 -->
-<script src="shared.js"></script>
-<script src="admin-core.js"></script>
-<script src="admin-categories.js"></script>
-<script src="admin-bookmarks.js"></script>
-<script src="admin-users.js"></script>
-<script src="admin-system.js"></script>
+    <!-- 先加载所有定义了渲染函数的模块文件 -->
+    <script src="admin-categories.js"></script>
+    <script src="admin-bookmarks.js"></script>
+    <script src="admin-users.js"></script>
+    <script src="admin-system.js"></script>
+    <!-- 最后加载负责调用这些函数的核心文件 -->
+    <script src="admin-core.js"></script>
 </body>
 </html>
