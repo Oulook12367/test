@@ -8,14 +8,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const confirmBtnYes = document.getElementById('confirm-btn-yes');
     const adminPanelNav = document.querySelector('.admin-panel-nav');
     const adminTabContents = document.querySelectorAll('.admin-tab-content');
-    const adminContentPanel = document.querySelector('.admin-panel-content'); // The master container
+    const adminContentPanel = document.querySelector('.admin-panel-content');
     const bookmarkEditModal = document.getElementById('bookmark-edit-modal');
     const bookmarkEditForm = document.getElementById('bookmark-edit-form');
     let allBookmarks = [], allCategories = [], allUsers = [];
 
     // --- 3. UI Flow & Modals ---
     const showModal = (modal) => {
-        hideAllModals(); // In showing any new modal, first hide all existing ones.
+        hideAllModals();
         if (modal) {
             modalBackdrop.style.display = 'flex';
             modal.style.display = 'block';
@@ -165,14 +165,28 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return (a.sortOrder || 0) - (b.sortOrder || 0);
         });
-        const categoryNameMap = new Map(allCategories.map(c=>[c.id,c.name]));
-        listEl.innerHTML = bookmarksToDisplay.map(bm => 
-            `<li data-id="${bm.id}"><input type="number" class="bm-sort-order" value="${bm.sortOrder || 0}"><span class="bm-admin-name">${escapeHTML(bm.name)}</span><span class="bm-admin-cat">${categoryNameMap.get(bm.categoryId) || "无分类"}</span><div class="bm-admin-actions"><button class="edit-bm-btn button-icon" title="编辑"><i class="fas fa-pencil-alt"></i></button><button class="delete-bm-btn danger button-icon" title="删除"><i class="fas fa-trash-alt"></i></button></div></li>`
-        ).join('');
+        
+        listEl.innerHTML = ''; // Clear existing list
+        bookmarksToDisplay.forEach(bm => {
+            const li = document.createElement('li');
+            li.dataset.id = bm.id;
+            // [新功能] 书签名称和分类现在是可编辑的输入框和下拉菜单
+            li.innerHTML = `<input type="number" class="bm-sort-order" value="${bm.sortOrder || 0}">` +
+                         `<input type="text" class="bm-name-input" value="${escapeHTML(bm.name)}">` +
+                         `<select class="bm-category-select"></select>` +
+                         `<div class="bm-admin-actions">` +
+                         `<button class="edit-bm-btn button-icon" title="编辑网址、描述、图标"><i class="fas fa-pencil-alt"></i></button>` +
+                         `<button class="delete-bm-btn danger button-icon" title="删除"><i class="fas fa-trash-alt"></i></button>` +
+                         `</div>`;
+            const categorySelect = li.querySelector('.bm-category-select');
+            // 为每个书签的分类下拉菜单填充选项
+            populateCategoryDropdown(categorySelect, allCategories, bm.categoryId, null, { allowNoParent: false });
+            listEl.appendChild(li);
+        });
     };
 
     const renderBookmarkAdminTab = (container) => {
-        container.innerHTML = `<p class="admin-panel-tip" style="margin-bottom: 1rem;">通过修改表单来调整分类。修改排序数字后，点击下方的“保存”按钮来应用更改。</p><div class="bookmark-admin-controls" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;"><span>筛选分类:</span><select id="bookmark-category-filter" style="width: auto; max-width: 350px; flex-grow: 1;"><option value="all">-- 显示全部分类 --</option></select></div><div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div><div style="flex-grow: 1; overflow-y: auto; min-height: 0;"><div id="bookmark-admin-list-container"><ul></ul></div></div><div class="admin-panel-actions"><button id="save-bookmarks-btn" class="button button-primary"><i class="fas fa-save"></i> 保存书签顺序</button><button id="add-new-bookmark-btn" class="button"><i class="fas fa-plus"></i> 添加新书签</button></div>`;
+        container.innerHTML = `<p class="admin-panel-tip" style="margin-bottom: 1rem;">通过修改表单来调整分类。修改排序数字后，点击下方的“保存”按钮来应用更改。</p><div class="bookmark-admin-controls" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;"><span>筛选分类:</span><select id="bookmark-category-filter" style="width: auto; max-width: 350px; flex-grow: 1;"><option value="all">-- 显示全部分类 --</option></select></div><div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div><div style="flex-grow: 1; overflow-y: auto; min-height: 0;"><div id="bookmark-admin-list-container"><ul></ul></div></div><div class="admin-panel-actions"><button id="save-bookmarks-btn" class="button button-primary"><i class="fas fa-save"></i> 保存书签</button><button id="add-new-bookmark-btn" class="button"><i class="fas fa-plus"></i> 添加新书签</button></div>`;
         const categoryFilter = container.querySelector('#bookmark-category-filter');
         allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
             const o=document.createElement('option');
@@ -184,6 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
         categoryFilter.value = lastFilter;
         renderBookmarkList(lastFilter);
     };
+      
 
     const renderUserAdminTab = (container) => {
         container.innerHTML = `<div id="user-management-container"><div class="user-list-container"><h3 style="margin-bottom: 1rem;">用户列表</h3><ul id="user-list"></ul></div><div class="user-form-container"><form id="user-form"><h3 id="user-form-title">添加新用户</h3><div class="user-form-static-fields"><input type="hidden" id="user-form-username-hidden"><div class="form-group-inline"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required></div><div class="form-group-inline"><label for="user-form-password">密码:</label><input type="password" id="user-form-password"></div><div class="form-group-inline"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div><div class="form-group-inline"><label for="user-form-default-cat">默认显示分类:</label><select id="user-form-default-cat"></select></div></div><div class="form-group flex-grow"><label>可见分类:</label><div id="user-form-categories" class="checkbox-group"></div></div><div class="user-form-buttons"><button type="submit" class="button button-primary">保存用户</button><button type="button" id="user-form-clear-btn" class="button">新增/清空</button></div><p class="modal-error-message"></p></form></div></div>`;
@@ -395,24 +410,37 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { errorEl.textContent = error.message; }
     };
     
-    const handleSaveBookmarks = async () => {
+ const handleSaveBookmarks = async () => {
         const listItems = document.querySelectorAll('#bookmark-admin-list-container li');
         let hasChanges = false;
+        
         listItems.forEach(li => {
             const id = li.dataset.id;
-            const newSortOrder = parseInt(li.querySelector('.bm-sort-order').value) || 0;
             const bookmark = allBookmarks.find(bm => bm.id === id);
-            if (bookmark && (bookmark.sortOrder || 0) !== newSortOrder) {
+            if (!bookmark) return;
+
+            // [新功能] 从新的输入框和下拉菜单中获取值
+            const newSortOrder = parseInt(li.querySelector('.bm-sort-order').value) || 0;
+            const newName = li.querySelector('.bm-name-input').value.trim();
+            const newCategoryId = li.querySelector('.bm-category-select').value;
+
+            if ((bookmark.sortOrder || 0) !== newSortOrder || bookmark.name !== newName || bookmark.categoryId !== newCategoryId) {
                 bookmark.sortOrder = newSortOrder;
+                bookmark.name = newName;
+                bookmark.categoryId = newCategoryId;
                 hasChanges = true;
             }
         });
-        if (!hasChanges) { alert('没有检测到排序变更。'); return; }
+
+        if (!hasChanges) { return; }
+        
         try {
             await apiRequest('data', 'PUT', { bookmarks: allBookmarks });
-            alert('书签顺序保存成功！');
-            await initializePage('tab-bookmarks');
-        } catch (error) { alert(`保存失败: ${error.message}`); }
+            // 无需刷新，因为本地状态已是最新
+        } catch (error) { 
+            alert(`保存失败: ${error.message}`);
+            initializePage('tab-bookmarks');
+        }
     };
 
     const handleAddNewBookmark = () => {
@@ -590,7 +618,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        adminContentPanel.addEventListener('change', (event) => {
+
+
+ adminContentPanel.addEventListener('change', (event) => {
             if (document.getElementById('tab-bookmarks')?.classList.contains('active')) {
                 if (event.target.id === 'bookmark-category-filter') {
                     const newCategoryId = event.target.value;
@@ -666,9 +696,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    document.querySelectorAll('.close-btn').forEach(btn => btn.addEventListener('click', hideAllModals));
-    const confirmNoBtn = document.getElementById('confirm-btn-no');
-    if(confirmNoBtn) confirmNoBtn.onclick = hideAllModals;
+   document.querySelectorAll('.close-btn').forEach(btn => btn.addEventListener('click', hideAllModals));
+    if(document.getElementById('confirm-btn-no')) document.getElementById('confirm-btn-no').onclick = hideAllModals;
     if(bookmarkEditForm) bookmarkEditForm.onsubmit = async (e) => {
         e.preventDefault();
         const id = bookmarkEditForm.querySelector('#bm-edit-id').value;
@@ -682,9 +711,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const endpoint = id ? `bookmarks/${id}` : 'bookmarks';
         const method = id ? 'PUT' : 'POST';
         try {
-            await apiRequest(endpoint, method, data);
+            const savedBookmark = await apiRequest(endpoint, method, data);
             hideAllModals();
-            await initializePage('tab-bookmarks');
+            if (id) {
+                const index = allBookmarks.findIndex(bm => bm.id === id);
+                if (index > -1) allBookmarks[index] = savedBookmark;
+            } else {
+                allBookmarks.push(savedBookmark);
+            }
+            renderBookmarkList(document.getElementById('bookmark-category-filter').value);
         } catch (error) {
             const errorEl = bookmarkEditForm.querySelector('.modal-error-message');
             if(errorEl) errorEl.textContent = error.message;
@@ -693,3 +728,4 @@ document.addEventListener('DOMContentLoaded', () => {
     
     initializePage();
 });
+
