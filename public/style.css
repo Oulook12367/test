@@ -181,24 +181,27 @@ body.login-page { display: flex; align-items: center; justify-content: center; p
 .admin-header h1 { font-size: 1.5rem; }
 .admin-panel-container { flex-grow: 1; display: flex; overflow: hidden; }
 .admin-panel-nav { width: 240px; flex-shrink: 0; padding: 1rem; border-top-right-radius: 0; border-bottom-right-radius: 0; background: rgba(255,255,255,0.1); }
-.admin-panel-content { flex-grow: 1; padding: 1.5rem; border-top-left-radius: 0; border-bottom-left-radius: 0; background: rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden; }
+.admin-panel-content { flex-grow: 1; padding: 1.5rem; border-top-left-radius: 0; border-bottom-left-radius: 0; background: rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: visible; } /* [修复] 允许内容溢出 */
 .admin-panel-nav a { display: flex; align-items: center; gap: 0.75rem; padding: 12px; border-radius: 10px; text-decoration: none; color: white; margin-bottom: 0.5rem; font-weight: 700; }
 .admin-panel-nav a.active, .admin-panel-nav a:hover { background: rgba(255, 255, 255, 0.15); }
-.admin-tab-content { display: none; flex-grow: 1; flex-direction: column; overflow: hidden; }
+.admin-tab-content { display: none; flex-grow: 1; flex-direction: column; overflow: visible; } /* [修复] 允许内容溢出 */
 .admin-tab-content.active { display: flex; animation: fadeIn 0.5s; }
 .admin-panel-actions { margin-top: auto; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 1rem; display: flex; gap: 1rem; }
 .category-admin-header, .bookmark-admin-header { display: flex; align-items: center; gap: 1rem; padding: 0.75rem; font-weight: 700; border-bottom: 1px solid rgba(255, 255, 255, 0.1); flex-shrink: 0;}
 #category-admin-list, #bookmark-admin-list-container ul { list-style: none; }
 #category-admin-list li, #bookmark-admin-list-container li { display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.1);}
-.category-admin-header span:nth-child(1), .cat-order-input, .bm-sort-order { flex: 0 0 70px; text-align: center; }
+
+/* [修复] 减小排序输入框的宽度 */
+.category-admin-header span:nth-child(1), .cat-order-input, .bm-sort-order { flex: 0 0 50px; text-align: center; }
 .category-admin-header span:nth-child(2), .cat-name-cell, .bm-name-input { flex-grow: 1; }
 .category-admin-header span:nth-child(3), .cat-parent-select, .bm-category-select { flex: 0 0 220px; }
 .category-admin-header span:nth-child(4), #category-admin-list li .delete-cat-btn { flex: 0 0 40px; }
 .bookmark-admin-header span:nth-child(2) { flex-grow: 1; }
 .bookmark-admin-header span:nth-child(3) { flex: 0 0 220px; }
 .bookmark-admin-header span:nth-child(4), .bm-admin-actions { flex: 0 0 100px; display: flex; justify-content: flex-end; }
+
 #user-management-container { display: grid; grid-template-columns: 1fr 2fr; gap: 2rem; height: 100%; overflow: hidden;}
-.user-list-container, .user-form-container { display: flex; flex-direction: column; overflow: hidden; }
+.user-list-container, .user-form-container { display: flex; flex-direction: column; overflow: visible; } /* [修复] 允许内容溢出 */
 #user-list { list-style: none; overflow-y: auto; flex-grow: 1; border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; }
 #user-list li { padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.2); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
 #user-list li:last-child { border-bottom: none; }
@@ -241,17 +244,16 @@ body.login-page { display: flex; align-items: center; justify-content: center; p
     #app-layout::after { content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1999; opacity: 0; visibility: hidden; transition: var(--transition-speed); }
     #app-layout.sidebar-open::after { opacity: 1; visibility: visible; }
     
-    #admin-page-container { padding: 1rem; gap: 1rem; }
+    #admin-page-container { padding: 1rem; gap: 1rem; height: auto; }
     .admin-header h1 { font-size: 1.2rem; }
     .admin-header .button { padding: 8px 12px; font-size: 0.9rem;}
-    .admin-panel-container { flex-direction: column; gap: 1rem; background: transparent; border: none; box-shadow: none; }
+    .admin-panel-container { flex-direction: column; gap: 1rem; background: transparent; border: none; box-shadow: none; overflow: visible; }
     .admin-panel-nav, .admin-panel-content { width: 100%; border-radius: var(--border-radius); background: rgba(255,255,255,0.1); border: 1px solid rgba(255, 255, 255, 0.1); }
     
-    /* [核心修复] Mobile Admin Table to Compact List Layout */
     .category-admin-header, .bookmark-admin-header { display: none; }
     #category-admin-list li, #bookmark-admin-list-container li {
         display: grid;
-        grid-template-columns: 70px 1fr 40px; /* Sort | Name/Select | Actions */
+        grid-template-columns: 50px 1fr 40px; /* [修复] 减小排序宽度 */
         grid-template-areas: 
             "sort name actions"
             "sort select actions";
@@ -268,12 +270,12 @@ body.login-page { display: flex; align-items: center; justify-content: center; p
     .delete-cat-btn, .bm-admin-actions { grid-area: actions; display: flex; align-items: center; justify-content: center; }
 
     #category-admin-list li > *, #bookmark-admin-list-container li > * {
-       margin-bottom: 0; /* Remove bottom margin from card-based layout */
+       margin-bottom: 0;
     }
     .cat-name-cell { padding-left: 0 !important; }
 
     /* User Admin Mobile Layout */
-    #user-management-container { grid-template-columns: 1fr; gap: 1.5rem; }
+    #user-management-container { grid-template-columns: 1fr; gap: 1.5rem; height: auto; } /* [修复] 移除固定高度 */
     .form-group-inline { grid-template-columns: 1fr; }
     .form-group-inline label { text-align: left; }
 }
