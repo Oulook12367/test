@@ -1,5 +1,9 @@
 // admin-users.js
 
+/**
+ * 渲染“用户管理”标签页的UI结构。
+ * @param {HTMLElement} container - 用于承载内容的DOM元素。
+ */
 function renderUserAdminTab(container) {
     container.innerHTML = `
         <div id="user-management-container">
@@ -12,8 +16,8 @@ function renderUserAdminTab(container) {
                     <h3 id="user-form-title">添加新用户</h3>
                     <div class="user-form-static-fields">
                         <input type="hidden" id="user-form-username-hidden">
-                        <div class="form-group-inline"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required></div>
-                        <div class="form-group-inline"><label for="user-form-password">密码:</label><input type="password" id="user-form-password" placeholder="留空则不修改"></div>
+                        <div class="form-group-inline"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required autocomplete="off"></div>
+                        <div class="form-group-inline"><label for="user-form-password">密码:</label><input type="password" id="user-form-password" placeholder="留空则不修改" autocomplete="new-password"></div>
                         <div class="form-group-inline"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div>
                         <div class="form-group-inline"><label for="user-form-default-cat">默认显示分类:</label><select id="user-form-default-cat"></select></div>
                     </div>
@@ -34,7 +38,7 @@ function renderUserAdminTab(container) {
     const currentUsername = parseJwtPayload(localStorage.getItem('jwt_token'))?.sub || '';
     const usersArray = Array.isArray(allUsers) ? allUsers : Object.values(allUsers);
     
-    userList.innerHTML = '';
+    userList.innerHTML = ''; // 清空列表
     usersArray.forEach(user => {
         if (!user || !user.username) return;
         const li = document.createElement('li');
@@ -53,6 +57,10 @@ function renderUserAdminTab(container) {
     clearUserForm();
 }
 
+/**
+ * 当选择一个用户时，用该用户的数据填充表单。
+ * @param {object} user - 用户对象。
+ */
 function populateUserForm(user) {
     const form = document.getElementById('user-form'); if (!form) return;
     form.reset();
@@ -77,6 +85,9 @@ function populateUserForm(user) {
     document.querySelector(`#user-list li[data-username="${user.username}"]`)?.classList.add('selected');
 }
 
+/**
+ * 清空并重置用户表单，用于新增用户。
+ */
 function clearUserForm() {
     const form = document.getElementById('user-form'); if (!form) return;
     form.reset();
@@ -102,13 +113,17 @@ function clearUserForm() {
     document.querySelectorAll('#user-list li').forEach(li => li.classList.remove('selected'));
 }
 
+/**
+ * 渲染用户角色选择的单选按钮。
+ * @param {Array<string>} [activeRoles=['viewer']] - 用户当前拥有的角色。
+ */
 function renderUserFormRoles(activeRoles = ['viewer']) {
-    // ... 此函数逻辑不变 ...
     const container = document.getElementById('user-form-roles'); if (!container) return;
     container.innerHTML = '';
     const username = document.getElementById('user-form-username').value;
     const isPublicUser = username === 'public';
     const isAdminUser = username === 'admin';
+
     ['admin', 'editor', 'viewer'].forEach(role => {
         const currentRole = activeRoles[0] || 'viewer';
         const isChecked = currentRole === role;
@@ -117,8 +132,12 @@ function renderUserFormRoles(activeRoles = ['viewer']) {
     });
 }
 
+/**
+ * 渲染用户可见分类的复选框列表。
+ * @param {Array<string>} [visibleIds=[]] - 用户可见的分类ID数组。
+ * @param {boolean} [isDisabled=false] - 是否禁用所有复选框。
+ */
 function renderUserFormCategories(visibleIds = [], isDisabled = false) {
-    // ... 此函数逻辑不变 ...
     const container = document.getElementById('user-form-categories'); if (!container) return;
     container.innerHTML = '';
     const sortedCategories = getHierarchicalSortedCategories(allCategories);
@@ -127,16 +146,27 @@ function renderUserFormCategories(visibleIds = [], isDisabled = false) {
     });
 }
 
+/**
+ * 根据用户可见分类，更新默认分类的下拉菜单选项。
+ * @param {HTMLFormElement} form - 包含下拉菜单的表单元素。
+ * @param {string} selectedId - 应被选中的默认分类ID。
+ */
 function updateDefaultCategoryDropdown(form, selectedId) {
-    // ... 此函数逻辑不变 ...
     const defaultCatSelect = form.querySelector('#user-form-default-cat');
     const visibleCatCheckboxes = form.querySelectorAll('#user-form-categories input:checked');
     const visibleCatIds = Array.from(visibleCatCheckboxes).map(cb => cb.value);
+    
     const currentSelectedValue = defaultCatSelect.value;
     defaultCatSelect.innerHTML = `<option value="all">全部书签</option>`;
+    
     const categoriesToShow = allCategories.filter(cat => visibleCatIds.includes(cat.id));
-    populateCategoryDropdown(defaultCatSelect, categoriesToShow, null, null, { allowNoParent: false });
-    defaultCatSelect.prepend(new Option("全部书签", "all"));
+    // 使用全局排序函数来填充下拉菜单
+    const sortedToShow = getHierarchicalSortedCategories(categoriesToShow);
+    
+    sortedToShow.forEach(cat => {
+        defaultCatSelect.innerHTML += `<option value="${cat.id}">${'— '.repeat(cat.level || 0)}${escapeHTML(cat.name)}</option>`;
+    });
+    
     if (selectedId && (selectedId === 'all' || categoriesToShow.some(c => c.id === selectedId))) {
         defaultCatSelect.value = selectedId;
     } else if (categoriesToShow.some(c => c.id === currentSelectedValue)) {
@@ -147,11 +177,16 @@ function updateDefaultCategoryDropdown(form, selectedId) {
 }
 
 
+// --- 事件监听器 ---
+
+// 【修复】使用事件委托来处理所有动态内容的点击事件
 document.addEventListener('click', event => {
+    // 确保只在用户管理标签页激活时生效
     if (document.getElementById('tab-users')?.classList.contains('active')) {
         const target = event.target;
         const userLi = target.closest('li[data-username]');
 
+        // 处理删除按钮
         if (target.closest('.delete-user-btn')) {
             event.stopPropagation();
             const username = userLi.dataset.username;
@@ -163,81 +198,98 @@ document.addEventListener('click', event => {
                     await initializePage('tab-users');
                 } catch (error) { showToast(`删除失败: ${error.message}`, true); }
             });
-        } else if (userLi) {
+        } 
+        // 处理列表项点击
+        else if (userLi) {
             const usersArray = Array.isArray(allUsers) ? allUsers : Object.values(allUsers);
             const user = usersArray.find(u => u.username === userLi.dataset.username);
             if (user) populateUserForm(user);
-        } else if (target.closest('#user-form-clear-btn')) {
+        } 
+        // 处理清空按钮
+        else if (target.closest('#user-form-clear-btn')) {
             clearUserForm();
         }
     }
 });
 
-document.getElementById('user-form')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const submitBtn = form.querySelector('button[type="submit"]');
-    const originalText = submitBtn.textContent;
-    const errorEl = form.querySelector('.modal-error-message');
-    errorEl.textContent = '';
-    
-    const hiddenUsername = form.querySelector('#user-form-username-hidden').value;
-    const isEditing = !!hiddenUsername;
-    const username = form.querySelector('#user-form-username').value.trim();
-    const password = form.querySelector('#user-form-password').value;
-
-    if (!username) { errorEl.textContent = '用户名不能为空'; return; }
-    if (!isEditing && !password) { errorEl.textContent = '新用户必须设置密码'; return; }
-
-    const selectedRole = form.querySelector('input[name="role-selection"]:checked').value;
-    const userData = {
-        roles: [selectedRole],
-        permissions: { visibleCategories: Array.from(form.querySelectorAll('#user-form-categories input:checked')).map(cb => cb.value) },
-        defaultCategoryId: form.querySelector('#user-form-default-cat').value
-    };
-    if (password) userData.password = password;
-    if (!isEditing) userData.username = username;
-
-    const endpoint = isEditing ? `users/${encodeURIComponent(hiddenUsername)}` : 'users';
-    const method = isEditing ? 'PUT' : 'POST';
-
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
-    submitBtn.disabled = true;
-
-    try {
-        const savedUser = await apiRequest(endpoint, method, userData);
-        showToast('用户保存成功！');
-        invalidateCache();
-
-        // 【修复】手动更新本地 allUsers 数组
-        if (isEditing) {
-            const userIndex = allUsers.findIndex(u => u.username === savedUser.username);
-            if (userIndex > -1) allUsers[userIndex] = savedUser;
-        } else {
-            allUsers.push(savedUser);
-        }
-
-        const token = localStorage.getItem('jwt_token');
-        if (token && parseJwtPayload(token).sub === savedUser.username && !savedUser.roles.includes('admin')) {
-            showToast('您的管理员权限已被移除，将退出管理后台。', true);
-            localStorage.removeItem('jwt_token');
-            setTimeout(() => window.location.href = 'index.html', 2000);
-            return;
-        }
+// 【修复】使用事件委托来处理表单提交
+document.addEventListener('submit', async (e) => {
+    // 确保是我们关心的表单
+    if (e.target.id === 'user-form') {
+        // 【关键】阻止浏览器默认的提交（刷新）行为
+        e.preventDefault();
         
-        // 使用更新后的 allUsers 重新渲染UI
-        renderUserAdminTab(document.getElementById('tab-users'));
-        // 选中刚刚新增或编辑的用户
-        populateUserForm(savedUser);
+        const form = e.target;
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const originalText = submitBtn.textContent;
+        const errorEl = form.querySelector('.modal-error-message');
+        errorEl.textContent = '';
+        
+        const hiddenUsername = form.querySelector('#user-form-username-hidden').value;
+        const isEditing = !!hiddenUsername;
+        const username = form.querySelector('#user-form-username').value.trim();
+        const password = form.querySelector('#user-form-password').value;
 
-    } catch (error) {
-        errorEl.textContent = error.message;
-    } finally {
-        submitBtn.innerHTML = originalText;
-        submitBtn.disabled = false;
+        if (!username) { errorEl.textContent = '用户名不能为空'; return; }
+        if (!isEditing && !password) { errorEl.textContent = '新用户必须设置密码'; return; }
+
+        const selectedRole = form.querySelector('input[name="role-selection"]:checked').value;
+        const userData = {
+            roles: [selectedRole],
+            permissions: { visibleCategories: Array.from(form.querySelectorAll('#user-form-categories input:checked')).map(cb => cb.value) },
+            defaultCategoryId: form.querySelector('#user-form-default-cat').value
+        };
+        if (password) userData.password = password;
+        if (!isEditing) userData.username = username;
+
+        const endpoint = isEditing ? `users/${encodeURIComponent(hiddenUsername)}` : 'users';
+        const method = isEditing ? 'PUT' : 'POST';
+
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
+        submitBtn.disabled = true;
+
+        try {
+            const savedUser = await apiRequest(endpoint, method, userData);
+            showToast('用户保存成功！');
+            invalidateCache();
+
+            // 【修复】乐观更新：手动更新本地 allUsers 数组
+            if (isEditing) {
+                const userIndex = allUsers.findIndex(u => u.username === savedUser.username);
+                if (userIndex > -1) {
+                    allUsers[userIndex] = savedUser;
+                } else { // 如果因为某种原因没找到，则添加
+                    allUsers.push(savedUser);
+                }
+            } else {
+                allUsers.push(savedUser);
+            }
+
+            // 检查当前用户权限是否变更
+            const token = localStorage.getItem('jwt_token');
+            if (token && parseJwtPayload(token).sub === savedUser.username && !savedUser.roles.includes('admin')) {
+                showToast('您的管理员权限已被移除，将退出管理后台。', true);
+                localStorage.removeItem('jwt_token');
+                setTimeout(() => window.location.href = 'index.html', 2000);
+                return;
+            }
+            
+            // 使用更新后的 allUsers 重新渲染UI
+            renderUserAdminTab(document.getElementById('tab-users'));
+            // 保持选中刚刚新增或编辑的用户
+            populateUserForm(savedUser);
+
+        } catch (error) {
+            errorEl.textContent = error.message;
+        } finally {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }
     }
 });
 
+
+// 当可见分类变化时，自动更新默认分类的下拉选项
 document.addEventListener('change', event => {
     if (document.getElementById('tab-users')?.classList.contains('active')) {
         const target = event.target;
