@@ -506,14 +506,14 @@ document.addEventListener('DOMContentLoaded', () => {
         await initializePage('tab-system');
     };
 
-    // --- [THE NEW CORE] The Master Event Listener ---
+    // --- The Master Event Listener ---
     if (adminContentPanel) {
         adminContentPanel.addEventListener('click', (event) => {
             const target = event.target;
             const activeTab = document.querySelector('.admin-tab-content.active');
             if (!activeTab) return;
             switch (activeTab.id) {
-                case 'tab-categories':
+                case 'tab-categories': {
                     if (target.closest('.delete-cat-btn')) {
                         event.stopPropagation();
                         const listItem = target.closest('li[data-id]');
@@ -531,7 +531,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         handleSaveCategories();
                     }
                     break;
-                case 'tab-bookmarks':
+                }
+                case 'tab-bookmarks': {
                     const bmListItem = target.closest('li[data-id]');
                     if (bmListItem) {
                         const bookmark = allBookmarks.find(bm => bm.id === bmListItem.dataset.id);
@@ -551,7 +552,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                     break;
-                case 'tab-users':
+                }
+                case 'tab-users': {
                     const userListItem = target.closest('li[data-username]');
                     if (target.closest('.button-icon.danger')) {
                         event.stopPropagation();
@@ -570,11 +572,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         clearUserForm();
                     }
                     break;
-                case 'tab-system':
+                }
+                case 'tab-system': {
                     if (target.closest('#import-bookmarks-btn-admin')) {
                         document.getElementById('import-file-input-admin')?.click();
                     }
                     break;
+                }
             }
         });
 
@@ -617,7 +621,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
         
-        adminContentPanel.addEventListener('focusout', async (event) => {
+        // [KEY FIX] The focusout listener is now attached to the document
+        // to correctly capture events from the modal, which is outside adminContentPanel.
+        document.addEventListener('focusout', async (event) => {
             if (event.target.id === 'bm-edit-url' && bookmarkEditModal.style.display === 'block') {
                 const urlInput = event.target;
                 const url = urlInput.value.trim();
