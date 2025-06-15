@@ -157,7 +157,7 @@ export async function onRequest(context) {
         apiPath = apiPath.slice(0, -1);
     }
     
-    // --- 3. Handle public/unauthenticated endpoints ---
+    // --- 3. Handle Public/Unauthenticated Endpoints ---
     if (apiPath === 'login' && request.method === 'POST') {
         const siteData = await getSiteData(env);
         globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteData.jwtSecret;
@@ -184,18 +184,19 @@ export async function onRequest(context) {
         return jsonResponse({ isPublic: true, categories: publicCategories, bookmarks: publicBookmarks, users: [], publicModeEnabled: true, defaultCategoryId: publicUser.defaultCategoryId });
     }
     
-    // --- 4. All subsequent requests require authentication and up-to-date data ---
-    const siteData = await getSiteData(env);
-    globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteData.jwtSecret;
+    // --- 4. All subsequent requests require authentication ---
+    const siteDataForAuth = await getSiteData(env);
+    globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteDataForAuth.jwtSecret;
     if (!globalThis.JWT_SECRET_STRING) return jsonResponse({ error: 'Critical Configuration Error: JWT_SECRET is missing.' }, 500);
 
-    const authResult = await authenticateRequest(request, siteData);
+    const authResult = await authenticateRequest(request, siteDataForAuth);
     if (authResult.error) return jsonResponse(authResult, authResult.status);
     const currentUser = authResult.user;
 
-    // --- Handle Authenticated GET requests ---
+    // --- 5. Handle Authenticated GET requests ---
     if (request.method === 'GET') {
         if (apiPath === 'data') {
+            const siteData = await getSiteData(env); // Re-fetch for freshness, although not strictly necessary for GET
             siteData.publicModeEnabled = env.PUBLIC_MODE_ENABLED === 'true';
             if (currentUser.roles.includes('admin')) {
                 const usersForAdmin = Object.values(siteData.users).map(({ passwordHash, salt, ...u }) => u);
@@ -210,12 +211,14 @@ export async function onRequest(context) {
         // Other GET endpoints can be added here
     }
 
-    // --- Handle Authenticated POST/PUT/DELETE requests with Read-Modify-Write pattern ---
+    // --- 6. Handle Authenticated POST/PUT/DELETE requests with Read-Modify-Write pattern ---
     if (request.method === 'POST' || request.method === 'PUT' || request.method === 'DELETE') {
-        const currentData = await env.NAVI_DATA.get('data', { type: 'json' });
-        if (!currentData) return jsonResponse({ error: "Data store not initialized, cannot save." }, 500);
-        const dataToModify = { ...currentData }; // Work on a mutable copy
+        
+        // [核心修复] 对所有写操作，都先从 KV 获取最新的数据副本
+        const dataToModify = await env.NAVI_DATA.get('data', { type: 'json' });
+        if (!dataToModify) return jsonResponse({ error: "数据存储未初始化，无法保存。" }, 500);
 
+        // A. Handle /api/data PUT
         if (apiPath === 'data' && request.method === 'PUT') {
             if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
             const dataToUpdate = await request.json();
@@ -225,6 +228,7 @@ export async function onRequest(context) {
             return jsonResponse({ success: true });
         }
         
+        // B. Handle /api/bookmarks POST
         if (apiPath === 'bookmarks' && request.method === 'POST') {
             if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
             const bookmark = await request.json();
@@ -240,6 +244,7 @@ export async function onRequest(context) {
             return jsonResponse(bookmark, 201);
         }
 
+        // C. Handle /api/bookmarks/:id PUT/DELETE
         if (apiPath.startsWith('bookmarks/')) {
             const id = apiPath.split('/')[1];
             const bookmarkIndex = dataToModify.bookmarks.findIndex(bm => bm.id === id);
@@ -260,7 +265,8 @@ export async function onRequest(context) {
                 return jsonResponse(null);
             }
         }
-
+        
+        // D. Handle /api/users... POST/PUT/DELETE
         if (apiPath.startsWith('users')) {
             if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
             
