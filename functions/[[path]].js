@@ -147,10 +147,13 @@ export async function onRequest(context) {
     const url = new URL(request.url);
     const path = url.pathname;
     
+    // --- 1. Environment Variable Check ---
+    const publicModeValue = env.PUBLIC_MODE_ENABLED;
     if (publicModeValue !== 'true' && publicModeValue !== 'false') {
         return new Response('<h1>Configuration Error</h1><p>The <code>PUBLIC_MODE_ENABLED</code> environment variable must be explicitly set to either <code>"true"</code> or <code>"false"</code>.</p>', { status: 500, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     }
 
+    // --- 2. Handle non-API requests early ---
     if (!path.startsWith('/api/')) {
         return next();
     }
@@ -160,23 +163,34 @@ export async function onRequest(context) {
         apiPath = apiPath.slice(0, -1);
     }
     
-    // Handle public/unauthenticated endpoints
+    // --- 3. Handle public/unauthenticated endpoints ---
     if (apiPath === 'login' && request.method === 'POST') {
         const siteData = await getSiteData(env);
         globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteData.jwtSecret;
         if (!globalThis.JWT_SECRET_STRING) return jsonResponse({ error: 'Critical Configuration Error: JWT_SECRET is missing.' }, 500);
+        
         const { username, password } = await request.json();
         if (username.toLowerCase() === 'public') return jsonResponse({ error: '此为保留账户，禁止登录。' }, 403);
         const user = siteData.users[username];
         if (!user || !user.salt) return jsonResponse({ error: '用户名或密码错误' }, 401);
         const passwordHash = await hashPassword(password, user.salt);
         if (user.passwordHash !== passwordHash) return jsonResponse({ error: '用户名或密码错误' }, 401);
+        
         const { passwordHash: removed, salt: removedSalt, ...safeUser } = user;
         const token = await new SignJWT({ sub: safeUser.username, roles: safeUser.roles }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('1d').sign(await JWT_SECRET());
         return jsonResponse({ token, user: safeUser });
     }
 
-    // Authenticate all subsequent requests
+    if (apiPath === 'data' && request.method === 'GET' && !request.headers.has('Authorization') && env.PUBLIC_MODE_ENABLED === 'true') {
+        const siteData = await getSiteData(env);
+        const publicUser = siteData.users.public || { permissions: { visibleCategories: [] }};
+        const publicCategories = siteData.categories.filter(cat => publicUser.permissions.visibleCategories.includes(cat.id));
+        const publicCategoryIds = publicCategories.map(cat => cat.id);
+        const publicBookmarks = siteData.bookmarks.filter(bm => publicCategoryIds.includes(bm.categoryId));
+        return jsonResponse({ isPublic: true, categories: publicCategories, bookmarks: publicBookmarks, users: [], publicModeEnabled: true, defaultCategoryId: publicUser.defaultCategoryId });
+    }
+    
+    // --- 4. All subsequent requests require authentication ---
     const siteDataForAuth = await getSiteData(env);
     globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteDataForAuth.jwtSecret;
     if (!globalThis.JWT_SECRET_STRING) return jsonResponse({ error: 'Critical Configuration Error: JWT_SECRET is missing.' }, 500);
@@ -185,7 +199,7 @@ export async function onRequest(context) {
     if (authResult.error) return jsonResponse(authResult, authResult.status);
     const currentUser = authResult.user;
 
-    // Handle Authenticated GET requests
+    // --- 5. Handle Authenticated GET requests ---
     if (request.method === 'GET') {
         const siteData = await getSiteData(env);
         siteData.publicModeEnabled = env.PUBLIC_MODE_ENABLED === 'true';
@@ -237,133 +251,134 @@ export async function onRequest(context) {
         }
     }
 
-    // Handle Authenticated Write requests (POST, PUT, DELETE, PATCH)
-    const dataToModify = await env.NAVI_DATA.get('data', { type: 'json' });
-    if (!dataToModify) return jsonResponse({ error: "Data store not initialized, cannot save." }, 500);
-
-    const clientVersion = request.headers.get('if-match');
-    if (clientVersion && clientVersion !== dataToModify.version) {
-        return jsonResponse({ error: '数据版本冲突，请刷新页面后重试。' }, 412); // 412 Precondition Failed
-    }
-
-    // --- PUT & PATCH /api/data ---
-    if (apiPath === 'data' && (request.method === 'PUT' || request.method === 'PATCH')) {
-        if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
-        const dataToUpdate = await request.json();
-        // Merge partial updates for PATCH
-        if(request.method === 'PATCH'){
-             if (dataToUpdate.categories) dataToModify.categories = dataToUpdate.categories;
-             if (dataToUpdate.bookmarks) dataToModify.bookmarks = dataToUpdate.bookmarks;
-        } else { // Replace for PUT
-             if (dataToUpdate.categories) dataToModify.categories = dataToUpdate.categories;
-             if (dataToUpdate.bookmarks) dataToModify.bookmarks = dataToUpdate.bookmarks;
-        }
-        const newVersion = await saveSiteData(env, dataToModify);
-        return jsonResponse({ success: true, version: newVersion }, 200, { 'ETag': newVersion });
-    }
-    
-    // --- POST /api/bookmarks ---
-    if (apiPath === 'bookmarks' && request.method === 'POST') {
-        if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
-        const bookmark = await request.json();
-        if (!currentUser.roles.includes('admin') && !currentUser.permissions.visibleCategories.includes(bookmark.categoryId)) return jsonResponse({ error: '无权在此分类下添加书签' }, 403);
-        bookmark.id = `bm-${Date.now()}`;
-        if (typeof bookmark.sortOrder === 'undefined' || bookmark.sortOrder === null) {
-            const bookmarksInCategory = dataToModify.bookmarks.filter(b => b.categoryId === bookmark.categoryId);
-            const maxOrder = bookmarksInCategory.length > 0 ? Math.max(...bookmarksInCategory.map(b => b.sortOrder || 0)) : -1;
-            bookmark.sortOrder = maxOrder + 1;
-        }
-        dataToModify.bookmarks.push(bookmark);
-        const newVersion = await saveSiteData(env, dataToModify);
-        return jsonResponse(bookmark, 201, { 'ETag': newVersion });
-    }
-
-    // --- PUT/DELETE /api/bookmarks/:id ---
-    if (apiPath.startsWith('bookmarks/')) {
-        const id = apiPath.split('/')[1];
-        const bookmarkIndex = dataToModify.bookmarks.findIndex(bm => bm.id === id);
-        if (bookmarkIndex === -1) return jsonResponse({ error: '书签未找到' }, 404);
-        if (!currentUser.roles.includes('admin') && !currentUser.permissions.visibleCategories.includes(dataToModify.bookmarks[bookmarkIndex].categoryId)) return jsonResponse({ error: '权限不足' }, 403);
+    // --- 6. Handle Authenticated Write requests (POST, PUT, DELETE, PATCH) ---
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
         
-        if (request.method === 'PUT') {
-            if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
-            const updatedBookmarkData = await request.json();
-            dataToModify.bookmarks[bookmarkIndex] = { ...dataToModify.bookmarks[bookmarkIndex], ...updatedBookmarkData };
-            const newVersion = await saveSiteData(env, dataToModify);
-            return jsonResponse(dataToModify.bookmarks[bookmarkIndex], 200, { 'ETag': newVersion });
-        }
-        if (request.method === 'DELETE') {
-            if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
-            dataToModify.bookmarks.splice(bookmarkIndex, 1);
-            const newVersion = await saveSiteData(env, dataToModify);
-            return jsonResponse(null, 204, { 'ETag': newVersion });
-        }
-    }
+        const dataToModify = await env.NAVI_DATA.get('data', { type: 'json' });
+        if (!dataToModify) return jsonResponse({ error: "Data store not initialized, cannot save." }, 500);
 
-    // --- PUT /api/users/self ---
-    if (apiPath === 'users/self' && request.method === 'PUT') {
-        const { defaultCategoryId } = await request.json();
-        if (typeof defaultCategoryId === 'undefined') return jsonResponse({ error: '未提供更新数据' }, 400);
-        const userToUpdate = dataToModify.users[currentUser.username];
-        if (userToUpdate) {
-            userToUpdate.defaultCategoryId = defaultCategoryId;
-            const newVersion = await saveSiteData(env, dataToModify);
-            const { passwordHash, salt, ...safeUser } = userToUpdate;
-            return jsonResponse(safeUser, 200, { 'ETag': newVersion });
-        }
-        return jsonResponse({ error: '用户未找到'}, 404);
-    }
-    
-    // --- POST/PUT/DELETE /api/users... ---
-    if (apiPath.startsWith('users')) {
-        if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
-        
-        if (request.method === 'POST' && apiPath === 'users') {
-            const { username: newUsername, password, roles, permissions } = await request.json();
-            if (!newUsername || !password || dataToModify.users[newUsername]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
-            const salt = generateSalt();
-            const passwordHash = await hashPassword(password, salt);
-            dataToModify.users[newUsername] = { username: newUsername, passwordHash, salt, roles, permissions, defaultCategoryId: 'all' };
-            const newVersion = await saveSiteData(env, dataToModify);
-            const { passwordHash: p, salt: s, ...newUser } = dataToModify.users[newUsername];
-            return jsonResponse(newUser, 201, { 'ETag': newVersion });
+        const clientVersion = request.headers.get('if-match');
+        if (clientVersion && clientVersion !== dataToModify.version) {
+            return jsonResponse({ error: '数据版本冲突，请刷新页面后重试。' }, 412); // 412 Precondition Failed
         }
 
-        const userPathMatch = apiPath.match(/^users\/(.+)$/);
-        if (userPathMatch) {
-            const username = decodeURIComponent(userPathMatch[1]);
-            const userToManage = dataToModify.users[username];
-            if (!userToManage) return jsonResponse({ error: `用户 '${username}' 未找到` }, 404);
-
-            if (request.method === 'PUT') {
-                const { roles, permissions, password, defaultCategoryId } = await request.json();
-                if (username === 'public') {
-                    if (permissions && typeof permissions.visibleCategories !== 'undefined') userToManage.permissions.visibleCategories = permissions.visibleCategories;
-                    userToManage.roles = ['viewer'];
-                } else {
-                    if (roles) userToManage.roles = roles;
-                    if (permissions) userToManage.permissions.visibleCategories = permissions.visibleCategories;
-                    if (typeof defaultCategoryId !== 'undefined') userToManage.defaultCategoryId = defaultCategoryId;
-                    if (password) {
-                        userToManage.salt = generateSalt();
-                        userToManage.passwordHash = await hashPassword(password, userToManage.salt);
-                    }
-                }
-                const newVersion = await saveSiteData(env, dataToModify);
-                const { passwordHash, salt, ...updatedUser } = userToManage;
-                return jsonResponse(updatedUser, 200, { 'ETag': newVersion });
+        if (apiPath === 'data' && (request.method === 'PUT' || request.method === 'PATCH')) {
+            if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
+            const dataToUpdate = await request.json();
+            if(request.method === 'PATCH'){
+                 if (dataToUpdate.categories) dataToModify.categories = dataToUpdate.categories;
+                 if (dataToUpdate.bookmarks) dataToModify.bookmarks = dataToUpdate.bookmarks;
+            } else { // PUT replaces the whole object
+                 if (dataToUpdate.categories) dataToModify.categories = dataToUpdate.categories;
+                 if (dataToUpdate.bookmarks) dataToModify.bookmarks = dataToUpdate.bookmarks;
             }
+            const newVersion = await saveSiteData(env, dataToModify);
+            return jsonResponse({ success: true, version: newVersion }, 200, { 'ETag': newVersion });
+        }
+        
+        if (apiPath === 'bookmarks' && request.method === 'POST') {
+            if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
+            const bookmark = await request.json();
+            if (!currentUser.roles.includes('admin') && !currentUser.permissions.visibleCategories.includes(bookmark.categoryId)) return jsonResponse({ error: '无权在此分类下添加书签' }, 403);
+            bookmark.id = `bm-${Date.now()}`;
+            if (typeof bookmark.sortOrder === 'undefined' || bookmark.sortOrder === null) {
+                const bookmarksInCategory = dataToModify.bookmarks.filter(b => b.categoryId === bookmark.categoryId);
+                const maxOrder = bookmarksInCategory.length > 0 ? Math.max(...bookmarksInCategory.map(b => b.sortOrder || 0)) : -1;
+                bookmark.sortOrder = maxOrder + 1;
+            }
+            dataToModify.bookmarks.push(bookmark);
+            const newVersion = await saveSiteData(env, dataToModify);
+            return jsonResponse(bookmark, 201, { 'ETag': newVersion });
+        }
 
+        if (apiPath.startsWith('bookmarks/')) {
+            const id = apiPath.split('/')[1];
+            const bookmarkIndex = dataToModify.bookmarks.findIndex(bm => bm.id === id);
+            if (bookmarkIndex === -1) return jsonResponse({ error: '书签未找到' }, 404);
+            if (!currentUser.roles.includes('admin') && !currentUser.permissions.visibleCategories.includes(dataToModify.bookmarks[bookmarkIndex].categoryId)) return jsonResponse({ error: '权限不足' }, 403);
+            
+            if (request.method === 'PUT') {
+                if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
+                const updatedBookmarkData = await request.json();
+                dataToModify.bookmarks[bookmarkIndex] = { ...dataToModify.bookmarks[bookmarkIndex], ...updatedBookmarkData };
+                const newVersion = await saveSiteData(env, dataToModify);
+                return jsonResponse(dataToModify.bookmarks[bookmarkIndex], 200, { 'ETag': newVersion });
+            }
             if (request.method === 'DELETE') {
-                if (username === 'public') return jsonResponse({ error: '公共账户为系统保留账户，禁止删除。' }, 403);
-                if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
-                if (userToManage.roles.includes('admin')) {
-                    const adminCount = Object.values(dataToModify.users).filter(u => u.roles.includes('admin')).length;
-                    if (adminCount <= 1) return jsonResponse({ error: '无法删除最后一个管理员账户' }, 403);
-                }
-                delete dataToModify.users[username];
+                if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
+                dataToModify.bookmarks.splice(bookmarkIndex, 1);
                 const newVersion = await saveSiteData(env, dataToModify);
                 return jsonResponse(null, 204, { 'ETag': newVersion });
+            }
+        }
+
+        if (apiPath === 'users/self' && request.method === 'PUT') {
+            const { defaultCategoryId } = await request.json();
+            if (typeof defaultCategoryId === 'undefined') return jsonResponse({ error: '未提供更新数据' }, 400);
+            const userToUpdate = dataToModify.users[currentUser.username];
+            if (userToUpdate) {
+                userToUpdate.defaultCategoryId = defaultCategoryId;
+                const newVersion = await saveSiteData(env, dataToModify);
+                const { passwordHash, salt, ...safeUser } = userToUpdate;
+                return jsonResponse(safeUser, 200, { 'ETag': newVersion });
+            }
+            return jsonResponse({ error: '用户未找到'}, 404);
+        }
+        
+        if (apiPath.startsWith('users')) {
+            if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
+            
+            if (request.method === 'POST' && apiPath === 'users') {
+                const { username: newUsername, password, roles, permissions } = await request.json();
+                if (!newUsername || !password || dataToModify.users[newUsername]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
+                const salt = generateSalt();
+                const passwordHash = await hashPassword(password, salt);
+                dataToModify.users[newUsername] = { username: newUsername, passwordHash, salt, roles, permissions, defaultCategoryId: 'all' };
+                const newVersion = await saveSiteData(env, dataToModify);
+                const { passwordHash: p, salt: s, ...newUser } = dataToModify.users[newUsername];
+                return jsonResponse(newUser, 201, { 'ETag': newVersion });
+            }
+
+            const userPathMatch = apiPath.match(/^users\/(.+)$/);
+            if (userPathMatch) {
+                const username = decodeURIComponent(userPathMatch[1]);
+                if (username === 'self') { 
+                    // This case is now handled separately above, so we can ignore it here.
+                } else {
+                    const userToManage = dataToModify.users[username];
+                    if (!userToManage) return jsonResponse({ error: `用户 '${username}' 未找到` }, 404);
+
+                    if (request.method === 'PUT') {
+                        const { roles, permissions, password, defaultCategoryId } = await request.json();
+                        if (username === 'public') {
+                            if (permissions && typeof permissions.visibleCategories !== 'undefined') userToManage.permissions.visibleCategories = permissions.visibleCategories;
+                            userToManage.roles = ['viewer'];
+                        } else {
+                            if (roles) userToManage.roles = roles;
+                            if (permissions) userToManage.permissions.visibleCategories = permissions.visibleCategories;
+                            if (typeof defaultCategoryId !== 'undefined') userToManage.defaultCategoryId = defaultCategoryId;
+                            if (password) {
+                                userToManage.salt = generateSalt();
+                                userToManage.passwordHash = await hashPassword(password, userToManage.salt);
+                            }
+                        }
+                        const newVersion = await saveSiteData(env, dataToModify);
+                        const { passwordHash, salt, ...updatedUser } = userToManage;
+                        return jsonResponse(updatedUser, 200, { 'ETag': newVersion });
+                    }
+
+                    if (request.method === 'DELETE') {
+                        if (username === 'public') return jsonResponse({ error: '公共账户为系统保留账户，禁止删除。' }, 403);
+                        if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
+                        if (userToManage.roles.includes('admin')) {
+                            const adminCount = Object.values(dataToModify.users).filter(u => u.roles.includes('admin')).length;
+                            if (adminCount <= 1) return jsonResponse({ error: '无法删除最后一个管理员账户' }, 403);
+                        }
+                        delete dataToModify.users[username];
+                        const newVersion = await saveSiteData(env, dataToModify);
+                        return jsonResponse(null, 204, { 'ETag': newVersion });
+                    }
+                }
             }
         }
     }
