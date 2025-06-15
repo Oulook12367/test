@@ -35,7 +35,7 @@ const getSiteData = async (env) => {
         const publicCatId = `cat-${Date.now() + 2}`;
         
         data = {
-            version: new Date().toISOString(), // [新增] 初始化版本号
+            version: new Date().toISOString(),
             users: {
                 'admin': {
                     username: 'admin',
@@ -66,28 +66,23 @@ const getSiteData = async (env) => {
 
         await env.NAVI_DATA.put('data', JSON.stringify(data));
     } else if (!data.version) {
-        // For backwards compatibility, add version if it doesn't exist
         data.version = new Date().toISOString();
         await env.NAVI_DATA.put('data', JSON.stringify(data));
     }
 
-    // Hydrate permissions on every read
     if (data.users) {
         for (const username in data.users) {
             const user = data.users[username];
             if (!user.permissions) user.permissions = {};
             if (!user.roles) user.roles = ['viewer'];
             if (!user.defaultCategoryId) user.defaultCategoryId = 'all';
-
             const isEditor = user.roles.includes('editor');
             const isAdmin = user.roles.includes('admin');
-
             Object.assign(user.permissions, {
                 canEditBookmarks: isEditor || isAdmin,
                 canEditCategories: isEditor || isAdmin,
                 canEditUsers: isAdmin,
             });
-
             if (!user.permissions.visibleCategories) {
                 user.permissions.visibleCategories = [];
             }
@@ -102,7 +97,6 @@ const saveSiteData = async (env, data) => {
     if (currentDataStr) {
         const timestamp = new Date().toISOString();
         await env.NAVI_BACKUPS.put(`backup-${timestamp}`, currentDataStr);
-        // Prune old backups
         const backups = await env.NAVI_BACKUPS.list({ prefix: "backup-" });
         if (backups.keys.length > 100) {
             const sortedKeys = backups.keys.sort((a, b) => a.name.localeCompare(b.name));
@@ -111,10 +105,9 @@ const saveSiteData = async (env, data) => {
             }
         }
     }
-    // [新增] 每次保存都更新版本号
     data.version = new Date().toISOString();
     await env.NAVI_DATA.put('data', JSON.stringify(data));
-    return data.version; // 返回新的版本号
+    return data.version;
 };
 
 const authenticateRequest = async (request, siteData) => {
@@ -147,13 +140,11 @@ export async function onRequest(context) {
     const url = new URL(request.url);
     const path = url.pathname;
     
-    // --- 1. Environment Variable Check ---
     const publicModeValue = env.PUBLIC_MODE_ENABLED;
     if (publicModeValue !== 'true' && publicModeValue !== 'false') {
-        return new Response('<h1>Configuration Error</h1><p>The <code>PUBLIC_MODE_ENABLED</code> environment variable must be explicitly set to either <code>"true"</code> or <code>"false"</code>.</p>', { status: 500, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+        return new Response('<h1>Configuration Error</h1><p>The <code>PUBLIC_MODE_ENABLED</code> environment variable must be set to <code>"true"</code> or <code>"false"</code>.</p>', { status: 500, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     }
 
-    // --- 2. Handle non-API requests early ---
     if (!path.startsWith('/api/')) {
         return next();
     }
@@ -163,7 +154,6 @@ export async function onRequest(context) {
         apiPath = apiPath.slice(0, -1);
     }
     
-    // --- 3. Handle public/unauthenticated endpoints ---
     if (apiPath === 'login' && request.method === 'POST') {
         const siteData = await getSiteData(env);
         globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteData.jwtSecret;
@@ -190,7 +180,6 @@ export async function onRequest(context) {
         return jsonResponse({ isPublic: true, categories: publicCategories, bookmarks: publicBookmarks, users: [], publicModeEnabled: true, defaultCategoryId: publicUser.defaultCategoryId });
     }
     
-    // --- 4. All subsequent requests require authentication ---
     const siteDataForAuth = await getSiteData(env);
     globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteDataForAuth.jwtSecret;
     if (!globalThis.JWT_SECRET_STRING) return jsonResponse({ error: 'Critical Configuration Error: JWT_SECRET is missing.' }, 500);
@@ -199,7 +188,6 @@ export async function onRequest(context) {
     if (authResult.error) return jsonResponse(authResult, authResult.status);
     const currentUser = authResult.user;
 
-    // --- 5. Handle Authenticated GET requests ---
     if (request.method === 'GET') {
         const siteData = await getSiteData(env);
         siteData.publicModeEnabled = env.PUBLIC_MODE_ENABLED === 'true';
@@ -251,7 +239,6 @@ export async function onRequest(context) {
         }
     }
 
-    // --- 6. Handle Authenticated Write requests (POST, PUT, DELETE, PATCH) ---
     if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
         
         const dataToModify = await env.NAVI_DATA.get('data', { type: 'json' });
@@ -259,26 +246,16 @@ export async function onRequest(context) {
 
         const clientVersion = request.headers.get('if-match');
         if (clientVersion && clientVersion !== dataToModify.version) {
-            return jsonResponse({ error: '数据版本冲突，请刷新页面后重试。' }, 412); // 412 Precondition Failed
+            return jsonResponse({ error: '数据版本冲突，请刷新页面后重试。' }, 412);
         }
 
-        if (apiPath === 'data' && (request.method === 'PUT' || request.method === 'PATCH')) {
-
-
-    if (!currentUser.permissions.canEditCategories && !currentUser.permissions.canEditBookmarks) {
-        return jsonResponse({ error: '权限不足' }, 403);
-    }
- 
-
-            
-            const dataToUpdate = await request.json();
-            if(request.method === 'PATCH'){
-                 if (dataToUpdate.categories) dataToModify.categories = dataToUpdate.categories;
-                 if (dataToUpdate.bookmarks) dataToModify.bookmarks = dataToUpdate.bookmarks;
-            } else { // PUT replaces the whole object
-                 if (dataToUpdate.categories) dataToModify.categories = dataToUpdate.categories;
-                 if (dataToUpdate.bookmarks) dataToModify.bookmarks = dataToUpdate.bookmarks;
+        if (apiPath === 'data' && request.method === 'PATCH') {
+            if (!currentUser.permissions.canEditCategories && !currentUser.permissions.canEditBookmarks) {
+                return jsonResponse({ error: '权限不足' }, 403);
             }
+            const dataToUpdate = await request.json();
+            if (dataToUpdate.categories) dataToModify.categories = dataToUpdate.categories;
+            if (dataToUpdate.bookmarks) dataToModify.bookmarks = dataToUpdate.bookmarks;
             const newVersion = await saveSiteData(env, dataToModify);
             return jsonResponse({ success: true, version: newVersion }, 200, { 'ETag': newVersion });
         }
@@ -319,6 +296,7 @@ export async function onRequest(context) {
             }
         }
 
+        // --- [核心修复] 补全用户管理的所有逻辑 ---
         if (apiPath === 'users/self' && request.method === 'PUT') {
             const { defaultCategoryId } = await request.json();
             if (typeof defaultCategoryId === 'undefined') return jsonResponse({ error: '未提供更新数据' }, 400);
@@ -349,9 +327,7 @@ export async function onRequest(context) {
             const userPathMatch = apiPath.match(/^users\/(.+)$/);
             if (userPathMatch) {
                 const username = decodeURIComponent(userPathMatch[1]);
-                if (username === 'self') { 
-                    // This case is now handled separately above, so we can ignore it here.
-                } else {
+                if (username !== 'self') {
                     const userToManage = dataToModify.users[username];
                     if (!userToManage) return jsonResponse({ error: `用户 '${username}' 未找到` }, 404);
 
