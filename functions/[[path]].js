@@ -317,7 +317,7 @@ export async function onRequest(context) {
         }
 
         // --- [核心修复] 补全用户管理的所有逻辑 ---
-         if (apiPath === 'users/self' && request.method === 'PUT') {
+           if (apiPath === 'users/self' && request.method === 'PUT') {
             const { defaultCategoryId } = await request.json();
             if (typeof defaultCategoryId === 'undefined') return jsonResponse({ error: '未提供更新数据' }, 400);
             const userToUpdate = dataToModify.users[currentUser.username];
@@ -380,6 +380,7 @@ export async function onRequest(context) {
                         // --- 修改 END ---
                     }
 
+          
                     if (request.method === 'DELETE') {
                         if (username === 'public') return jsonResponse({ error: '公共账户为系统保留账户，禁止删除。' }, 403);
                         if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
