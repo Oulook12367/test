@@ -239,41 +239,61 @@ export async function onRequest(context) {
         }
     }
 
-    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
-        
-        const dataToModify = await env.NAVI_DATA.get('data', { type: 'json' });
-        if (!dataToModify) return jsonResponse({ error: "Data store not initialized, cannot save." }, 500);
+   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
+        
+        const dataToModify = await env.NAVI_DATA.get('data', { type: 'json' });
+        if (!dataToModify) return jsonResponse({ error: "Data store not initialized, cannot save." }, 500);
 
-        const clientVersion = request.headers.get('if-match');
-        if (clientVersion && clientVersion !== dataToModify.version) {
-            return jsonResponse({ error: '数据版本冲突，请刷新页面后重试。' }, 412);
-        }
+        const clientVersion = request.headers.get('if-match');
+        if (clientVersion && clientVersion !== dataToModify.version) {
+            return jsonResponse({ error: '数据版本冲突，请刷新页面后重试。' }, 412);
+        }
 
-        if (apiPath === 'data' && request.method === 'PATCH') {
-            if (!currentUser.permissions.canEditCategories && !currentUser.permissions.canEditBookmarks) {
-                return jsonResponse({ error: '权限不足' }, 403);
+        if (apiPath === 'data' && request.method === 'PATCH') {
+            if (!currentUser.permissions.canEditCategories && !currentUser.permissions.canEditBookmarks) {
+                return jsonResponse({ error: '权限不足' }, 403);
+            }
+            const dataToUpdate = await request.json();
+
+            // --- 核心修复 START ---
+            // 后端接管ID生成，处理前端发来的临时ID
+            if (dataToUpdate.categories) {
+                const idMap = new Map(); // 用于映射临时ID到后端生成的新ID
+
+                // 第一次遍历：为所有带临时ID的新分类生成永久ID
+                dataToUpdate.categories.forEach(cat => {
+                    if (cat.id && cat.id.startsWith('new-')) { // 识别临时ID
+                        const oldId = cat.id;
+                        const newId = `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                        cat.id = newId;
+                        idMap.set(oldId, newId); // 记录映射关系
+                    }
+                });
+
+                // 第二次遍历：更新所有对临时ID的引用（例如 parentId）
+                if (idMap.size > 0) {
+                    dataToUpdate.categories.forEach(cat => {
+                        if (cat.parentId && idMap.has(cat.parentId)) {
+                            cat.parentId = idMap.get(cat.parentId);
+                        }
+                    });
+                }
+                
+                dataToModify.categories = dataToUpdate.categories;
             }
-            const dataToUpdate = await request.json();
-            if (dataToUpdate.categories) dataToModify.categories = dataToUpdate.categories;
-            if (dataToUpdate.bookmarks) dataToModify.bookmarks = dataToUpdate.bookmarks;
-            const newVersion = await saveSiteData(env, dataToModify);
-            return jsonResponse({ success: true, version: newVersion }, 200, { 'ETag': newVersion });
-        }
-        
-        if (apiPath === 'bookmarks' && request.method === 'POST') {
-            if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
-            const bookmark = await request.json();
-            if (!currentUser.roles.includes('admin') && !currentUser.permissions.visibleCategories.includes(bookmark.categoryId)) return jsonResponse({ error: '无权在此分类下添加书签' }, 403);
-            bookmark.id = `bm-${Date.now()}`;
-            if (typeof bookmark.sortOrder === 'undefined' || bookmark.sortOrder === null) {
-                const bookmarksInCategory = dataToModify.bookmarks.filter(b => b.categoryId === bookmark.categoryId);
-                const maxOrder = bookmarksInCategory.length > 0 ? Math.max(...bookmarksInCategory.map(b => b.sortOrder || 0)) : -1;
-                bookmark.sortOrder = maxOrder + 1;
-            }
-            dataToModify.bookmarks.push(bookmark);
-            const newVersion = await saveSiteData(env, dataToModify);
-            return jsonResponse(bookmark, 201, { 'ETag': newVersion });
-        }
+            // --- 核心修复 END ---
+            
+            if (dataToUpdate.bookmarks) dataToModify.bookmarks = dataToUpdate.bookmarks;
+            const newVersion = await saveSiteData(env, dataToModify);
+            
+            // 返回更新后的完整数据，这部分在上次修改中已完成，保持即可
+            const responsePayload = {
+                categories: dataToModify.categories,
+                bookmarks: dataToModify.bookmarks,
+                version: newVersion
+            };
+            return jsonResponse(responsePayload, 200, { 'ETag': newVersion });
+        }
 
         if (apiPath.startsWith('bookmarks/')) {
             const id = apiPath.split('/')[1];
