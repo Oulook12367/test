@@ -290,6 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 将 allBookmarks 也包含在请求体中
         const result = await apiRequest('data', 'PATCH', { 
             categories: finalCategories, 
+            bookmarks: allBookmarks // <--- 添加此行
         });
         // --- 修改部分结束 ---
 
@@ -298,7 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- 新增部分 ---
         // 成功后强制刷新UI，确保ID等状态正确显示
         alert('分类已成功保存！'); // 给予用户明确反馈
-        renderAdminTab('tab-categories');
+        await initializePage('tab-categories');
         // --- 新增部分结束 ---
 
     } catch (error) {
@@ -508,6 +509,7 @@ if (!updatedUser) {
         // 将 allCategories 也包含在请求体中
         const result = await apiRequest('data', 'PATCH', { 
             bookmarks: allBookmarks, 
+            categories: allCategories // <--- 添加此行
         });
         // --- 修改部分结束 ---
 
@@ -516,7 +518,7 @@ if (!updatedUser) {
         // --- 新增部分 ---
         alert('书签已成功保存！');
         // 不需要刷新整个Tab，只刷新列表即可
-        renderBookmarkList(document.getElementById('bookmark-category-filter').value);
+       await initializePage('tab-bookmarks');
         // --- 新增部分结束 ---
 
     } catch (error) { 
