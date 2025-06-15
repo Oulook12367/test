@@ -40,54 +40,46 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Data Loading & Rendering ---
- // 替换 main.js 中的整个 initializePage 函数
-async function initializePage() {
-    try {
-        const token = localStorage.getItem('jwt_token');
-        
-        // --- 公共模式逻辑 (无需修改) ---
-        if (!token) {
-            const publicData = await apiRequest('data');
-            if (publicData && publicData.isPublic) {
-                allCategories = publicData.categories || [];
-                allBookmarks = publicData.bookmarks || [];
-                currentUser = { roles: ['viewer'], defaultCategoryId: publicData.defaultCategoryId || 'all' };
-                updateHeader(true);
-                renderUI();
-                if(appLayout) appLayout.style.display = 'flex';
-                return;
+    async function initializePage() {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            if (!token) {
+                 const publicData = await apiRequest('data');
+                 if (publicData && publicData.isPublic) {
+                     allCategories = publicData.categories || [];
+                     allBookmarks = publicData.bookmarks || [];
+                     currentUser = { roles: ['viewer'], defaultCategoryId: publicData.defaultCategoryId || 'all' };
+                     updateHeader(true);
+                     renderUI();
+                     if(appLayout) appLayout.style.display = 'flex';
+                     return;
+                 }
+                 throw new Error("No token and not in public mode.");
             }
-            throw new Error("No token and not in public mode.");
-        }
-        
-        // --- 认证用户逻辑 (关键修正) ---
-        const payload = parseJwtPayload(token); // 使用新的、安全的函数
-        if (!payload || !payload.sub) {
-            throw new Error("Invalid token.");
-        }
-        const currentUsername = payload.sub;
+            
+            let currentUsername = '';
+            try { currentUsername = parseJwtPayload(token).sub; } 
+            catch (e) { throw new Error("Invalid token."); }
 
-        const data = await apiRequest('data');
-        const userFromServer = data.users.find(u => u.username === currentUsername);
-        if (!userFromServer) { 
-            throw new Error("Logged in user not found in data from server."); 
-        }
-        
-        allCategories = data.categories || [];
-        allBookmarks = data.bookmarks || [];
-        currentUser = userFromServer;
-        updateHeader(false);
-        renderUI();
-        if(appLayout) appLayout.style.display = 'flex';
+            const data = await apiRequest('data');
+            const userFromServer = data.users.find(u => u.username === currentUsername);
+            if (!userFromServer) { throw new Error("Logged in user not found in data from server."); }
+            
+            allCategories = data.categories || [];
+            allBookmarks = data.bookmarks || [];
+            currentUser = userFromServer;
+            updateHeader(false);
+            renderUI();
+            if(appLayout) appLayout.style.display = 'flex';
 
-    } catch (error) {
-        console.error("Initialization failed:", error);
-        localStorage.removeItem('jwt_token');
-        window.location.href = 'login.html';
-    } finally {
-        document.body.classList.remove('is-loading');
+        } catch (error) {
+            console.error("Initialization failed:", error);
+            localStorage.removeItem('jwt_token');
+            window.location.href = 'login.html';
+        } finally {
+            document.body.classList.remove('is-loading');
+        }
     }
-}
 
     const renderUI = () => {
         renderCategories();
@@ -167,21 +159,38 @@ async function initializePage() {
         buildTreeUI(tree, categoryNav, 0);
     };
     
-    // [重要修改] 优化图标加载逻辑
+    // [!!!] 核心修复：替换整个 renderBookmarks 函数
     const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
         if (!bookmarksGrid) return;
+        
         let categoryIdsToDisplay;
         if (categoryId === 'all') {
             categoryIdsToDisplay = new Set(allCategories.map(c => c.id));
         } else {
             categoryIdsToDisplay = getRecursiveCategoryIds( [categoryId], allCategories);
         }
+        
         let filteredBookmarks = allBookmarks.filter(bm => categoryIdsToDisplay.has(bm.categoryId));
+        
         if (searchTerm) {
             const lower = searchTerm.toLowerCase();
             filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lower) || bm.url.toLowerCase().includes(lower));
         }
-        filteredBookmarks.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
+        
+        // --- [修复] 创建一个 map 用于快速查找分类的排序值 ---
+        const categorySortMap = new Map(allCategories.map(cat => [cat.id, cat.sortOrder || 0]));
+
+        // --- [修复] 更新排序逻辑，使其与 admin.js 保持一致 ---
+        filteredBookmarks.sort((a, b) => {
+            const catA_sort = categorySortMap.get(a.categoryId) || 0;
+            const catB_sort = categorySortMap.get(b.categoryId) || 0;
+            // 1. 首先比较分类的排序
+            if (catA_sort !== catB_sort) {
+                return catA_sort - catB_sort;
+            }
+            // 2. 如果分类相同，则比较书签自身的排序
+            return (a.sortOrder || 0) - (b.sortOrder || 0);
+        });
         
         bookmarksGrid.innerHTML = '';
         if(filteredBookmarks.length === 0){
@@ -189,7 +198,6 @@ async function initializePage() {
             return;
         }
         
-        // 备用图标 (一个简单的地球SVG)
         const fallbackIcon = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L8 12v1c0 1.1.9 2 2 2v1.93zM17.99 9.21c-.23-.6-.53-1.15-.9-1.64L13 12v-1c0-1.1-.9-2-2-2V7.07c3.95.49 7 3.85 7 7.93 0 .62-.08 1.21-.21 1.79z'/%3E%3C/svg%3E`;
 
         bookmarksGrid.innerHTML = filteredBookmarks.map(bm => {
@@ -197,7 +205,6 @@ async function initializePage() {
             try { domain = new URL(bm.url).hostname; } catch (e) {}
             const gStaticIconUrl = `https://www.google.com/s2/favicons?sz=64&domain_url=${domain}`;
             
-            // 优先使用用户自定义图标，其次是谷歌图标，最后是备用SVG
             const finalIconSrc = bm.icon || gStaticIconUrl;
             
             return `<a href="${bm.url}" class="bookmark-card glass-pane" target="_blank" rel="noopener noreferrer">
@@ -269,5 +276,6 @@ async function initializePage() {
             }
         });
     }
+    
     initializePage();
 });
