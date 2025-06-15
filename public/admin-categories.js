@@ -17,41 +17,27 @@ function renderCategoryAdminTab(container) {
         </div>`;
 
     const listEl = container.querySelector('#category-admin-list');
-    const categoryMap = new Map(allCategories.map(c => [c.id, {...c, children: []}]));
-    const tree = [];
-    allCategories.forEach(c => {
-        if (!c) return;
-        const node = categoryMap.get(c.id);
-        if (c.parentId && categoryMap.has(c.parentId)) {
-            const parent = categoryMap.get(c.parentId);
-            if(parent) parent.children.push(node);
-        } else {
-            tree.push(node);
-        }
+    
+    // 【修复】使用新的排序函数来渲染列表
+    const sortedCategories = getHierarchicalSortedCategories(allCategories);
+    
+    listEl.innerHTML = ''; // 清空
+    sortedCategories.forEach(cat => {
+        const li = document.createElement('li');
+        li.dataset.id = cat.id;
+        li.innerHTML = `
+            <input type="number" class="cat-order-input" value="${cat.sortOrder || 0}" min="0">
+            <div class="cat-name-cell" style="padding-left: ${(cat.level || 0) * 25}px;">
+                <input type="text" class="cat-name-input" value="${escapeHTML(cat.name)}">
+            </div>
+            <select class="cat-parent-select"></select>
+            <div class="cat-actions" style="display: flex; align-items: center; justify-content: flex-end; gap: 5px;">
+                 <span class="item-status" style="display:inline-block; width: 20px;"></span>
+                 <button class="delete-cat-btn button-icon danger" title="删除"><i class="fas fa-trash-alt"></i></button>
+            </div>`;
+        populateCategoryDropdown(li.querySelector('.cat-parent-select'), allCategories, cat.parentId, cat.id);
+        listEl.appendChild(li);
     });
-    tree.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-
-    const buildList = (nodes, level) => {
-        nodes.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
-            if (!cat) return;
-            const li = document.createElement('li');
-            li.dataset.id = cat.id;
-            li.innerHTML = `
-                <input type="number" class="cat-order-input" value="${cat.sortOrder || 0}" min="0">
-                <div class="cat-name-cell" style="padding-left: ${level * 25}px;">
-                    <input type="text" class="cat-name-input" value="${escapeHTML(cat.name)}">
-                </div>
-                <select class="cat-parent-select"></select>
-                <div class="cat-actions" style="display: flex; align-items: center; justify-content: flex-end; gap: 5px;">
-                     <span class="item-status" style="display:inline-block; width: 20px;"></span>
-                     <button class="delete-cat-btn button-icon danger" title="删除"><i class="fas fa-trash-alt"></i></button>
-                </div>`;
-            populateCategoryDropdown(li.querySelector('.cat-parent-select'), allCategories, cat.parentId, cat.id);
-            listEl.appendChild(li);
-            if (cat.children && cat.children.length > 0) buildList(cat.children, level + 1);
-        });
-    };
-    buildList(tree, 0);
 }
 
 const handleCategoryAutoSave = debounce(async (listItem) => {
@@ -94,6 +80,7 @@ const handleCategoryAutoSave = debounce(async (listItem) => {
     }
 }, 750);
 
+
 document.addEventListener('input', event => {
     if (document.getElementById('tab-categories')?.classList.contains('active')) {
         const listItem = event.target.closest('li[data-id]');
@@ -107,6 +94,7 @@ document.addEventListener('click', event => {
     if (document.getElementById('tab-categories')?.classList.contains('active')) {
         const target = event.target;
         
+        // 【修复】新增分类功能
         if (target.closest('#add-new-category-btn')) {
             const newCatName = prompt("请输入新分类的名称：");
             if(newCatName && newCatName.trim()){
@@ -115,8 +103,8 @@ document.addEventListener('click', event => {
                         const newCategory = await apiRequest('categories', 'POST', { name: newCatName.trim() });
                         showToast("新增分类成功！");
                         invalidateCache();
-                        allCategories.push(newCategory);
-                        renderCategoryAdminTab(document.getElementById('tab-categories'));
+                        allCategories.push(newCategory); // 手动更新本地状态
+                        renderCategoryAdminTab(document.getElementById('tab-categories')); // 重新渲染UI
                     } catch(error) {
                         showToast(`添加分类失败: ${error.message}`, true);
                     }
@@ -133,7 +121,7 @@ document.addEventListener('click', event => {
                     await apiRequest(`categories/${catId}`, 'DELETE');
                     showToast("分类及相关书签删除成功！");
                     invalidateCache();
-                    await initializePage('tab-categories');
+                    await initializePage('tab-categories'); // 删除操作后需要完全刷新数据
                 } catch(error) {
                     showToast(`删除失败: ${error.message}`, true);
                 }
