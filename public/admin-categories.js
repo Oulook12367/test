@@ -1,136 +1,205 @@
-// admin-categories.js
+// admin-core.js
 
-// --- 渲染函数 ---
-function renderCategoryAdminTab(container) {
-    container.innerHTML = `
-        <p class="admin-panel-tip" style="margin-bottom: 1rem;">所有更改（名称、父级、排序）都将自动保存。</p>
-        <div class="category-admin-header">
-            <span>排序</span>
-            <span>分类名称</span>
-            <span>上级分类</span>
-            <span>操作</span>
-        </div>
-        <div style="flex-grow: 1; overflow-y: auto; min-height: 0;">
-            <ul id="category-admin-list"></ul>
-        </div>
-        <div class="admin-panel-actions">
-            <button id="add-new-category-btn" class="button"><i class="fas fa-plus"></i> 添加新分类</button>
-        </div>`;
+// --- 全局状态定义 ---
+let allBookmarks = [], allCategories = [], allUsers = [];
 
-    const listEl = container.querySelector('#category-admin-list');
-    const categoryMap = new Map(allCategories.map(c => [c.id, {...c, children: []}]));
+document.addEventListener('DOMContentLoaded', () => {
+    // --- 1. 全局元素选择器 ---
+    const adminPageContainer = document.getElementById('admin-page-container');
+    const adminPanelNav = document.querySelector('.admin-panel-nav');
+    const adminContentPanel = document.querySelector('.admin-panel-content');
+    const adminTabContents = document.querySelectorAll('.admin-tab-content');
+    const modalBackdrop = document.getElementById('modal-backdrop');
+    const confirmModal = document.getElementById('confirm-modal');
+    
+    // --- 2. 核心初始化函数 (带缓存逻辑) ---
+    async function initializePage(activeTabId = 'tab-categories') {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const payload = token ? parseJwtPayload(token) : null;
+            if (!payload) throw new Error("无效或缺失的认证令牌。");
+
+            const cachedData = sessionStorage.getItem('adminDataCache');
+            if (cachedData) {
+                console.log("从前端缓存加载数据...");
+                const data = JSON.parse(cachedData);
+                allCategories = data.categories || [];
+                allBookmarks = data.bookmarks || [];
+                allUsers = data.users || [];
+            } else {
+                console.log("缓存未命中，从API获取数据...");
+                const data = await apiRequest('data');
+                if (!data || !data.users.find(u => u.username === payload.sub)?.roles.includes('admin')) {
+                    throw new Error("用户权限可能已变更，或数据获取失败。");
+                }
+                allCategories = data.categories || [];
+                allBookmarks = data.bookmarks || [];
+                allUsers = data.users || [];
+                // 只缓存必要的数据
+                sessionStorage.setItem('adminDataCache', JSON.stringify({categories: allCategories, bookmarks: allBookmarks, users: allUsers}));
+            }
+
+            if (adminPageContainer) adminPageContainer.style.display = 'flex';
+            document.body.classList.remove('is-loading');
+
+            const linkToClick = document.querySelector(`.admin-tab-link[data-tab="${activeTabId}"]`);
+            if (linkToClick && !linkToClick.classList.contains('active')) {
+                linkToClick.click();
+            } else if (!document.querySelector('.admin-tab-link.active')) {
+                document.querySelector('.admin-tab-link')?.click();
+            } else {
+                 renderAdminTab(activeTabId || 'tab-categories');
+            }
+
+        } catch (error) {
+            console.error("初始化管理页面失败:", error);
+            localStorage.removeItem('jwt_token');
+            sessionStorage.removeItem('adminDataCache');
+            window.location.href = 'index.html';
+        }
+    }
+
+    // --- 3. 标签页渲染与切换 ---
+    const renderAdminTab = (tabId) => {
+        const container = document.getElementById(tabId);
+        if (!container) return;
+        container.innerHTML = ''; // 清空内容
+        
+        switch (tabId) {
+            case 'tab-categories':
+                renderCategoryAdminTab(container);
+                break;
+            case 'tab-users':
+                renderUserAdminTab(container);
+                break;
+            case 'tab-bookmarks':
+                renderBookmarkAdminTab(container);
+                break;
+            case 'tab-system':
+                renderSystemSettingsTab(container);
+                break;
+        }
+    };
+
+    if (adminPanelNav) {
+        adminPanelNav.addEventListener('click', (e) => {
+            e.preventDefault();
+            const link = e.target.closest('.admin-tab-link');
+            if (!link || link.classList.contains('active')) return;
+
+            adminPanelNav.querySelectorAll('.admin-tab-link').forEach(l => l.classList.remove('active'));
+            link.classList.add('active');
+            
+            const tabId = link.dataset.tab;
+            adminTabContents.forEach(content => content.classList.toggle('active', content.id === tabId));
+            
+            renderAdminTab(tabId);
+        });
+    }
+
+    // --- 4. 启动页面 ---
+    initializePage();
+});
+
+// --- 5. 全局共享工具函数 ---
+
+function invalidateCache() {
+    console.log("前端缓存已失效，下次将重新获取。");
+    sessionStorage.removeItem('adminDataCache');
+}
+
+function showToast(message, isError = false) {
+    let toast = document.querySelector('.toast-message');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.className = 'toast-message';
+        Object.assign(toast.style, {
+            position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)',
+            padding: '12px 25px', borderRadius: '12px', color: 'white',
+            background: isError ? 'rgba(239, 68, 68, 0.8)' : 'rgba(34, 197, 94, 0.8)',
+            backdropFilter: 'blur(10px)', zIndex: '9999', opacity: '0',
+            transition: 'opacity 0.3s ease-in-out', fontWeight: '700',
+        });
+        document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.style.background = isError ? 'rgba(239, 68, 68, 0.8)' : 'rgba(34, 197, 94, 0.8)';
+    toast.style.opacity = '1';
+    setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+}
+
+function showModal(modalElement) {
+    const modalBackdrop = document.getElementById('modal-backdrop');
+    hideAllModals();
+    if (modalElement && modalBackdrop) {
+        modalBackdrop.style.display = 'flex';
+        modalElement.style.display = 'block';
+    }
+}
+
+function hideAllModals() {
+    const modalBackdrop = document.getElementById('modal-backdrop');
+    if (modalBackdrop) modalBackdrop.style.display = 'none';
+    document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+}
+
+function showConfirm(title, text, onConfirm) {
+    const confirmModal = document.getElementById('confirm-modal');
+    const confirmTitle = document.getElementById('confirm-title');
+    const confirmText = document.getElementById('confirm-text');
+    const confirmBtnYes = document.getElementById('confirm-btn-yes');
+    
+    if (!confirmModal || !confirmTitle || !confirmText || !confirmBtnYes) return;
+    
+    confirmTitle.textContent = title;
+    confirmText.textContent = text;
+    showModal(confirmModal);
+    
+    confirmBtnYes.onclick = () => {
+        hideAllModals();
+        if (typeof onConfirm === 'function') {
+            onConfirm();
+        }
+    };
+}
+
+function populateCategoryDropdown(selectElement, categories, selectedId = null, ignoreId = null, options = { allowNoParent: true }) {
+    selectElement.innerHTML = '';
+    if (options.allowNoParent) selectElement.innerHTML = '<option value=""> 顶级分类 </option>';
+    
+    const categoryMap = new Map(categories.map(cat => [cat.id, { ...cat, children: [] }]));
     const tree = [];
-    allCategories.forEach(c => {
-        const node = categoryMap.get(c.id);
-        if (c.parentId && categoryMap.has(c.parentId)) {
-            categoryMap.get(c.parentId).children.push(node);
+    
+    categories.forEach(cat => {
+        if (cat.id === ignoreId) return;
+        const node = categoryMap.get(cat.id);
+        if (cat.parentId && categoryMap.has(cat.parentId)) {
+            const parent = categoryMap.get(cat.parentId);
+            if(parent) parent.children.push(node);
         } else {
             tree.push(node);
         }
     });
-    tree.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 
-    const buildList = (nodes, level) => {
-        nodes.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
-            const li = document.createElement('li');
-            li.dataset.id = cat.id;
-            li.innerHTML = `
-                <input type="number" class="cat-order-input" value="${cat.sortOrder || 0}">
-                <div class="cat-name-cell" style="padding-left: ${level * 25}px;">
-                    <input type="text" class="cat-name-input" value="${escapeHTML(cat.name)}">
-                </div>
-                <select class="cat-parent-select"></select>
-                <div class="cat-actions" style="display: flex; align-items: center; gap: 5px;">
-                     <span class="item-status" style="display:inline-block; width: 20px;"></span>
-                     <button class="delete-cat-btn button-icon danger" title="删除"><i class="fas fa-trash-alt"></i></button>
-                </div>`;
-            populateCategoryDropdown(li.querySelector('.cat-parent-select'), allCategories, cat.parentId, cat.id);
-            listEl.appendChild(li);
-            if (cat.children && cat.children.length > 0) buildList(cat.children, level + 1);
+    tree.sort((a,b)=>(a.sortOrder||0) - (b.sortOrder||0));
+
+    const buildOptions = (nodes, level) => {
+        if (level >= 10) return;
+        nodes.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)).forEach(node => {
+            if (!node) return;
+            const option = document.createElement('option');
+            option.value = node.id;
+            option.textContent = `${'— '.repeat(level)}${node.name}`;
+            if (node.id === selectedId) option.selected = true;
+            selectElement.appendChild(option);
+            if (node.children.length > 0) buildOptions(node.children, level + 1);
         });
     };
-    buildList(tree, 0);
+    buildOptions(tree, 0);
 }
 
-// --- 自动保存逻辑 ---
-const handleCategoryAutoSave = debounce(async (listItem) => {
-    const id = listItem.dataset.id;
-    if (!id || id.startsWith('new-')) return; // 不保存未提交的新分类
-
-    const category = allCategories.find(c => c.id === id);
-    if (!category) return;
-
-    const statusEl = listItem.querySelector('.item-status');
-
-    const newName = listItem.querySelector('.cat-name-input').value.trim();
-    const newSortOrder = parseInt(listItem.querySelector('.cat-order-input').value) || 0;
-    const newParentId = listItem.querySelector('.cat-parent-select').value || null;
-
-    if (category.name === newName && category.sortOrder === newSortOrder && category.parentId === newParentId) {
-        return; // 数据未变
-    }
-    
-    if (!newName) {
-        showToast("分类名称不能为空！", true);
-        listItem.querySelector('.cat-name-input').value = category.name; // 恢复旧名称
-        return;
-    }
-
-    // 乐观更新本地数据
-    category.name = newName;
-    category.sortOrder = newSortOrder;
-    category.parentId = newParentId;
-
-    try {
-        if (statusEl) statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        // 在新架构中，我们需要一个精细化的API来更新分类
-        // await apiRequest(`categories/${id}`, 'PUT', category);
-        showToast("分类自动保存功能需要后端支持PUT /api/categories/:id接口", true); // 临时提示
-        if (statusEl) statusEl.innerHTML = '<i class="fas fa-check" style="color: #34d399;"></i>';
-        invalidateCache();
-    } catch (error) {
-        console.error(`自动保存分类 ${id} 失败:`, error);
-        if (statusEl) statusEl.innerHTML = `<i class="fas fa-times" title="${error.message}" style="color: #f87171;"></i>`;
-    } finally {
-        setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 2000);
-    }
-}, 750);
-
-
-// --- 事件处理 ---
-document.addEventListener('input', event => {
-    if (document.getElementById('tab-categories')?.classList.contains('active')) {
-        const listItem = event.target.closest('li[data-id]');
-        if (listItem) {
-            handleCategoryAutoSave(listItem);
-        }
-    }
-});
-
-document.addEventListener('click', event => {
-    if (document.getElementById('tab-categories')?.classList.contains('active')) {
-        const target = event.target;
-        
-        // 添加新分类
-        if (target.closest('#add-new-category-btn')) {
-            // ... (此处逻辑与旧版类似，在UI上添加一个新行，但需要一个“确认添加”按钮来调用POST API)
-            // 简单起见，可以弹出一个模态框来添加新分类
-            showToast("功能待实现：弹出模态框添加新分类。");
-        }
-        
-        // 删除分类
-        if (target.closest('.delete-cat-btn')) {
-            const listItem = target.closest('li[data-id]');
-            const catId = listItem.dataset.id;
-            const catName = listItem.querySelector('.cat-name-input').value;
-            showConfirm('确认删除', `您确定要删除分类 "${catName}" 吗？其下所有子分类和书签都将被删除。`, async () => {
-                // 后端需要实现级联删除的逻辑
-                // await apiRequest(`categories/${catId}`, 'DELETE');
-                showToast("分类删除功能需要后端支持DELETE /api/categories/:id接口", true); // 临时提示
-                invalidateCache();
-                // 成功后重新加载页面
-                // location.reload();
-            });
-        }
-    }
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.close-btn, #confirm-btn-no').forEach(btn => {
+        btn.addEventListener('click', hideAllModals);
+    });
 });
