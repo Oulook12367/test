@@ -290,7 +290,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // 将 allBookmarks 也包含在请求体中
         const result = await apiRequest('data', 'PATCH', { 
             categories: finalCategories, 
-            bookmarks: allBookmarks 
         });
         // --- 修改部分结束 ---
 
@@ -504,7 +503,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // 将 allCategories 也包含在请求体中
         const result = await apiRequest('data', 'PATCH', { 
             bookmarks: allBookmarks, 
-            categories: allCategories 
         });
         // --- 修改部分结束 ---
 
