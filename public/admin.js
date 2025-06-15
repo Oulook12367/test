@@ -126,8 +126,10 @@ document.addEventListener('DOMContentLoaded', () => {
         buildOptions(tree, 0);
     };
     
+    // --- Render functions for each tab ---
     const renderCategoryAdminTab = (container) => {
-        container.innerHTML = `<p class="admin-panel-tip">通过修改表单来调整分类，完成后请点击下方的“保存”按钮。</p><div class="category-admin-header"><span>排序</span><span>分类名称</span><span>上级分类</span><span>操作</span></div><div style="flex-grow: 1; overflow-y: auto; min-height: 0;"><ul id="category-admin-list"></ul></div><div class="admin-panel-actions"><button id="save-categories-btn" class="button button-primary"><i class="fas fa-save"></i> 保存全部分类</button><button id="add-new-category-btn" class="button"><i class="fas fa-plus"></i> 添加新分类</button></div>`;
+        // [修复] 为提示段落添加下外边距
+        container.innerHTML = `<p class="admin-panel-tip" style="margin-bottom: 1rem;">通过修改表单来调整分类，完成后请点击下方的“保存”按钮。</p><div class="category-admin-header"><span>排序</span><span>分类名称</span><span>上级分类</span><span>操作</span></div><div style="flex-grow: 1; overflow-y: auto; min-height: 0;"><ul id="category-admin-list"></ul></div><div class="admin-panel-actions"><button id="save-categories-btn" class="button button-primary"><i class="fas fa-save"></i> 保存全部分类</button><button id="add-new-category-btn" class="button"><i class="fas fa-plus"></i> 添加新分类</button></div>`;
         const listEl = container.querySelector('#category-admin-list');
         const categoryMap = new Map(allCategories.map(c => [c.id, {...c, children: []}]));
         const tree = [];
@@ -160,18 +162,14 @@ document.addEventListener('DOMContentLoaded', () => {
             ? [...allBookmarks]
             : allBookmarks.filter(bm => bm.categoryId === categoryId);
         
-        // [修复] 创建一个 map 用于快速查找分类的排序值
         const categorySortMap = new Map(allCategories.map(cat => [cat.id, cat.sortOrder || 0]));
 
-        // [修复] 更新排序逻辑
         bookmarksToDisplay.sort((a, b) => {
             const catA_sort = categorySortMap.get(a.categoryId) || 0;
             const catB_sort = categorySortMap.get(b.categoryId) || 0;
-            // 首先比较分类的排序
             if (catA_sort !== catB_sort) {
                 return catA_sort - catB_sort;
             }
-            // 如果分类相同，则比较书签自身的排序
             return (a.sortOrder || 0) - (b.sortOrder || 0);
         });
         
@@ -190,8 +188,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const renderBookmarkAdminTab = (container) => {
-        // [修复] 调整HTML结构，为列表区域增加一个带滚动条的父容器
-        container.innerHTML = `<p class="admin-panel-tip">通过修改表单来调整分类。修改排序数字后，点击下方的“保存”按钮来应用更改。</p><div class="bookmark-admin-controls" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;"><span>筛选分类:</span><select id="bookmark-category-filter" style="width: auto; max-width: 350px; flex-grow: 1;"><option value="all">-- 显示全部分类 --</option></select></div><div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div><div style="flex-grow: 1; overflow-y: auto; min-height: 0;"><div id="bookmark-admin-list-container"><ul></ul></div></div><div class="admin-panel-actions"><button id="save-bookmarks-btn" class="button button-primary"><i class="fas fa-save"></i> 保存书签顺序</button><button id="add-new-bookmark-btn" class="button"><i class="fas fa-plus"></i> 添加新书签</button></div>`;
+        // [修复] 为提示段落添加下外边距
+        container.innerHTML = `<p class="admin-panel-tip" style="margin-bottom: 1rem;">通过修改表单来调整分类。修改排序数字后，点击下方的“保存”按钮来应用更改。</p><div class="bookmark-admin-controls" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;"><span>筛选分类:</span><select id="bookmark-category-filter" style="width: auto; max-width: 350px; flex-grow: 1;"><option value="all">-- 显示全部分类 --</option></select></div><div class="bookmark-admin-header"><span class="sort-col">排序</span><span>书签名称</span><span>所属分类</span><span>操作</span></div><div style="flex-grow: 1; overflow-y: auto; min-height: 0;"><div id="bookmark-admin-list-container"><ul></ul></div></div><div class="admin-panel-actions"><button id="save-bookmarks-btn" class="button button-primary"><i class="fas fa-save"></i> 保存书签顺序</button><button id="add-new-bookmark-btn" class="button"><i class="fas fa-plus"></i> 添加新书签</button></div>`;
         const categoryFilter = container.querySelector('#bookmark-category-filter');
         
         allCategories.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(cat => {
@@ -208,7 +206,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const renderUserAdminTab = (container) => {
-        container.innerHTML = `<div id="user-management-container"><div class="user-list-container"><h3>用户列表</h3><ul id="user-list"></ul></div><div class="user-form-container"><form id="user-form"><h3 id="user-form-title">添加新用户</h3><div class="user-form-static-fields"><input type="hidden" id="user-form-username-hidden"><div class="form-group-inline"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required></div><div class="form-group-inline"><label for="user-form-password">密码:</label><input type="password" id="user-form-password"></div><div class="form-group-inline"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div><div class="form-group-inline"><label for="user-form-default-cat">默认显示分类:</label><select id="user-form-default-cat"></select></div></div><div class="form-group flex-grow"><label>可见分类:</label><div id="user-form-categories" class="checkbox-group"></div></div><div class="user-form-buttons"><button type="submit" class="button button-primary">保存用户</button><button type="button" id="user-form-clear-btn" class="button">新增/清空</button></div><p class="modal-error-message"></p></form></div></div>`;
+        // [修复] 为用户列表的标题添加下外边距
+        container.innerHTML = `<div id="user-management-container"><div class="user-list-container"><h3 style="margin-bottom: 1rem;">用户列表</h3><ul id="user-list"></ul></div><div class="user-form-container"><form id="user-form"><h3 id="user-form-title">添加新用户</h3><div class="user-form-static-fields"><input type="hidden" id="user-form-username-hidden"><div class="form-group-inline"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required></div><div class="form-group-inline"><label for="user-form-password">密码:</label><input type="password" id="user-form-password"></div><div class="form-group-inline"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div><div class="form-group-inline"><label for="user-form-default-cat">默认显示分类:</label><select id="user-form-default-cat"></select></div></div><div class="form-group flex-grow"><label>可见分类:</label><div id="user-form-categories" class="checkbox-group"></div></div><div class="user-form-buttons"><button type="submit" class="button button-primary">保存用户</button><button type="button" id="user-form-clear-btn" class="button">新增/清空</button></div><p class="modal-error-message"></p></form></div></div>`;
         const userList = container.querySelector('#user-list');
         const token = localStorage.getItem('jwt_token');
         let currentUsername = '';
@@ -230,7 +229,14 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     const renderSystemSettingsTab = (container) => {
-        container.innerHTML = `<div class="system-setting-item"><h3><i class="fas fa-file-import"></i> 导入书签</h3><p>从浏览器导出的HTML文件导入书签。导入操作会合并现有书签，不会清空原有数据。</p><button id="import-bookmarks-btn-admin" class="button">选择HTML文件</button><input type="file" id="import-file-input-admin" accept=".html,.htm" style="display: none;"></div>`;
+        // [修复] 调整系统工具页的布局和间距
+        container.innerHTML = `<div class="system-setting-item">` +
+            `<p style="margin-bottom: 1.5rem;">从浏览器导出的HTML文件导入书签。导入操作会合并现有书签，不会清空原有数据。</p>` +
+            `<div style="display: flex; align-items: center; gap: 1rem;">` +
+            `<h3><i class="fas fa-file-import"></i> 导入书签</h3>`+
+            `<button id="import-bookmarks-btn-admin" class="button">选择HTML文件</button>` +
+            `<input type="file" id="import-file-input-admin" accept=".html,.htm" style="display: none;">` +
+            `</div></div>`;
     };
 
     const handleAddNewCategory = () => {
@@ -240,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const allOrderInputs = listEl.querySelectorAll('.cat-order-input');
         const existingOrders = Array.from(allOrderInputs).map(input => parseInt(input.value) || 0);
         const maxOrder = existingOrders.length > 0 ? Math.max(...existingOrders) : -1;
-        const newSortOrder = maxOrder + 1; // [修复] 排序增量改为 1
+        const newSortOrder = maxOrder + 1;
         const li = document.createElement('li');
         li.dataset.id = newCatId;
         li.innerHTML = `<input type="number" class="cat-order-input" value="${newSortOrder}"><div class="cat-name-cell"><input type="text" class="cat-name-input" value="新分类"></div><select class="cat-parent-select"></select><button class="delete-cat-btn button-icon danger" title="删除"><i class="fas fa-trash-alt"></i></button>`;
