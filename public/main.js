@@ -1,7 +1,8 @@
+// main.js
+
 document.addEventListener('DOMContentLoaded', () => {
-    // --- Element Selectors ---
+    // --- 1. Element Selectors ---
     const appLayout = document.getElementById('app-layout');
-    const themeToggleButton = document.getElementById('theme-toggle');
     const localSearchInput = document.getElementById('local-search');
     const searchEngineSelect = document.getElementById('search-engine');
     const bookmarksGrid = document.getElementById('bookmarks-grid');
@@ -12,82 +13,103 @@ document.addEventListener('DOMContentLoaded', () => {
     const mobileSidebarToggleBtn = document.getElementById('mobile-sidebar-toggle');
     const actionBtn = document.getElementById('action-btn');
 
-    // --- State ---
+    // --- 2. State ---
     let allBookmarks = [], allCategories = [], currentUser = null;
+    let categoryMap = new Map(); // 用于快速查找分类信息
 
-    // --- Helpers ---
-    const getRecursiveCategoryIds = (initialIds, categories) => {
-        const fullIdSet = new Set(initialIds);
-        const queue = [...initialIds];
+    // --- 3. 【新增】核心排序与辅助函数 ---
+    /**
+     * 将扁平的分类数组，转换为按层级优先的排序后数组。
+     * @param {Array} items - 全部分类或书签数组。
+     * @param {string} [parentIdKey='parentId'] - 用于标识父ID的键名。
+     * @returns {Array} - 一个新数组，项目按正确的层级顺序排列。
+     */
+    function getHierarchicalSortedData(items, parentIdKey = 'parentId') {
+        const itemMap = new Map(items.map(i => [i.id, {...i, children: []}]));
+        const tree = [];
+        const sortedList = [];
+
+        items.forEach(i => {
+            if (!i) return;
+            const node = itemMap.get(i.id);
+            if (i[parentIdKey] && itemMap.has(i[parentIdKey])) {
+                const parent = itemMap.get(i[parentIdKey]);
+                if(parent) parent.children.push(node);
+            } else {
+                tree.push(node);
+            }
+        });
+        
+        tree.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+        function flattenTree(nodes, level, topLevelParentId = null) {
+            nodes.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+            nodes.forEach(node => {
+                node.level = level;
+                // 记录每个节点所属的顶级父分类ID，用于分组
+                node.topLevelParentId = topLevelParentId || node.id; 
+                sortedList.push(node);
+                if (node.children.length > 0) {
+                    flattenTree(node.children, level + 1, node.topLevelParentId);
+                }
+            });
+        }
+
+        flattenTree(tree, 0);
+        return sortedList;
+    }
+
+    /**
+     * 获取一个分类及其所有子孙分类的ID集合。
+     * @param {string} categoryId - 起始分类的ID。
+     * @returns {Set<string>} - 包含所有相关分类ID的Set。
+     */
+    function getCategoryWithDescendants(categoryId) {
+        const idSet = new Set([categoryId]);
+        const queue = [categoryId];
         while (queue.length > 0) {
-            const parentId = queue.shift();
-            const children = categories.filter(c => c.parentId === parentId);
-            for (const child of children) {
-                if (!fullIdSet.has(child.id)) {
-                    fullIdSet.add(child.id);
-                    queue.push(child.id);
+            const currentId = queue.shift();
+            for (const cat of allCategories) {
+                if (cat.parentId === currentId) {
+                    if (!idSet.has(cat.id)) {
+                        idSet.add(cat.id);
+                        queue.push(cat.id);
+                    }
                 }
             }
         }
-        return fullIdSet;
-    };
-    
-    const applySidebarState = (isCollapsed) => {
-        if (appLayout) {
-            appLayout.classList.toggle('sidebar-collapsed', isCollapsed);
-            localStorage.setItem('sidebarCollapsed', isCollapsed);
-        }
-    };
+        return idSet;
+    }
 
-    // --- Data Loading & Rendering ---
+
+    // --- 4. Data Loading & Rendering ---
     async function initializePage() {
         try {
-            const token = localStorage.getItem('jwt_token');
-            if (!token) {
-                 const publicData = await apiRequest('data');
-                 if (publicData && publicData.isPublic) {
-                     allCategories = publicData.categories || [];
-                     allBookmarks = publicData.bookmarks || [];
-                     currentUser = { roles: ['viewer'], defaultCategoryId: publicData.defaultCategoryId || 'all' };
-                     updateHeader(true);
-                     renderUI();
-                     if(appLayout) appLayout.style.display = 'flex';
-                     return;
-                 }
-                 throw new Error("No token and not in public mode.");
+            // 统一通过 /api/data 获取数据，后端已处理好权限和数据范围
+            const data = await apiRequest('data');
+            
+            // 【修复】使用新的排序函数预处理分类数据
+            allCategories = getHierarchicalSortedData(data.categories || []);
+            categoryMap = new Map(allCategories.map(c => [c.id, c]));
+            allBookmarks = data.bookmarks || [];
+
+            if (data.isPublic) {
+                currentUser = { roles: ['viewer'], defaultCategoryId: data.defaultCategoryId || 'all' };
+                updateHeader(true);
+            } else {
+                const token = localStorage.getItem('jwt_token');
+                const payload = token ? parseJwtPayload(token) : {};
+                const usersArray = Array.isArray(data.users) ? data.users : Object.values(data.users);
+                currentUser = usersArray.find(u => u.username === payload.sub);
+                if (!currentUser) throw new Error("已登录用户未在服务器数据中找到。");
+                updateHeader(false);
             }
             
-            let currentUsername = '';
-            try { currentUsername = parseJwtPayload(token).sub; } 
-            catch (e) { throw new Error("Invalid token."); }
-
-            const data = await apiRequest('data');
-            const userFromServer = data.users.find(u => u.username === currentUsername);
-            if (!userFromServer) { throw new Error("Logged in user not found in data from server."); }
-            
-            allCategories = data.categories || [];
-            allBookmarks = data.bookmarks || [];
-            currentUser = userFromServer;
-
-            // [新功能] 预先计算并存储每个分类的“深度等级”
-            const categoryMap = new Map(allCategories.map(cat => [cat.id, cat]));
-            allCategories.forEach(cat => {
-                let level = 0;
-                let current = cat;
-                while (current && current.parentId && categoryMap.has(current.parentId)) {
-                    level++;
-                    current = categoryMap.get(current.parentId);
-                    if (level > 20) break; // 防止因循环依赖导致的死循环
-                }
-                cat.level = level;
-            });
-            
-            updateHeader(false);
             renderUI();
             if(appLayout) appLayout.style.display = 'flex';
 
         } catch (error) {
-            console.error("Initialization failed:", error);
+            console.error("页面初始化失败:", error);
             localStorage.removeItem('jwt_token');
             window.location.href = 'login.html';
         } finally {
@@ -104,11 +126,8 @@ document.addEventListener('DOMContentLoaded', () => {
         renderBookmarks(finalIdToRender, localSearchInput.value);
         if (!activeId) {
             const defaultLi = document.querySelector(`.sidebar li[data-id="${finalIdToRender}"]`);
-            if (defaultLi) {
-                defaultLi.classList.add('active');
-            } else {
-                document.querySelector(`.sidebar li[data-id="all"]`)?.classList.add('active');
-            }
+            if (defaultLi) defaultLi.classList.add('active');
+            else document.querySelector(`.sidebar li[data-id="all"]`)?.classList.add('active');
         }
     };
     
@@ -135,69 +154,46 @@ document.addEventListener('DOMContentLoaded', () => {
         if(!categoryNav || !sidebarFooterNav) return;
         categoryNav.innerHTML = '';
         sidebarFooterNav.innerHTML = '';
-        const canSetDefault = currentUser && !currentUser.roles.includes('viewer');
+        const canSetDefault = currentUser && currentUser.username && !currentUser.roles.includes('viewer');
 
         const allLi = document.createElement('li');
         allLi.dataset.id = 'all';
-        let allStarHTML = '';
-        if (canSetDefault) {
-            allStarHTML = `<i class="star-icon ${'all' === currentUser.defaultCategoryId ? 'fas fa-star is-default' : 'far fa-star'}" data-cat-id="all" title="设为默认"></i>`;
-        }
+        let allStarHTML = canSetDefault ? `<i class="star-icon ${'all' === currentUser.defaultCategoryId ? 'fas fa-star is-default' : 'far fa-star'}" data-cat-id="all" title="设为默认"></i>` : '';
         allLi.innerHTML = `<i class="fas fa-inbox fa-fw"></i><span>全部书签</span>${allStarHTML}`;
         sidebarFooterNav.appendChild(allLi);
-
-        const sortedCategories = [...allCategories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
-        const categoryMap = new Map(sortedCategories.map(cat => [cat.id, { ...cat, children: [] }]));
-        const tree = [];
-        for (const cat of sortedCategories) {
-            if (cat.parentId && categoryMap.has(cat.parentId)) {
-                categoryMap.get(cat.parentId).children.push(categoryMap.get(cat.id));
-            } else {
-                tree.push(categoryMap.get(cat.id));
-            }
-        }
-        const buildTreeUI = (nodes, container, level) => {
-            for (const node of nodes) {
-                const li = document.createElement('li');
-                li.dataset.id = node.id;
-                li.style.paddingLeft = `${15 + level * 20}px`;
-                let starHTML = '';
-                if (canSetDefault) {
-                    starHTML = `<i class="star-icon ${node.id === currentUser.defaultCategoryId ? 'fas fa-star is-default' : 'far fa-star'}" data-cat-id="${node.id}" title="设为默认"></i>`;
-                }
-                li.innerHTML = `<i class="fas fa-folder fa-fw"></i><span>${escapeHTML(node.name)}</span>${starHTML}`;
-                container.appendChild(li);
-                if (node.children.length > 0) buildTreeUI(node.children, container, level + 1);
-            }
-        };
-        buildTreeUI(tree, categoryNav, 0);
+        
+        // 【修复】直接遍历已排序的分类数组
+        allCategories.forEach(cat => {
+            const li = document.createElement('li');
+            li.dataset.id = cat.id;
+            li.style.paddingLeft = `${15 + (cat.level || 0) * 20}px`;
+            let starHTML = canSetDefault ? `<i class="star-icon ${cat.id === currentUser.defaultCategoryId ? 'fas fa-star is-default' : 'far fa-star'}" data-cat-id="${cat.id}" title="设为默认"></i>` : '';
+            li.innerHTML = `<i class="fas fa-folder fa-fw"></i><span>${escapeHTML(cat.name)}</span>${starHTML}`;
+            categoryNav.appendChild(li);
+        });
     };
     
+    // 【修复】全新的书签渲染逻辑
     const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
         if (!bookmarksGrid) return;
         
-        let categoryIdsToDisplay;
-        if (categoryId === 'all') {
-            categoryIdsToDisplay = new Set(allCategories.map(c => c.id));
-        } else {
-            categoryIdsToDisplay = getRecursiveCategoryIds( [categoryId], allCategories);
-        }
-        
-        let filteredBookmarks = allBookmarks.filter(bm => categoryIdsToDisplay.has(bm.categoryId));
+        let visibleCategoryIds = categoryId === 'all' 
+            ? new Set(allCategories.map(c => c.id)) 
+            : getCategoryWithDescendants(categoryId);
+
+        let filteredBookmarks = allBookmarks.filter(bm => visibleCategoryIds.has(bm.categoryId));
         
         if (searchTerm) {
             const lower = searchTerm.toLowerCase();
             filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lower) || bm.url.toLowerCase().includes(lower));
         }
         
-        const categorySortMap = new Map(allCategories.map(cat => [cat.id, cat.sortOrder || 0]));
-
+        // 【修复】按分类的层级顺序给书签排序
+        const categoryOrderMap = new Map(allCategories.map((cat, index) => [cat.id, index]));
         filteredBookmarks.sort((a, b) => {
-            const catA_sort = categorySortMap.get(a.categoryId) || 0;
-            const catB_sort = categorySortMap.get(b.categoryId) || 0;
-            if (catA_sort !== catB_sort) {
-                return catA_sort - catB_sort;
-            }
+            const orderA = categoryOrderMap.get(a.categoryId) ?? Infinity;
+            const orderB = categoryOrderMap.get(b.categoryId) ?? Infinity;
+            if (orderA !== orderB) return orderA - orderB;
             return (a.sortOrder || 0) - (b.sortOrder || 0);
         });
         
@@ -209,16 +205,17 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const fallbackIcon = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L8 12v1c0 1.1.9 2 2 2v1.93zM17.99 9.21c-.23-.6-.53-1.15-.9-1.64L13 12v-1c0-1.1-.9-2-2-2V7.07c3.95.49 7 3.85 7 7.93 0 .62-.08 1.21-.21 1.79z'/%3E%3C/svg%3E`;
 
-        // [新功能] 动态插入层级分隔符
         let htmlChunks = [];
-        let previousLevel = -1; // 使用-1作为初始值
-        const categoryLevelMap = new Map(allCategories.map(cat => [cat.id, cat.level]));
+        let previousTopLevelParentId = null;
 
         filteredBookmarks.forEach((bm, index) => {
-            const currentLevel = categoryLevelMap.get(bm.categoryId) ?? 0;
+            const categoryOfBookmark = categoryMap.get(bm.categoryId);
+            if (!categoryOfBookmark) return;
+
+            const currentTopLevelParentId = categoryOfBookmark.topLevelParentId;
             
-            // 如果层级发生变化，并且不是第一个项目，则插入分隔符
-            if (index > 0 && currentLevel !== previousLevel) {
+            // 【修复】当顶级分类变化时，插入分隔符
+            if (index > 0 && currentTopLevelParentId !== previousTopLevelParentId) {
                 htmlChunks.push('<div class="bookmark-level-separator"></div>');
             }
 
@@ -234,22 +231,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 </a>`
             );
             
-            previousLevel = currentLevel;
+            previousTopLevelParentId = currentTopLevelParentId;
         });
         
         bookmarksGrid.innerHTML = htmlChunks.join('');
     };
 
-    // --- Event Listeners ---
+    // --- 5. Event Listeners ---
     if (sidebarToggleBtn) {
-        sidebarToggleBtn.addEventListener('click', () => applySidebarState(!appLayout.classList.contains('sidebar-collapsed')));
+        const isInitiallyCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+        if(appLayout) appLayout.classList.toggle('sidebar-collapsed', isInitiallyCollapsed);
+        sidebarToggleBtn.addEventListener('click', () => {
+            const isCollapsed = appLayout.classList.toggle('sidebar-collapsed');
+            localStorage.setItem('sidebarCollapsed', isCollapsed);
+        });
     }
+
     if (mobileSidebarToggleBtn) {
         mobileSidebarToggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (appLayout) appLayout.classList.toggle('sidebar-open');
         });
     }
+
     if (appLayout) {
         appLayout.addEventListener('click', (e) => {
             if (e.target === appLayout) {
@@ -257,12 +261,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
     if (logoutButton) {
         logoutButton.addEventListener('click', () => {
             localStorage.removeItem('jwt_token');
             window.location.href = 'login.html';
         });
     }
+
     if (localSearchInput) {
         localSearchInput.addEventListener('keyup', debounce((e) => {
             renderBookmarks(document.querySelector('.sidebar .active')?.dataset.id || 'all', e.target.value);
@@ -273,11 +279,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
     const sidebar = document.querySelector('.sidebar');
     if (sidebar) {
         sidebar.addEventListener('click', async (e) => {
             const star = e.target.closest('.star-icon');
             const li = e.target.closest('li[data-id]');
+            
             if (star) {
                 e.stopPropagation();
                 const newDefaultId = star.dataset.catId;
@@ -290,10 +298,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     const activeLi = document.querySelector(`.sidebar li[data-id="${currentActiveId}"]`);
                     if(activeLi) activeLi.classList.add('active');
                 } catch (error) {
-                    alert('设置失败: ' + error.message);
+                    showToast('设置默认分类失败: ' + error.message, true);
                 }
                 return;
             }
+            
             if (li) {
                 if(appLayout) appLayout.classList.remove('sidebar-open');
                 document.querySelectorAll('.sidebar li').forEach(el => el.classList.remove('active'));
@@ -303,5 +312,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // --- 6. Start the application ---
     initializePage();
 });
