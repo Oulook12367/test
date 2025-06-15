@@ -34,7 +34,7 @@ function renderUserAdminTab(container) {
     const currentUsername = parseJwtPayload(localStorage.getItem('jwt_token'))?.sub || '';
     const usersArray = Array.isArray(allUsers) ? allUsers : Object.values(allUsers);
     
-    userList.innerHTML = ''; // 清空列表
+    userList.innerHTML = '';
     usersArray.forEach(user => {
         if (!user || !user.username) return;
         const li = document.createElement('li');
@@ -103,12 +103,12 @@ function clearUserForm() {
 }
 
 function renderUserFormRoles(activeRoles = ['viewer']) {
+    // ... 此函数逻辑不变 ...
     const container = document.getElementById('user-form-roles'); if (!container) return;
     container.innerHTML = '';
     const username = document.getElementById('user-form-username').value;
     const isPublicUser = username === 'public';
     const isAdminUser = username === 'admin';
-
     ['admin', 'editor', 'viewer'].forEach(role => {
         const currentRole = activeRoles[0] || 'viewer';
         const isChecked = currentRole === role;
@@ -118,39 +118,25 @@ function renderUserFormRoles(activeRoles = ['viewer']) {
 }
 
 function renderUserFormCategories(visibleIds = [], isDisabled = false) {
+    // ... 此函数逻辑不变 ...
     const container = document.getElementById('user-form-categories'); if (!container) return;
     container.innerHTML = '';
-    const sortedCategories = [...allCategories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
-    const categoryMap = new Map(sortedCategories.map(cat => [cat.id, { ...cat, children: [] }]));
-    const tree = [];
-    for (const cat of sortedCategories) {
-        if (cat.parentId && categoryMap.has(cat.parentId)) {
-            const parent = categoryMap.get(cat.parentId);
-            if(parent) parent.children.push(categoryMap.get(cat.id));
-        }
-        else tree.push(categoryMap.get(cat.id));
-    }
-    const buildCheckboxes = (nodes, level) => {
-        if (level >= 10) return;
-        for (const node of nodes) {
-            container.innerHTML += `<div><input type="checkbox" id="cat-perm-${node.id}" value="${node.id}" ${visibleIds.includes(node.id) ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}><label for="cat-perm-${node.id}" style="padding-left: ${level * 20}px">${escapeHTML(node.name)}</label></div>`;
-            if (node.children && node.children.length > 0) buildCheckboxes(node.children, level + 1);
-        }
-    };
-    buildCheckboxes(tree, 0);
+    const sortedCategories = getHierarchicalSortedCategories(allCategories);
+    sortedCategories.forEach(node => {
+        container.innerHTML += `<div><input type="checkbox" id="cat-perm-${node.id}" value="${node.id}" ${visibleIds.includes(node.id) ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}><label for="cat-perm-${node.id}" style="padding-left: ${(node.level||0) * 20}px">${escapeHTML(node.name)}</label></div>`;
+    });
 }
 
 function updateDefaultCategoryDropdown(form, selectedId) {
+    // ... 此函数逻辑不变 ...
     const defaultCatSelect = form.querySelector('#user-form-default-cat');
     const visibleCatCheckboxes = form.querySelectorAll('#user-form-categories input:checked');
     const visibleCatIds = Array.from(visibleCatCheckboxes).map(cb => cb.value);
     const currentSelectedValue = defaultCatSelect.value;
     defaultCatSelect.innerHTML = `<option value="all">全部书签</option>`;
     const categoriesToShow = allCategories.filter(cat => visibleCatIds.includes(cat.id));
-    categoriesToShow.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
-    categoriesToShow.forEach(cat => {
-        defaultCatSelect.innerHTML += `<option value="${cat.id}">${escapeHTML(cat.name)}</option>`;
-    });
+    populateCategoryDropdown(defaultCatSelect, categoriesToShow, null, null, { allowNoParent: false });
+    defaultCatSelect.prepend(new Option("全部书签", "all"));
     if (selectedId && (selectedId === 'all' || categoriesToShow.some(c => c.id === selectedId))) {
         defaultCatSelect.value = selectedId;
     } else if (categoriesToShow.some(c => c.id === currentSelectedValue)) {
@@ -223,6 +209,7 @@ document.getElementById('user-form')?.addEventListener('submit', async (e) => {
         showToast('用户保存成功！');
         invalidateCache();
 
+        // 【修复】手动更新本地 allUsers 数组
         if (isEditing) {
             const userIndex = allUsers.findIndex(u => u.username === savedUser.username);
             if (userIndex > -1) allUsers[userIndex] = savedUser;
@@ -238,7 +225,9 @@ document.getElementById('user-form')?.addEventListener('submit', async (e) => {
             return;
         }
         
+        // 使用更新后的 allUsers 重新渲染UI
         renderUserAdminTab(document.getElementById('tab-users'));
+        // 选中刚刚新增或编辑的用户
         populateUserForm(savedUser);
 
     } catch (error) {
