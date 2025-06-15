@@ -38,13 +38,13 @@ function renderUserAdminTab(container) {
     const currentUsername = parseJwtPayload(localStorage.getItem('jwt_token'))?.sub || '';
     const usersArray = Array.isArray(allUsers) ? allUsers : Object.values(allUsers);
     
-    userList.innerHTML = ''; // 清空列表
+    userList.innerHTML = '';
     usersArray.forEach(user => {
         if (!user || !user.username) return;
         const li = document.createElement('li');
         li.dataset.username = user.username;
         li.innerHTML = `<span>${user.username === 'public' ? `<i class="fas fa-eye fa-fw"></i> ${user.username} (公共模式)` : `${user.username} (${(user.roles || []).join(', ')})`}</span>`;
-        if (user.username !== 'public' && user.username !== currentUsername) {
+        if (user.username !== currentUsername) {
             const delBtn = document.createElement('button');
             delBtn.className = 'button-icon danger delete-user-btn';
             delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
@@ -122,12 +122,11 @@ function renderUserFormRoles(activeRoles = ['viewer']) {
     container.innerHTML = '';
     const username = document.getElementById('user-form-username').value;
     const isPublicUser = username === 'public';
-    const isAdminUser = username === 'admin';
 
     ['admin', 'editor', 'viewer'].forEach(role => {
         const currentRole = activeRoles[0] || 'viewer';
         const isChecked = currentRole === role;
-        const isDisabled = (isAdminUser && role !== 'admin') || (isPublicUser && role !== 'viewer');
+        const isDisabled = isPublicUser && role !== 'viewer';
         container.innerHTML += `<div><input type="radio" id="role-${role}" name="role-selection" value="${role}" ${isChecked ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}><label for="role-${role}">${role}</label></div>`;
     });
 }
@@ -160,7 +159,6 @@ function updateDefaultCategoryDropdown(form, selectedId) {
     defaultCatSelect.innerHTML = `<option value="all">全部书签</option>`;
     
     const categoriesToShow = allCategories.filter(cat => visibleCatIds.includes(cat.id));
-    // 使用全局排序函数来填充下拉菜单
     const sortedToShow = getHierarchicalSortedCategories(categoriesToShow);
     
     sortedToShow.forEach(cat => {
@@ -179,14 +177,11 @@ function updateDefaultCategoryDropdown(form, selectedId) {
 
 // --- 事件监听器 ---
 
-// 【修复】使用事件委托来处理所有动态内容的点击事件
 document.addEventListener('click', event => {
-    // 确保只在用户管理标签页激活时生效
     if (document.getElementById('tab-users')?.classList.contains('active')) {
         const target = event.target;
         const userLi = target.closest('li[data-username]');
 
-        // 处理删除按钮
         if (target.closest('.delete-user-btn')) {
             event.stopPropagation();
             const username = userLi.dataset.username;
@@ -199,24 +194,19 @@ document.addEventListener('click', event => {
                 } catch (error) { showToast(`删除失败: ${error.message}`, true); }
             });
         } 
-        // 处理列表项点击
         else if (userLi) {
             const usersArray = Array.isArray(allUsers) ? allUsers : Object.values(allUsers);
             const user = usersArray.find(u => u.username === userLi.dataset.username);
             if (user) populateUserForm(user);
         } 
-        // 处理清空按钮
         else if (target.closest('#user-form-clear-btn')) {
             clearUserForm();
         }
     }
 });
 
-// 【修复】使用事件委托来处理表单提交
 document.addEventListener('submit', async (e) => {
-    // 确保是我们关心的表单
     if (e.target.id === 'user-form') {
-        // 【关键】阻止浏览器默认的提交（刷新）行为
         e.preventDefault();
         
         const form = e.target;
@@ -253,19 +243,15 @@ document.addEventListener('submit', async (e) => {
             showToast('用户保存成功！');
             invalidateCache();
 
-            // 【修复】乐观更新：手动更新本地 allUsers 数组
             if (isEditing) {
                 const userIndex = allUsers.findIndex(u => u.username === savedUser.username);
                 if (userIndex > -1) {
                     allUsers[userIndex] = savedUser;
-                } else { // 如果因为某种原因没找到，则添加
-                    allUsers.push(savedUser);
                 }
             } else {
                 allUsers.push(savedUser);
             }
 
-            // 检查当前用户权限是否变更
             const token = localStorage.getItem('jwt_token');
             if (token && parseJwtPayload(token).sub === savedUser.username && !savedUser.roles.includes('admin')) {
                 showToast('您的管理员权限已被移除，将退出管理后台。', true);
@@ -274,9 +260,7 @@ document.addEventListener('submit', async (e) => {
                 return;
             }
             
-            // 使用更新后的 allUsers 重新渲染UI
             renderUserAdminTab(document.getElementById('tab-users'));
-            // 保持选中刚刚新增或编辑的用户
             populateUserForm(savedUser);
 
         } catch (error) {
@@ -289,7 +273,6 @@ document.addEventListener('submit', async (e) => {
 });
 
 
-// 当可见分类变化时，自动更新默认分类的下拉选项
 document.addEventListener('change', event => {
     if (document.getElementById('tab-users')?.classList.contains('active')) {
         const target = event.target;
