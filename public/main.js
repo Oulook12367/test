@@ -1,292 +1,307 @@
-/* --- Glassmorphism UI - Final Polished Version by Gemini --- */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+document.addEventListener('DOMContentLoaded', () => {
+    // --- Element Selectors ---
+    const appLayout = document.getElementById('app-layout');
+    const themeToggleButton = document.getElementById('theme-toggle');
+    const localSearchInput = document.getElementById('local-search');
+    const searchEngineSelect = document.getElementById('search-engine');
+    const bookmarksGrid = document.getElementById('bookmarks-grid');
+    const categoryNav = document.getElementById('category-nav');
+    const sidebarFooterNav = document.getElementById('sidebar-footer-nav');
+    const logoutButton = document.getElementById('logout-btn');
+    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+    const mobileSidebarToggleBtn = document.getElementById('mobile-sidebar-toggle');
+    const actionBtn = document.getElementById('action-btn');
 
-:root {
-    --font-main: 'Inter', sans-serif;
-    --border-radius: 20px;
-    --transition-speed: 0.3s ease;
-    --sidebar-width: 280px;
-}
+    // --- State ---
+    let allBookmarks = [], allCategories = [], currentUser = null;
 
-/* 1. GLOBAL & BACKGROUND */
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-    font-family: var(--font-main);
-    background-color: #111827;
-    color: #ffffff;
-    height: 100vh;
-}
-/* 在桌面端，主应用页面本身不滚动，由内部容器滚动 */
-body:not(.login-page) { overflow: hidden; }
-
-.page-background {
-    position: fixed; top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: linear-gradient(135deg, #ff00ff, #00ffff);
-    z-index: -2; overflow: hidden;
-}
-.page-background::before, .page-background::after {
-    content: ''; position: absolute;
-    width: clamp(300px, 40vw, 600px); height: clamp(300px, 40vw, 600px);
-    border-radius: 50%; opacity: 0.6; filter: blur(80px); z-index: -1;
-}
-.page-background::before {
-    top: -10%; left: -10%;
-    background: linear-gradient(45deg, #f87171, #60a5fa);
-    animation: move-blob 15s infinite alternate;
-}
-.page-background::after {
-    bottom: -10%; right: -10%;
-    background: linear-gradient(45deg, #34d399, #fbbf24);
-    animation: move-blob 20s infinite alternate-reverse;
-}
-@keyframes move-blob {
-    from { transform: translate(0, 0) scale(1); }
-    to { transform: translate(100px, 50px) scale(1.2); }
-}
-
-/* 2. GLASS PANE UTILITY */
-.glass-pane {
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(25px);
-    -webkit-backdrop-filter: blur(25px);
-    border-radius: var(--border-radius);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-    transition: var(--transition-speed);
-}
-
-/* 3. GENERIC COMPONENTS */
-.button, button {
-    display: inline-flex; align-items: center; justify-content: center;
-    gap: 0.5rem; padding: 12px 24px; font-weight: 700;
-    border-radius: 12px; cursor: pointer; border: none;
-    transition: all 0.3s; color: white;
-    background: rgba(255, 255, 255, 0.1);
-    white-space: nowrap; /* Prevents text wrapping in buttons */
-}
-.button:hover, button:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: translateY(-2px);
-}
-.button.button-primary {
-    background: rgba(99, 102, 241, 0.8);
-}
-.button.button-primary:hover {
-    background: rgba(99, 102, 241, 1);
-}
-.button-icon.danger:hover {
-    background: rgba(239, 68, 68, 0.2);
-}
-
-.button-icon, #action-btn {
-    padding: 0;
-    width: 44px; height: 44px;
-    font-size: 1.2rem; border-radius: 50%;
-    flex-shrink: 0; /* Prevent buttons from shrinking */
-}
-#action-btn {
-    font-size: 1rem; gap: 0.5rem; width: auto; padding: 0 20px; border-radius: 12px;
-}
-#action-btn i { font-size: 1.2rem; margin: 0; }
-
-input, textarea, select {
-    width: 100%; background: transparent; border: none;
-    border-bottom: 2px solid rgba(255, 255, 255, 0.2);
-    padding: 10px 4px; color: white; font-size: 1rem;
-    transition: border-color 0.3s;
-}
-input:focus, textarea:focus, select:focus { outline: none; border-bottom-color: white; }
-input::placeholder, textarea::placeholder { color: rgba(255, 255, 255, 0.7); }
-
-select {
-    -webkit-appearance: none; -moz-appearance: none; appearance: none;
-    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-    background-repeat: no-repeat;
-    background-position: right 10px center;
-    background-size: 1em;
-    padding-right: 2rem;
-}
-select option {
-    background: rgba(30, 41, 59, 0.95);
-    color: #f1f5f9;
-}
-
-label { display: block; margin-bottom: 0.5rem; font-weight: 700; }
-.form-group { margin-bottom: 1rem; }
-.error-message { color: #f87171; text-align: center; min-height: 1.2em; font-weight: 700;}
-.empty-message { text-align: center; padding: 4rem 0; font-size: 1.2rem; opacity: 0.7; }
-
-/* 4. LAYOUTS */
-body.login-page { display: flex; align-items: center; justify-content: center; padding: 1rem; }
-.auth-box { width: 100%; max-width: 384px; padding: 2rem; text-align: center; }
-.auth-title { font-size: 2.25rem; font-weight: 700; margin-bottom: 1rem; }
-.auth-subtitle { margin-bottom: 1.5rem; opacity: 0.8; }
-.auth-box .full-width { width: 100%; padding: 14px; }
-#login-form .button { margin-top: 1.5rem; }
-
-#app-layout { display: flex; height: 100vh; padding: 1.5rem; gap: 1.5rem; }
-.sidebar { width: var(--sidebar-width); flex-shrink: 0; padding: 1.5rem; display: flex; flex-direction: column; }
-.sidebar-header { padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.2); }
-.category-nav { list-style: none; }
-.category-nav.dynamic { flex-grow: 1; overflow-y: auto; padding-right: 10px;}
-#sidebar-footer-nav { margin-top: auto; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.2); }
-.category-nav li { display: flex; align-items: center; gap: 0.75rem; padding: 12px; border-radius: 10px; cursor: pointer; font-weight: 700; transition: var(--transition-speed); }
-.category-nav li:hover { background: rgba(255, 255, 255, 0.15); }
-.category-nav li.active { background: rgba(255, 255, 255, 0.2); }
-.star-icon { margin-left: auto; padding: 5px; cursor: pointer; opacity: 0.7; transition: var(--transition-speed); z-index: 5; position: relative;}
-.star-icon:hover, .star-icon.is-default { opacity: 1; transform: scale(1.2); }
-.star-icon.is-default { color: #fbbf24; }
-.main-content { flex-grow: 1; display: flex; flex-direction: column; gap: 1.5rem; min-width: 0; }
-.header { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1.5rem; }
-.header-right { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; }
-.search-bar { flex-grow: 1; }
-.search-bar form { display: flex; align-items: center; }
-.search-bar select {
-    width: 130px;
-    flex-shrink: 0;
-    border-radius: 0;
-    border-right: 2px solid rgba(255,255,255,0.5);
-}
-.search-bar input { padding-left: 1rem; }
-
-#bookmarks-grid {
-    flex-grow: 1;
-    overflow-y: auto;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 1rem;
-    padding: 0 10px 10px 0;
-    align-content: start;
-}
-.bookmark-card {
-    padding: 1.25rem;
-    text-decoration: none;
-    color: white;
-    display: flex;
-    flex-direction: column;
-}
-.bookmark-card:hover { transform: translateY(-5px); box-shadow: 0 12px 40px rgba(31, 38, 135, 0.4); }
-.bookmark-card h3 { display: flex; align-items: center; gap: 12px; font-size: 1.1rem; font-weight: 700; flex-shrink: 0; }
-.bookmark-card img { width: 24px; height: 24px; border-radius: 6px; }
-.bookmark-card p {
-    font-size: 0.9rem; opacity: 0.8; margin-top: 0.75rem;
-    flex-grow: 1; overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-}
-.bookmark-level-separator {
-    grid-column: 1 / -1;
-    height: 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.15);
-    margin: 1rem 0 0.5rem 0;
-}
-
-#admin-page-container { display: flex; flex-direction: column; height: 100vh; padding: 1.5rem; gap: 1.5rem; }
-.admin-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; flex-shrink: 0; }
-.admin-header h1 { font-size: 1.5rem; }
-.admin-panel-container { flex-grow: 1; display: flex; overflow: hidden; }
-.admin-panel-nav { width: 240px; flex-shrink: 0; padding: 1rem; border-top-right-radius: 0; border-bottom-right-radius: 0; background: rgba(255,255,255,0.1); }
-.admin-panel-content { flex-grow: 1; padding: 1.5rem; border-top-left-radius: 0; border-bottom-left-radius: 0; background: rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden; }
-.admin-panel-nav a { display: flex; align-items: center; gap: 0.75rem; padding: 12px; border-radius: 10px; text-decoration: none; color: white; margin-bottom: 0.5rem; font-weight: 700; }
-.admin-panel-nav a.active, .admin-panel-nav a:hover { background: rgba(255, 255, 255, 0.15); }
-.admin-tab-content { display: none; flex-grow: 1; flex-direction: column; overflow: hidden; }
-.admin-tab-content.active { display: flex; animation: fadeIn 0.5s; }
-.admin-panel-actions { margin-top: auto; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 1rem; display: flex; gap: 1rem; }
-.category-admin-header, .bookmark-admin-header { display: flex; align-items: center; gap: 1rem; padding: 0.75rem; font-weight: 700; border-bottom: 1px solid rgba(255, 255, 255, 0.1); flex-shrink: 0;}
-#category-admin-list, #bookmark-admin-list-container ul { list-style: none; }
-#category-admin-list li, #bookmark-admin-list-container li { display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.1);}
-.category-admin-header span:nth-child(1), .cat-order-input, .bm-sort-order { flex: 0 0 50px; text-align: center; }
-.category-admin-header span:nth-child(2), .cat-name-cell, .bm-name-input { flex-grow: 1; }
-.category-admin-header span:nth-child(3), .cat-parent-select, .bm-category-select { flex: 0 0 220px; }
-.category-admin-header span:nth-child(4), #category-admin-list li .delete-cat-btn { flex: 0 0 40px; }
-.bookmark-admin-header span:nth-child(2) { flex-grow: 1; }
-.bookmark-admin-header span:nth-child(3) { flex: 0 0 220px; }
-.bookmark-admin-header span:nth-child(4), .bm-admin-actions { flex: 0 0 100px; display: flex; justify-content: flex-end; }
-#user-management-container { display: grid; grid-template-columns: 1fr 2fr; gap: 2rem; height: 100%; overflow: hidden;}
-.user-list-container, .user-form-container { display: flex; flex-direction: column; overflow: hidden; }
-#user-list { list-style: none; overflow-y: auto; flex-grow: 1; border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; }
-#user-list li { padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.2); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-#user-list li:last-child { border-bottom: none; }
-#user-list li:hover, #user-list li.selected { background-color: rgba(255, 255, 255, 0.1); }
-.user-form-container form { height: 100%; display: flex; flex-direction: column; }
-.form-group-inline { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: 1rem; margin-bottom: 1rem; }
-.form-group-inline label { margin-bottom: 0; text-align: right; font-weight: normal; opacity: 0.8; }
-.form-group.flex-grow { flex-grow: 1; min-height: 0; display: flex; flex-direction: column; }
-#user-form-categories.checkbox-group { flex-grow: 1; overflow-y: auto; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 1rem; }
-.checkbox-group.horizontal { display: flex; flex-direction: row; flex-wrap: wrap; gap: 1rem; border: none; padding: 0; align-items: center; }
-.checkbox-group div { display: flex; align-items: center; gap: 0.25rem; }
-.checkbox-group input[type="checkbox"],
-.checkbox-group input[type="radio"] { width: auto; margin: 0; flex-shrink: 0; }
-
-.modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); backdrop-filter: blur(5px); z-index: 1000; justify-content: center; align-items: center; }
-.modal { padding: 2rem; max-width: 500px; width: 90%; }
-.modal .close-btn { position: absolute; top: 1rem; right: 1rem; font-size: 1.5rem; color: white; cursor: pointer; border: none; background: none; }
-.modal-content.small { text-align: center; }
-.confirm-buttons { display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem;}
-#bookmark-edit-modal { z-index: 1001; }
-#confirm-modal { z-index: 1002; }
-
-#app-layout.sidebar-collapsed .sidebar { margin-left: calc(-1 * var(--sidebar-width) - 1.5rem); }
-#app-layout.sidebar-collapsed { padding-left: 0; }
-#mobile-sidebar-toggle { display: none; }
-
-/* --- Mobile Responsiveness --- */
-@media (max-width: 900px) {
-    /* [修复] 让整个页面可以滚动 */
-    body:not(.login-page) { overflow: auto; }
-    #app-layout, #admin-page-container { height: auto; }
-
-    #app-layout { padding: 0; flex-direction: column; gap: 0; }
-    #sidebar-toggle-btn { display: none; }
-    #mobile-sidebar-toggle { display: inline-flex; }
-    .main-content { padding: 1rem; gap: 1rem; border-radius: 0; }
-    .header { padding: 0.75rem; flex-wrap: wrap; gap: 0.75rem; }
-    .header-left { flex-grow: 1; }
-    .header-right { margin-left: 0; }
-    .search-bar { width: 100%; order: 3; }
-    .sidebar { position: fixed; top: 0; left: 0; height: 100%; z-index: 2000; transform: translateX(-100%); box-shadow: 4px 0 25px rgba(0,0,0,0.3); }
-    #app-layout.sidebar-open .sidebar { transform: translateX(0); }
-    #app-layout::after { content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1999; opacity: 0; visibility: hidden; transition: var(--transition-speed); }
-    #app-layout.sidebar-open::after { opacity: 1; visibility: visible; }
+    // --- Helpers ---
+    const getRecursiveCategoryIds = (initialIds, categories) => {
+        const fullIdSet = new Set(initialIds);
+        const queue = [...initialIds];
+        while (queue.length > 0) {
+            const parentId = queue.shift();
+            const children = categories.filter(c => c.parentId === parentId);
+            for (const child of children) {
+                if (!fullIdSet.has(child.id)) {
+                    fullIdSet.add(child.id);
+                    queue.push(child.id);
+                }
+            }
+        }
+        return fullIdSet;
+    };
     
-    #admin-page-container { padding: 1rem; gap: 1rem; }
-    .admin-header h1 { font-size: 1.2rem; }
-    .admin-header .button { padding: 8px 12px; font-size: 0.9rem;}
-    .admin-panel-container { flex-direction: column; gap: 1rem; background: transparent; border: none; box-shadow: none; overflow: visible; }
-    .admin-panel-nav, .admin-panel-content { width: 100%; border-radius: var(--border-radius); background: rgba(255,255,255,0.1); border: 1px solid rgba(255, 255, 255, 0.1); }
-    /* [修复] 移除所有内部滚动条 */
-    .admin-panel-content, .admin-tab-content, .user-list-container, #user-list, .user-form-container { overflow: visible; }
+    const applySidebarState = (isCollapsed) => {
+        if (appLayout) {
+            appLayout.classList.toggle('sidebar-collapsed', isCollapsed);
+            localStorage.setItem('sidebarCollapsed', isCollapsed);
+        }
+    };
+
+    // --- Data Loading & Rendering ---
+    async function initializePage() {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            if (!token) {
+                 const publicData = await apiRequest('data');
+                 if (publicData && publicData.isPublic) {
+                     allCategories = publicData.categories || [];
+                     allBookmarks = publicData.bookmarks || [];
+                     currentUser = { roles: ['viewer'], defaultCategoryId: publicData.defaultCategoryId || 'all' };
+                     updateHeader(true);
+                     renderUI();
+                     if(appLayout) appLayout.style.display = 'flex';
+                     return;
+                 }
+                 throw new Error("No token and not in public mode.");
+            }
+            
+            let currentUsername = '';
+            try { currentUsername = parseJwtPayload(token).sub; } 
+            catch (e) { throw new Error("Invalid token."); }
+
+            const data = await apiRequest('data');
+            const userFromServer = data.users.find(u => u.username === currentUsername);
+            if (!userFromServer) { throw new Error("Logged in user not found in data from server."); }
+            
+            allCategories = data.categories || [];
+            allBookmarks = data.bookmarks || [];
+            currentUser = userFromServer;
+
+            // [新功能] 预先计算并存储每个分类的“深度等级”
+            const categoryMap = new Map(allCategories.map(cat => [cat.id, cat]));
+            allCategories.forEach(cat => {
+                let level = 0;
+                let current = cat;
+                while (current && current.parentId && categoryMap.has(current.parentId)) {
+                    level++;
+                    current = categoryMap.get(current.parentId);
+                    if (level > 20) break; // 防止因循环依赖导致的死循环
+                }
+                cat.level = level;
+            });
+            
+            updateHeader(false);
+            renderUI();
+            if(appLayout) appLayout.style.display = 'flex';
+
+        } catch (error) {
+            console.error("Initialization failed:", error);
+            localStorage.removeItem('jwt_token');
+            window.location.href = 'login.html';
+        } finally {
+            document.body.classList.remove('is-loading');
+        }
+    }
+
+    const renderUI = () => {
+        renderCategories();
+        const activeId = document.querySelector('.sidebar .active')?.dataset.id;
+        const initialIdToRender = activeId || currentUser.defaultCategoryId || 'all';
+        const isVisible = initialIdToRender === 'all' || allCategories.some(c => c.id === initialIdToRender);
+        const finalIdToRender = isVisible ? initialIdToRender : 'all';
+        renderBookmarks(finalIdToRender, localSearchInput.value);
+        if (!activeId) {
+            const defaultLi = document.querySelector(`.sidebar li[data-id="${finalIdToRender}"]`);
+            if (defaultLi) {
+                defaultLi.classList.add('active');
+            } else {
+                document.querySelector(`.sidebar li[data-id="all"]`)?.classList.add('active');
+            }
+        }
+    };
     
-    .category-admin-header, .bookmark-admin-header { display: none; }
-    #category-admin-list li, #bookmark-admin-list-container li {
-        display: grid;
-        grid-template-columns: 50px 1fr 40px;
-        grid-template-areas: 
-            "sort name actions"
-            "sort select actions";
-        gap: 0.5rem 1rem;
-        padding: 0.75rem;
-        margin-bottom: 0.5rem;
-        border-radius: 8px;
-        background: rgba(255,255,255,0.05);
-        border: none;
+    function updateHeader(isPublic) {
+        if (!actionBtn || !logoutButton) return;
+        if (isPublic) {
+            actionBtn.innerHTML = '<i class="fas fa-key"></i> 登录';
+            actionBtn.onclick = () => window.location.href = 'login.html';
+            actionBtn.style.display = 'inline-flex';
+            logoutButton.style.display = 'none';
+        } else {
+            if(currentUser && currentUser.roles.includes('admin')) {
+                actionBtn.innerHTML = '<i class="fas fa-cogs"></i> 管理后台';
+                actionBtn.onclick = () => window.location.href = 'admin.html';
+                actionBtn.style.display = 'inline-flex';
+            } else {
+                actionBtn.style.display = 'none';
+            }
+            logoutButton.style.display = 'inline-flex';
+        }
     }
-    .cat-order-input, .bm-sort-order { grid-area: sort; }
-    .cat-name-cell, .bm-name-input { grid-area: name; }
-    .cat-parent-select, .bm-category-select { grid-area: select; }
-    .delete-cat-btn, .bm-admin-actions { grid-area: actions; display: flex; align-items: center; justify-content: center; }
 
-    #category-admin-list li > *, #bookmark-admin-list-container li > * {
-       margin-bottom: 0;
+    const renderCategories = () => {
+        if(!categoryNav || !sidebarFooterNav) return;
+        categoryNav.innerHTML = '';
+        sidebarFooterNav.innerHTML = '';
+        const canSetDefault = currentUser && !currentUser.roles.includes('viewer');
+
+        const allLi = document.createElement('li');
+        allLi.dataset.id = 'all';
+        let allStarHTML = '';
+        if (canSetDefault) {
+            allStarHTML = `<i class="star-icon ${'all' === currentUser.defaultCategoryId ? 'fas fa-star is-default' : 'far fa-star'}" data-cat-id="all" title="设为默认"></i>`;
+        }
+        allLi.innerHTML = `<i class="fas fa-inbox fa-fw"></i><span>全部书签</span>${allStarHTML}`;
+        sidebarFooterNav.appendChild(allLi);
+
+        const sortedCategories = [...allCategories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
+        const categoryMap = new Map(sortedCategories.map(cat => [cat.id, { ...cat, children: [] }]));
+        const tree = [];
+        for (const cat of sortedCategories) {
+            if (cat.parentId && categoryMap.has(cat.parentId)) {
+                categoryMap.get(cat.parentId).children.push(categoryMap.get(cat.id));
+            } else {
+                tree.push(categoryMap.get(cat.id));
+            }
+        }
+        const buildTreeUI = (nodes, container, level) => {
+            for (const node of nodes) {
+                const li = document.createElement('li');
+                li.dataset.id = node.id;
+                li.style.paddingLeft = `${15 + level * 20}px`;
+                let starHTML = '';
+                if (canSetDefault) {
+                    starHTML = `<i class="star-icon ${node.id === currentUser.defaultCategoryId ? 'fas fa-star is-default' : 'far fa-star'}" data-cat-id="${node.id}" title="设为默认"></i>`;
+                }
+                li.innerHTML = `<i class="fas fa-folder fa-fw"></i><span>${escapeHTML(node.name)}</span>${starHTML}`;
+                container.appendChild(li);
+                if (node.children.length > 0) buildTreeUI(node.children, container, level + 1);
+            }
+        };
+        buildTreeUI(tree, categoryNav, 0);
+    };
+    
+    const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
+        if (!bookmarksGrid) return;
+        
+        let categoryIdsToDisplay;
+        if (categoryId === 'all') {
+            categoryIdsToDisplay = new Set(allCategories.map(c => c.id));
+        } else {
+            categoryIdsToDisplay = getRecursiveCategoryIds( [categoryId], allCategories);
+        }
+        
+        let filteredBookmarks = allBookmarks.filter(bm => categoryIdsToDisplay.has(bm.categoryId));
+        
+        if (searchTerm) {
+            const lower = searchTerm.toLowerCase();
+            filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lower) || bm.url.toLowerCase().includes(lower));
+        }
+        
+        const categorySortMap = new Map(allCategories.map(cat => [cat.id, cat.sortOrder || 0]));
+
+        filteredBookmarks.sort((a, b) => {
+            const catA_sort = categorySortMap.get(a.categoryId) || 0;
+            const catB_sort = categorySortMap.get(b.categoryId) || 0;
+            if (catA_sort !== catB_sort) {
+                return catA_sort - catB_sort;
+            }
+            return (a.sortOrder || 0) - (b.sortOrder || 0);
+        });
+        
+        bookmarksGrid.innerHTML = '';
+        if(filteredBookmarks.length === 0){
+            bookmarksGrid.innerHTML = '<p class="empty-message">这里什么都没有...</p>';
+            return;
+        }
+        
+        const fallbackIcon = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L8 12v1c0 1.1.9 2 2 2v1.93zM17.99 9.21c-.23-.6-.53-1.15-.9-1.64L13 12v-1c0-1.1-.9-2-2-2V7.07c3.95.49 7 3.85 7 7.93 0 .62-.08 1.21-.21 1.79z'/%3E%3C/svg%3E`;
+
+        // [新功能] 动态插入层级分隔符
+        let htmlChunks = [];
+        let previousLevel = -1; // 使用-1作为初始值
+        const categoryLevelMap = new Map(allCategories.map(cat => [cat.id, cat.level]));
+
+        filteredBookmarks.forEach((bm, index) => {
+            const currentLevel = categoryLevelMap.get(bm.categoryId) ?? 0;
+            
+            // 如果层级发生变化，并且不是第一个项目，则插入分隔符
+            if (index > 0 && currentLevel !== previousLevel) {
+                htmlChunks.push('<div class="bookmark-level-separator"></div>');
+            }
+
+            let domain = '';
+            try { domain = new URL(bm.url).hostname; } catch (e) {}
+            const gStaticIconUrl = `https://www.google.com/s2/favicons?sz=64&domain_url=${domain}`;
+            const finalIconSrc = bm.icon || gStaticIconUrl;
+            
+            htmlChunks.push(
+                `<a href="${bm.url}" class="bookmark-card glass-pane" target="_blank" rel="noopener noreferrer">
+                    <h3><img src="${finalIconSrc}" alt="" onerror="this.onerror=null;this.src='${fallbackIcon}'"> ${escapeHTML(bm.name)}</h3>
+                    <p>${escapeHTML(bm.description || '')}</p>
+                </a>`
+            );
+            
+            previousLevel = currentLevel;
+        });
+        
+        bookmarksGrid.innerHTML = htmlChunks.join('');
+    };
+
+    // --- Event Listeners ---
+    if (sidebarToggleBtn) {
+        sidebarToggleBtn.addEventListener('click', () => applySidebarState(!appLayout.classList.contains('sidebar-collapsed')));
     }
-    .cat-name-cell { padding-left: 0 !important; }
-
-    /* [修复] 用户管理页在移动端改为堆叠布局 */
-    #user-management-container { grid-template-columns: 1fr; gap: 1.5rem; height: auto; }
-    .form-group-inline { grid-template-columns: 1fr; }
-    .form-group-inline label { text-align: left; }
-}
-
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    if (mobileSidebarToggleBtn) {
+        mobileSidebarToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (appLayout) appLayout.classList.toggle('sidebar-open');
+        });
+    }
+    if (appLayout) {
+        appLayout.addEventListener('click', (e) => {
+            if (e.target === appLayout) {
+                 appLayout.classList.remove('sidebar-open');
+            }
+        });
+    }
+    if (logoutButton) {
+        logoutButton.addEventListener('click', () => {
+            localStorage.removeItem('jwt_token');
+            window.location.href = 'login.html';
+        });
+    }
+    if (localSearchInput) {
+        localSearchInput.addEventListener('keyup', debounce((e) => {
+            renderBookmarks(document.querySelector('.sidebar .active')?.dataset.id || 'all', e.target.value);
+        }, 250));
+        localSearchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.target.value.trim() !== '') {
+                window.open(searchEngineSelect.value + encodeURIComponent(e.target.value.trim()), '_blank');
+            }
+        });
+    }
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) {
+        sidebar.addEventListener('click', async (e) => {
+            const star = e.target.closest('.star-icon');
+            const li = e.target.closest('li[data-id]');
+            if (star) {
+                e.stopPropagation();
+                const newDefaultId = star.dataset.catId;
+                if (newDefaultId === currentUser.defaultCategoryId) return;
+                try {
+                    await apiRequest('users/self', 'PUT', { defaultCategoryId: newDefaultId });
+                    currentUser.defaultCategoryId = newDefaultId;
+                    const currentActiveId = document.querySelector('.sidebar li.active')?.dataset.id;
+                    renderCategories();
+                    const activeLi = document.querySelector(`.sidebar li[data-id="${currentActiveId}"]`);
+                    if(activeLi) activeLi.classList.add('active');
+                } catch (error) {
+                    alert('设置失败: ' + error.message);
+                }
+                return;
+            }
+            if (li) {
+                if(appLayout) appLayout.classList.remove('sidebar-open');
+                document.querySelectorAll('.sidebar li').forEach(el => el.classList.remove('active'));
+                li.classList.add('active');
+                renderBookmarks(li.dataset.id, localSearchInput.value);
+            }
+        });
+    }
+    
+    initializePage();
+});
