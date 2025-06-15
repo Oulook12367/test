@@ -320,8 +320,11 @@ export async function onRequest(context) {
                 const passwordHash = await hashPassword(password, salt);
                 dataToModify.users[newUsername] = { username: newUsername, passwordHash, salt, roles, permissions, defaultCategoryId: 'all' };
                 const newVersion = await saveSiteData(env, dataToModify);
-                const { passwordHash: p, salt: s, ...newUser } = dataToModify.users[newUsername];
-                return jsonResponse(newUser, 201, { 'ETag': newVersion });
+
+const { passwordHash: p, salt: s, ...newUser } = dataToModify.users[newUsername];
+// 将 newUser 和 newVersion 一起放入返回的 JSON 中
+const responsePayload = { user: newUser, version: newVersion };
+return jsonResponse(responsePayload, 201, { 'ETag': newVersion });
             }
 
             const userPathMatch = apiPath.match(/^users\/(.+)$/);
