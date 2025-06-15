@@ -68,6 +68,20 @@ document.addEventListener('DOMContentLoaded', () => {
             allCategories = data.categories || [];
             allBookmarks = data.bookmarks || [];
             currentUser = userFromServer;
+
+            // [新功能] 预先计算并存储每个分类的“深度等级”
+            const categoryMap = new Map(allCategories.map(cat => [cat.id, cat]));
+            allCategories.forEach(cat => {
+                let level = 0;
+                let current = cat;
+                while (current && current.parentId && categoryMap.has(current.parentId)) {
+                    level++;
+                    current = categoryMap.get(current.parentId);
+                    if (level > 20) break; // 防止因循环依赖导致的死循环
+                }
+                cat.level = level;
+            });
+            
             updateHeader(false);
             renderUI();
             if(appLayout) appLayout.style.display = 'flex';
@@ -159,7 +173,6 @@ document.addEventListener('DOMContentLoaded', () => {
         buildTreeUI(tree, categoryNav, 0);
     };
     
-    // [!!!] 核心修复：替换整个 renderBookmarks 函数
     const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
         if (!bookmarksGrid) return;
         
@@ -177,18 +190,14 @@ document.addEventListener('DOMContentLoaded', () => {
             filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lower) || bm.url.toLowerCase().includes(lower));
         }
         
-        // --- [修复] 创建一个 map 用于快速查找分类的排序值 ---
         const categorySortMap = new Map(allCategories.map(cat => [cat.id, cat.sortOrder || 0]));
 
-        // --- [修复] 更新排序逻辑，使其与 admin.js 保持一致 ---
         filteredBookmarks.sort((a, b) => {
             const catA_sort = categorySortMap.get(a.categoryId) || 0;
             const catB_sort = categorySortMap.get(b.categoryId) || 0;
-            // 1. 首先比较分类的排序
             if (catA_sort !== catB_sort) {
                 return catA_sort - catB_sort;
             }
-            // 2. 如果分类相同，则比较书签自身的排序
             return (a.sortOrder || 0) - (b.sortOrder || 0);
         });
         
@@ -200,18 +209,35 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const fallbackIcon = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L8 12v1c0 1.1.9 2 2 2v1.93zM17.99 9.21c-.23-.6-.53-1.15-.9-1.64L13 12v-1c0-1.1-.9-2-2-2V7.07c3.95.49 7 3.85 7 7.93 0 .62-.08 1.21-.21 1.79z'/%3E%3C/svg%3E`;
 
-        bookmarksGrid.innerHTML = filteredBookmarks.map(bm => {
+        // [新功能] 动态插入层级分隔符
+        let htmlChunks = [];
+        let previousLevel = -1; // 使用-1作为初始值
+        const categoryLevelMap = new Map(allCategories.map(cat => [cat.id, cat.level]));
+
+        filteredBookmarks.forEach((bm, index) => {
+            const currentLevel = categoryLevelMap.get(bm.categoryId) ?? 0;
+            
+            // 如果层级发生变化，并且不是第一个项目，则插入分隔符
+            if (index > 0 && currentLevel !== previousLevel) {
+                htmlChunks.push('<div class="bookmark-level-separator"></div>');
+            }
+
             let domain = '';
             try { domain = new URL(bm.url).hostname; } catch (e) {}
             const gStaticIconUrl = `https://www.google.com/s2/favicons?sz=64&domain_url=${domain}`;
-            
             const finalIconSrc = bm.icon || gStaticIconUrl;
             
-            return `<a href="${bm.url}" class="bookmark-card glass-pane" target="_blank" rel="noopener noreferrer">
-                        <h3><img src="${finalIconSrc}" alt="" onerror="this.onerror=null;this.src='${fallbackIcon}'"> ${escapeHTML(bm.name)}</h3>
-                        <p>${escapeHTML(bm.description || '')}</p>
-                    </a>`;
-        }).join('');
+            htmlChunks.push(
+                `<a href="${bm.url}" class="bookmark-card glass-pane" target="_blank" rel="noopener noreferrer">
+                    <h3><img src="${finalIconSrc}" alt="" onerror="this.onerror=null;this.src='${fallbackIcon}'"> ${escapeHTML(bm.name)}</h3>
+                    <p>${escapeHTML(bm.description || '')}</p>
+                </a>`
+            );
+            
+            previousLevel = currentLevel;
+        });
+        
+        bookmarksGrid.innerHTML = htmlChunks.join('');
     };
 
     // --- Event Listeners ---
