@@ -297,7 +297,7 @@ export async function onRequest(context) {
         }
 
         // --- [核心修复] 补全用户管理的所有逻辑 ---
-         if (apiPath === 'users/self' && request.method === 'PUT') {
+         if (apiPath === 'users/self' && request.method === 'PUT') {
             const { defaultCategoryId } = await request.json();
             if (typeof defaultCategoryId === 'undefined') return jsonResponse({ error: '未提供更新数据' }, 400);
             const userToUpdate = dataToModify.users[currentUser.username];
@@ -312,8 +312,8 @@ export async function onRequest(context) {
             }
             return jsonResponse({ error: '用户未找到'}, 404);
         }
-        
-        if (apiPath.startsWith('users')) {
+        
+        if (apiPath.startsWith('users')) {
             if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
             
             if (request.method === 'POST' && apiPath === 'users') {
@@ -329,33 +329,36 @@ export async function onRequest(context) {
                 return jsonResponse(responsePayload, 201, { 'ETag': newVersion });
             }
 
-            const userPathMatch = apiPath.match(/^users\/(.+)$/);
-            if (userPathMatch) {
-                const username = decodeURIComponent(userPathMatch[1]);
-                if (username !== 'self') {
-                    const userToManage = dataToModify.users[username];
-                    if (!userToManage) return jsonResponse({ error: `用户 '${username}' 未找到` }, 404);
+            const userPathMatch = apiPath.match(/^users\/(.+)$/);
+            if (userPathMatch) {
+                const username = decodeURIComponent(userPathMatch[1]);
+                if (username !== 'self') {
+                    const userToManage = dataToModify.users[username];
+                    if (!userToManage) return jsonResponse({ error: `用户 '${username}' 未找到` }, 404);
 
-                    if (request.method === 'PUT') {
-                        const { roles, permissions, password, defaultCategoryId } = await request.json();
+                    if (request.method === 'PUT') {
+                        const { roles, permissions, password, defaultCategoryId } = await request.json();
+                        // ... (省略内部逻辑)
                         if (username === 'public') {
-                            if (permissions && typeof permissions.visibleCategories !== 'undefined') userToManage.permissions.visibleCategories = permissions.visibleCategories;
-                            userToManage.roles = ['viewer'];
-                        } else {
-                            if (roles) userToManage.roles = roles;
-                            if (permissions) userToManage.permissions.visibleCategories = permissions.visibleCategories;
+                            if (permissions && typeof permissions.visibleCategories !== 'undefined') userToManage.permissions.visibleCategories = permissions.visibleCategories;
                             if (typeof defaultCategoryId !== 'undefined') userToManage.defaultCategoryId = defaultCategoryId;
-                            if (password) {
-                                userToManage.salt = generateSalt();
-                                userToManage.passwordHash = await hashPassword(password, userToManage.salt);
-                            }
-                        }
-                        const newVersion = await saveSiteData(env, dataToModify);
-                        const { passwordHash, salt, ...updatedUser } = userToManage;
-                      // 修正此处返回格式，使其与前端预期一致
+                            userToManage.roles = ['viewer'];
+                        } else {
+                            if (roles) userToManage.roles = roles;
+                            if (permissions && typeof permissions.visibleCategories !== 'undefined') userToManage.permissions.visibleCategories = permissions.visibleCategories;
+                            if (typeof defaultCategoryId !== 'undefined') userToManage.defaultCategoryId = defaultCategoryId;
+                            if (password) {
+                                userToManage.salt = generateSalt();
+                                userToManage.passwordHash = await hashPassword(password, userToManage.salt);
+                            }
+                        }
+                        const newVersion = await saveSiteData(env, dataToModify);
+                        const { passwordHash, salt, ...updatedUser } = userToManage;
+                        // --- 修改 START ---
+                        // 修正此处返回格式，使其与前端预期一致
                         return jsonResponse({ user: updatedUser, version: newVersion }, 200, { 'ETag': newVersion });
                         // --- 修改 END ---
-                    }
+                    }
 
                     if (request.method === 'DELETE') {
                         if (username === 'public') return jsonResponse({ error: '公共账户为系统保留账户，禁止删除。' }, 403);
