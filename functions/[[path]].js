@@ -311,11 +311,10 @@ export async function onRequest(context) {
         }
     }
     
-    // --- 【重构和修复】Users API ---
+    // 【重构和修复】Users API 
     if (apiPath.startsWith('users')) {
         if (!currentUser.permissions.canEditUsers && apiPath !== 'users/self') return jsonResponse({ error: '权限不足' }, 403);
 
-        // 新增用户
         if (apiPath === 'users' && request.method === 'POST') {
             const { username, password, roles, permissions, defaultCategoryId } = await request.json();
             if (!username || !password || siteData.users[username]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
@@ -335,14 +334,12 @@ export async function onRequest(context) {
             });
             return jsonResponse(safeUser, 201);
         }
-
-        // 修改或删除特定用户，或修改自己的信息
+        
         if (apiPath.startsWith('users/')) {
             let username = decodeURIComponent(apiPath.substring('users/'.length));
             
-            // 修改自己的默认分类
             if (username === 'self' && request.method === 'PUT') {
-                 username = currentUser.username; // 'self' is an alias for the current user
+                 username = currentUser.username;
                  const { defaultCategoryId } = await request.json();
                  const userToUpdate = siteData.users[username];
                  if (userToUpdate) {
@@ -358,11 +355,8 @@ export async function onRequest(context) {
             const userToManage = siteData.users[username];
             if (!userToManage) return jsonResponse({ error: '用户未找到' }, 404);
 
-            // 修改特定用户信息
             if (request.method === 'PUT') {
                 const { roles, permissions, password, defaultCategoryId } = await request.json();
-                
-                // 【修复】精确更新，而不是覆盖
                 if (roles) userToManage.roles = roles;
                 if (permissions && permissions.visibleCategories) {
                     userToManage.permissions.visibleCategories = permissions.visibleCategories;
@@ -378,10 +372,25 @@ export async function onRequest(context) {
                 return jsonResponse(safeUser);
             }
             
-            // 删除特定用户
+            // 【安全修复】用户删除逻辑
             if (request.method === 'DELETE') {
-                if (username === 'admin' || username === 'public') return jsonResponse({ error: '无法删除保留账户' }, 403);
-                if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
+                if (username === currentUser.username) {
+                    return jsonResponse({ error: '无法删除自己' }, 403);
+                }
+                
+                if (username === 'public') {
+                    if (env.PUBLIC_MODE_ENABLED === 'true') {
+                        return jsonResponse({ error: '公共模式已启用，无法删除 public 账户。' }, 403);
+                    }
+                }
+                
+                if (userToManage.roles.includes('admin')) {
+                    const adminCount = Object.values(siteData.users).filter(u => u.roles.includes('admin')).length;
+                    if (adminCount <= 1) {
+                        return jsonResponse({ error: '无法删除最后一个管理员账户' }, 403);
+                    }
+                }
+                
                 await env.NAVI_DATA.delete(`user:${username}`);
                 const newIndex = Object.keys(siteData.users).filter(u => u !== username);
                 await env.NAVI_DATA.put('_index:users', JSON.stringify(newIndex));
