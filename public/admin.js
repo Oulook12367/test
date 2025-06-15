@@ -96,11 +96,15 @@ document.addEventListener('DOMContentLoaded', () => {
         try { result = await response.json(); } 
         catch (e) { /* ignore empty body */ }
         
-        if (!response.ok) {
-            throw new Error(result?.error || `请求失败，状态码: ${response.status}`);
+       if (!response.ok) {
+        let errorMsg = `请求失败，状态码: ${response.status}`;
+        if (result && result.error) {
+            errorMsg += ` - ${result.error}`;
         }
-        return result;
+        throw new Error(errorMsg);
     }
+    return result;
+}
 
     if (adminPanelNav) {
         adminPanelNav.addEventListener('click', (e) => {
