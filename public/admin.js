@@ -271,48 +271,50 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
   const handleSaveCategories = async () => {
-    const listItems = document.querySelectorAll('#category-admin-list li');
-    let hasError = false;
-    const finalCategories = Array.from(listItems).map(li => {
-            const name = li.querySelector('.cat-name-input').value.trim();
-            if (!name) hasError = true;
-            const idVal = li.dataset.id;
-            return {
-                id: idVal.startsWith('new-') ? `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` : idVal,
+        const listItems = document.querySelectorAll('#category-admin-list li');
+        let hasError = false;
+        // 1. 从UI收集数据
+        const finalCategories = Array.from(listItems).map(li => {
+            const name = li.querySelector('.cat-name-input').value.trim();
+            if (!name) hasError = true;
+            const idVal = li.dataset.id; // 直接使用ID（无论是临时的还是永久的）
+            
+            // --- 核心修复 START ---
+            // 不再由前端生成 "cat-..." 格式的ID。
+            // 直接发送ID，后端会处理 new- 前缀的临时ID。
+            return {
+                id: idVal,
                 name: name,
                 parentId: li.querySelector('.cat-parent-select').value || null,
                 sortOrder: parseInt(li.querySelector('.cat-order-input').value) || 0,
             };
+            // --- 核心修复 END ---
         });
+
         if (hasError) { alert('分类名称不能为空！'); return; }
-        
-        const oldCategories = JSON.parse(JSON.stringify(allCategories));
-        allCategories = finalCategories;
-        // No success alert
-       try {
-        // --- 修改 START ---
-        // 遵循注释的指示，将 allBookmarks 也包含在请求体中
-        const result = await apiRequest('data', 'PATCH', { 
-            categories: finalCategories, 
-            bookmarks: allBookmarks // <--- 添加此行
-        });
-        // --- 修改 END ---
 
-        dataVersion = result.version;
+        try {
+            // 2. 发送请求
+            const result = await apiRequest('data', 'PATCH', {
+                categories: finalCategories,
+                bookmarks: allBookmarks
+            });
 
-        // --- 新增部分 ---
-        // 成功后强制刷新UI，确保ID等状态正确显示
-        alert('分类已成功保存！'); // 给予用户明确反馈
-      // 使用 initializePage 重新加载数据和UI，确保状态完全同步
-      await initializePage('tab-categories');
-        // --- 新增部分结束 ---
+            // 3. 用后端返回的权威数据更新前端状态
+            allCategories = result.categories;
+            allBookmarks = result.bookmarks;
+            dataVersion = result.version;
 
-    } catch (error) {
-        allCategories = oldCategories;
-        renderAdminTab('tab-categories');
-        alert('保存失败: ' + error.message);
-    }
-};
+            alert('分类已成功保存！');
+
+            // 4. 基于最新状态重新渲染UI
+            renderAdminTab('tab-categories');
+
+        } catch (error) {
+            alert('保存失败: ' + error.message);
+            await initializePage('tab-categories');
+        }
+    };
 
     const handleDeleteCategory = (catIdToDelete, catName) => {
         showConfirm('确认删除', `您确定要删除分类 "${catName}" 吗？这也会删除其下所有的子分类和书签。`, async () => {
