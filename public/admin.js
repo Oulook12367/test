@@ -574,7 +574,7 @@ const handleSaveBookmarks = async () => {
                     const username = userLi.dataset.username;
                     if (target.closest('.button-icon.danger')) {
                         // 此处应有 handleDeleteUser 函数，这里仅作示例
-                        showConfirm('确认删除', `确定要删除用户 "${username}" 吗?`, () => alert(`删除 ${username} 的逻辑未实现`));
+                      showConfirm('确认删除', `确定要删除用户 "${username}" 吗?`, () => { alert(`删除 ${username} 的逻辑未实现`); });
                     } else {
                         const user = allUsers.find(u => u.username === username);
                         if (user) populateUserForm(user);
