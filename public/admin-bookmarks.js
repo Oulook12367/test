@@ -203,6 +203,7 @@ document.getElementById('bookmark-edit-form')?.addEventListener('submit', async 
         hideAllModals();
         invalidateCache();
         
+        // 【修复】手动更新本地状态
         if (id) {
             const index = allBookmarks.findIndex(bm => bm.id === id);
             if (index > -1) allBookmarks[index] = savedBookmark;
@@ -219,7 +220,7 @@ document.getElementById('bookmark-edit-form')?.addEventListener('submit', async 
     }
 });
 
-// Re-implement URL scraper on focusout
+// 【修复】重新加入网址自动填充功能
 document.addEventListener('focusout', async (event) => {
     if (event.target.id === 'bm-edit-url') {
         const urlInput = event.target;
@@ -229,7 +230,7 @@ document.addEventListener('focusout', async (event) => {
         if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) return;
 
         const nameInput = form.querySelector('#bm-edit-name');
-        if (nameInput.value) return; // Don't overwrite existing name
+        if (nameInput.value) return; // 不覆盖已有名称
 
         const originalPlaceholder = urlInput.placeholder;
         const errorEl = form.querySelector('.modal-error-message');
