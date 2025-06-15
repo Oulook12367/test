@@ -449,9 +449,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const oldUsers = JSON.parse(JSON.stringify(allUsers));
         
         try {
-            const result = await apiRequest(endpoint, method, userData);
-            dataVersion = result.version;
-            const updatedUser = result;
+            const result = await apiRequest(endpoint, method, userData); // result 现在是 { user: {...}, version: '...' }
+dataVersion = result.version;       // 正确地从响应体中获取 version
+const updatedUser = result.user;    // 正确地从响应体中获取 user 对象
+
+// 检查一下 updatedUser 是否存在，增加代码健壮性
+if (!updatedUser) {
+    throw new Error('从服务器返回的数据格式不正确。');
+}
             
             const userIndex = allUsers.findIndex(u => u.username === updatedUser.username);
             if (userIndex > -1) {
