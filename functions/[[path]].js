@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose';
 
-// --- 安全与工具函数 ---
+// --- 安全与工具函数 (保持不变) ---
 const JWT_SECRET = () => new TextEncoder().encode(globalThis.JWT_SECRET_STRING);
 const generateSalt = (length = 16) => {
     const array = new Uint8Array(length);
@@ -115,7 +115,7 @@ const getSiteData = async (context) => {
     }
     
     const responseToCache = new Response(JSON.stringify(siteData), { headers: { 'Content-Type': 'application/json' } });
-    context.waitUntil(cache.put(cacheKey, responseToCache.clone(), { expirationTtl: 600000000000000 }));
+    context.waitUntil(cache.put(cacheKey, responseToCache.clone(), { expirationTtl: 3600 })); // 缓存1小时
     
     return siteData;
 };
@@ -159,7 +159,6 @@ export async function onRequest(context) {
         return jsonResponse({ error: 'Critical Configuration Error: JWT_SECRET is missing.' }, 500);
     }
     
-    // Scrape URL
     if (apiPath === 'scrape-url') {
         const authResultForScrape = await authenticateRequest(request, siteData);
         if (authResultForScrape.error) return jsonResponse(authResultForScrape, authResultForScrape.status);
@@ -182,7 +181,6 @@ export async function onRequest(context) {
         }
     }
 
-    // Login
     if (apiPath === 'login' && request.method === 'POST') {
         const { username, password } = await request.json();
         if (username.toLowerCase() === 'public') return jsonResponse({ error: '此为保留账户，禁止登录。' }, 403);
@@ -195,7 +193,6 @@ export async function onRequest(context) {
         return jsonResponse({ token, user: safeUser });
     }
 
-    // Get all data
     if (apiPath === 'data' && request.method === 'GET') {
         const authHeader = request.headers.get('Authorization');
         siteData.publicModeEnabled = env.PUBLIC_MODE_ENABLED === 'true';
@@ -220,12 +217,10 @@ export async function onRequest(context) {
         return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks, users: [safeUser], publicModeEnabled: siteData.publicModeEnabled });
     }
 
-    // --- All subsequent APIs require authentication ---
     const authResult = await authenticateRequest(request, siteData);
     if (authResult.error) return jsonResponse(authResult, authResult.status);
     const currentUser = authResult.user;
 
-    // Bookmarks API
     if (apiPath === 'bookmarks' && request.method === 'POST') {
         if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
         const bookmark = await request.json();
@@ -259,7 +254,6 @@ export async function onRequest(context) {
         }
     }
 
-    // Categories API
     if (apiPath === 'categories' && request.method === 'POST') {
         if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
         const { name } = await request.json();
@@ -317,64 +311,84 @@ export async function onRequest(context) {
         }
     }
     
-    // Users API
-    if (apiPath === 'users' && request.method === 'POST') {
-        if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
-        const { username, password, roles, permissions, defaultCategoryId } = await request.json();
-        if (!username || !password || siteData.users[username]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
-        const salt = generateSalt();
-        const passwordHash = await hashPassword(password, salt);
-        const newUser = { username, passwordHash, salt, roles, permissions, defaultCategoryId: defaultCategoryId || 'all' };
-        await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(newUser));
-        const userIndex = Object.keys(siteData.users);
-        userIndex.push(username);
-        await env.NAVI_DATA.put('_index:users', JSON.stringify(userIndex));
-        await purgeDataCache(context);
-        const { passwordHash: p, salt: s, ...safeUser } = newUser;
-        Object.assign(safeUser, { permissions: { canEditBookmarks: safeUser.roles.includes('editor') || safeUser.roles.includes('admin'), canEditCategories: safeUser.roles.includes('editor') || safeUser.roles.includes('admin'), canEditUsers: safeUser.roles.includes('admin'), visibleCategories: permissions.visibleCategories }});
-        return jsonResponse(safeUser, 201);
-    }
-    if (apiPath.startsWith('users/')) {
-        const username = decodeURIComponent(apiPath.substring('users/'.length));
-        const userToManage = siteData.users[username];
-        if (!userToManage) return jsonResponse({ error: '用户未找到' }, 404);
-        if (request.method === 'PUT') {
-            if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
-            const { roles, permissions, password, defaultCategoryId } = await request.json();
-            if (roles) userToManage.roles = roles;
-            if (permissions) userToManage.permissions = permissions;
-            if (defaultCategoryId !== undefined) userToManage.defaultCategoryId = defaultCategoryId;
-            if (password) {
-                userToManage.salt = generateSalt();
-                userToManage.passwordHash = await hashPassword(password, userToManage.salt);
+    // --- 【重构和修复】Users API ---
+    if (apiPath.startsWith('users')) {
+        if (!currentUser.permissions.canEditUsers && apiPath !== 'users/self') return jsonResponse({ error: '权限不足' }, 403);
+
+        // 新增用户
+        if (apiPath === 'users' && request.method === 'POST') {
+            const { username, password, roles, permissions, defaultCategoryId } = await request.json();
+            if (!username || !password || siteData.users[username]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
+            const salt = generateSalt();
+            const passwordHash = await hashPassword(password, salt);
+            const newUser = { username, passwordHash, salt, roles, permissions, defaultCategoryId: defaultCategoryId || 'all' };
+            await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(newUser));
+            const userIndex = Object.keys(siteData.users);
+            userIndex.push(username);
+            await env.NAVI_DATA.put('_index:users', JSON.stringify(userIndex));
+            await purgeDataCache(context);
+            const { passwordHash: p, salt: s, ...safeUser } = newUser;
+            Object.assign(safeUser.permissions, {
+                canEditBookmarks: roles.includes('editor') || roles.includes('admin'),
+                canEditCategories: roles.includes('editor') || roles.includes('admin'),
+                canEditUsers: roles.includes('admin'),
+            });
+            return jsonResponse(safeUser, 201);
+        }
+
+        // 修改或删除特定用户，或修改自己的信息
+        if (apiPath.startsWith('users/')) {
+            let username = decodeURIComponent(apiPath.substring('users/'.length));
+            
+            // 修改自己的默认分类
+            if (username === 'self' && request.method === 'PUT') {
+                 username = currentUser.username; // 'self' is an alias for the current user
+                 const { defaultCategoryId } = await request.json();
+                 const userToUpdate = siteData.users[username];
+                 if (userToUpdate) {
+                     userToUpdate.defaultCategoryId = defaultCategoryId;
+                     await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(userToUpdate));
+                     await purgeDataCache(context);
+                     const { passwordHash, salt, ...safeUser } = userToUpdate;
+                     return jsonResponse(safeUser);
+                 }
+                 return jsonResponse({ error: '用户未找到'}, 404);
             }
-            await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(userToManage));
-            await purgeDataCache(context);
-            const { passwordHash: p, salt: s, ...safeUser } = userToManage;
-            return jsonResponse(safeUser);
+
+            const userToManage = siteData.users[username];
+            if (!userToManage) return jsonResponse({ error: '用户未找到' }, 404);
+
+            // 修改特定用户信息
+            if (request.method === 'PUT') {
+                const { roles, permissions, password, defaultCategoryId } = await request.json();
+                
+                // 【修复】精确更新，而不是覆盖
+                if (roles) userToManage.roles = roles;
+                if (permissions && permissions.visibleCategories) {
+                    userToManage.permissions.visibleCategories = permissions.visibleCategories;
+                }
+                if (defaultCategoryId !== undefined) userToManage.defaultCategoryId = defaultCategoryId;
+                if (password) {
+                    userToManage.salt = generateSalt();
+                    userToManage.passwordHash = await hashPassword(password, userToManage.salt);
+                }
+                await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(userToManage));
+                await purgeDataCache(context);
+                const { passwordHash: p, salt: s, ...safeUser } = userToManage;
+                return jsonResponse(safeUser);
+            }
+            
+            // 删除特定用户
+            if (request.method === 'DELETE') {
+                if (username === 'admin' || username === 'public') return jsonResponse({ error: '无法删除保留账户' }, 403);
+                if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
+                await env.NAVI_DATA.delete(`user:${username}`);
+                const newIndex = Object.keys(siteData.users).filter(u => u !== username);
+                await env.NAVI_DATA.put('_index:users', JSON.stringify(newIndex));
+                await purgeDataCache(context);
+                return jsonResponse(null);
+            }
         }
-        if (request.method === 'DELETE') {
-            if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
-            if (username === 'admin' || username === 'public') return jsonResponse({ error: '无法删除保留账户' }, 403);
-            if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
-            await env.NAVI_DATA.delete(`user:${username}`);
-            const newIndex = Object.keys(siteData.users).filter(u => u !== username);
-            await env.NAVI_DATA.put('_index:users', JSON.stringify(newIndex));
-            await purgeDataCache(context);
-            return jsonResponse(null);
-        }
-    }
-    if (apiPath === 'users/self' && request.method === 'PUT') {
-        const { defaultCategoryId } = await request.json();
-        const userToUpdate = siteData.users[currentUser.username];
-        if (userToUpdate) {
-            userToUpdate.defaultCategoryId = defaultCategoryId;
-            await env.NAVI_DATA.put(`user:${currentUser.username}`, JSON.stringify(userToUpdate));
-            await purgeDataCache(context);
-            const { passwordHash, salt, ...safeUser } = userToUpdate;
-            return jsonResponse(safeUser);
-        }
-        return jsonResponse({ error: '用户未找到'}, 404);
     }
     
     // Import API
