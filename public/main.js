@@ -1,7 +1,7 @@
 // main.js
 
 document.addEventListener('DOMContentLoaded', () => {
-    // --- 1. Element Selectors ---
+    // --- 1. 元素选择器 ---
     const appLayout = document.getElementById('app-layout');
     const localSearchInput = document.getElementById('local-search');
     const searchEngineSelect = document.getElementById('search-engine');
@@ -13,14 +13,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const mobileSidebarToggleBtn = document.getElementById('mobile-sidebar-toggle');
     const actionBtn = document.getElementById('action-btn');
 
-    // --- 2. State ---
+    // --- 2. 全局状态变量 ---
     let allBookmarks = [], allCategories = [], currentUser = null;
     let categoryMap = new Map(); // 用于快速查找分类信息
 
-    // --- 3. 【新增】核心排序与辅助函数 ---
+    // --- 3. 核心排序与辅助函数 ---
     /**
      * 将扁平的分类数组，转换为按层级优先的排序后数组。
-     * @param {Array} items - 全部分类或书签数组。
+     * @param {Array} items - 全部分类数组。
      * @param {string} [parentIdKey='parentId'] - 用于标识父ID的键名。
      * @returns {Array} - 一个新数组，项目按正确的层级顺序排列。
      */
@@ -82,13 +82,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // --- 4. Data Loading & Rendering ---
+    // --- 4. 数据加载与渲染 ---
     async function initializePage() {
         try {
-            // 统一通过 /api/data 获取数据，后端已处理好权限和数据范围
             const data = await apiRequest('data');
             
-            // 【修复】使用新的排序函数预处理分类数据
             allCategories = getHierarchicalSortedData(data.categories || []);
             categoryMap = new Map(allCategories.map(c => [c.id, c]));
             allBookmarks = data.bookmarks || [];
@@ -162,7 +160,6 @@ document.addEventListener('DOMContentLoaded', () => {
         allLi.innerHTML = `<i class="fas fa-inbox fa-fw"></i><span>全部书签</span>${allStarHTML}`;
         sidebarFooterNav.appendChild(allLi);
         
-        // 【修复】直接遍历已排序的分类数组
         allCategories.forEach(cat => {
             const li = document.createElement('li');
             li.dataset.id = cat.id;
@@ -173,7 +170,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
     
-    // 【修复】全新的书签渲染逻辑
     const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
         if (!bookmarksGrid) return;
         
@@ -188,7 +184,6 @@ document.addEventListener('DOMContentLoaded', () => {
             filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lower) || bm.url.toLowerCase().includes(lower));
         }
         
-        // 【修复】按分类的层级顺序给书签排序
         const categoryOrderMap = new Map(allCategories.map((cat, index) => [cat.id, index]));
         filteredBookmarks.sort((a, b) => {
             const orderA = categoryOrderMap.get(a.categoryId) ?? Infinity;
@@ -214,7 +209,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const currentTopLevelParentId = categoryOfBookmark.topLevelParentId;
             
-            // 【修复】当顶级分类变化时，插入分隔符
             if (index > 0 && currentTopLevelParentId !== previousTopLevelParentId) {
                 htmlChunks.push('<div class="bookmark-level-separator"></div>');
             }
@@ -256,6 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (appLayout) {
         appLayout.addEventListener('click', (e) => {
+            // 当点击侧边栏外部的遮罩层时，关闭侧边栏
             if (e.target === appLayout) {
                  appLayout.classList.remove('sidebar-open');
             }
