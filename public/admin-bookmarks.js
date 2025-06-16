@@ -38,7 +38,7 @@ function renderBookmarkAdminTab(container) {
 }
 
 /**
- * 【修复】根据指定的分类ID渲染书签列表，并使用正确的排序逻辑。
+ * 根据指定的分类ID渲染书签列表，并使用正确的排序逻辑。
  * @param {string} categoryId - 要筛选的分类ID，或 'all' 表示所有分类。
  */
 function renderBookmarkList(categoryId) {
@@ -49,7 +49,7 @@ function renderBookmarkList(categoryId) {
 
     if (categoryId === 'all') {
         bookmarksToDisplay = [...allBookmarks];
-        // 【修复】当显示所有书签时，使用层级排序
+        // 当显示所有书签时，使用层级排序
         const sortedCategories = getHierarchicalSortedCategories(allCategories);
         const categoryOrderMap = new Map(sortedCategories.map((cat, index) => [cat.id, index]));
         
@@ -84,7 +84,10 @@ function renderBookmarkList(categoryId) {
     });
 }
 
-
+/**
+ * 带有防抖功能的自动保存函数，用于处理书签的行内编辑。
+ * @param {HTMLElement} listItem - 被修改的列表项DOM元素。
+ */
 const handleBookmarkAutoSave = debounce(async (listItem) => {
     const id = listItem.dataset.id;
     const bookmark = allBookmarks.find(bm => bm.id === id);
@@ -106,6 +109,7 @@ const handleBookmarkAutoSave = debounce(async (listItem) => {
         return;
     }
 
+    // 乐观更新本地JS数据
     bookmark.name = newName;
     bookmark.sortOrder = newSortOrder;
     bookmark.categoryId = newCategoryId;
@@ -174,6 +178,10 @@ document.addEventListener('click', event => {
     }
 });
 
+/**
+ * 打开用于新增或编辑书签的模态框。
+ * @param {object|null} bookmark - 如果是编辑，则传入书签对象；如果是新增，则为null。
+ */
 function openBookmarkEditModal(bookmark = null) {
     const modal = document.getElementById('bookmark-edit-modal');
     const form = document.getElementById('bookmark-edit-form');
