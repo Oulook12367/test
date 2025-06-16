@@ -49,7 +49,6 @@ function renderBookmarkList(categoryId) {
 
     if (categoryId === 'all') {
         bookmarksToDisplay = [...allBookmarks];
-        // 当显示所有书签时，使用层级排序
         const sortedCategories = getHierarchicalSortedCategories(allCategories);
         const categoryOrderMap = new Map(sortedCategories.map((cat, index) => [cat.id, index]));
         
@@ -57,12 +56,22 @@ function renderBookmarkList(categoryId) {
             const orderA = categoryOrderMap.get(a.categoryId) ?? Infinity;
             const orderB = categoryOrderMap.get(b.categoryId) ?? Infinity;
             if (orderA !== orderB) return orderA - orderB;
-            return (a.sortOrder || 0) - (b.sortOrder || 0);
+            
+            // 【修复】增加第二排序条件
+            const sortOrderA = a.sortOrder || 0;
+            const sortOrderB = b.sortOrder || 0;
+            if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
+            return a.name.localeCompare(b.name); // 按名称排序
         });
     } else {
-        // 当按分类筛选时，只需按书签自身排序
         bookmarksToDisplay = allBookmarks.filter(bm => bm.categoryId === categoryId);
-        bookmarksToDisplay.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        // 【修复】增加第二排序条件
+        bookmarksToDisplay.sort((a, b) => {
+            const sortOrderA = a.sortOrder || 0;
+            const sortOrderB = b.sortOrder || 0;
+            if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
+            return a.name.localeCompare(b.name); // 按名称排序
+        });
     }
     
     listEl.innerHTML = '';
