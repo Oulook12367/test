@@ -57,20 +57,18 @@ function renderBookmarkList(categoryId) {
             const orderB = categoryOrderMap.get(b.categoryId) ?? Infinity;
             if (orderA !== orderB) return orderA - orderB;
             
-            // 【修复】增加第二排序条件
             const sortOrderA = a.sortOrder || 0;
             const sortOrderB = b.sortOrder || 0;
             if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
-            return a.name.localeCompare(b.name); // 按名称排序
+            return a.name.localeCompare(b.name);
         });
     } else {
         bookmarksToDisplay = allBookmarks.filter(bm => bm.categoryId === categoryId);
-        // 【修复】增加第二排序条件
         bookmarksToDisplay.sort((a, b) => {
             const sortOrderA = a.sortOrder || 0;
             const sortOrderB = b.sortOrder || 0;
             if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
-            return a.name.localeCompare(b.name); // 按名称排序
+            return a.name.localeCompare(b.name);
         });
     }
     
@@ -118,7 +116,6 @@ const handleBookmarkAutoSave = debounce(async (listItem) => {
         return;
     }
 
-    // 乐观更新本地JS数据
     bookmark.name = newName;
     bookmark.sortOrder = newSortOrder;
     bookmark.categoryId = newCategoryId;
@@ -219,9 +216,16 @@ document.getElementById('bookmark-edit-form')?.addEventListener('submit', async 
     const submitBtn = form.querySelector('button[type="submit"]');
     const originalText = submitBtn.textContent;
     const id = form.querySelector('#bm-edit-id').value;
+    
+    // 【修复】自动补全协议头
+    let url = form.querySelector('#bm-edit-url').value.trim();
+    if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+    }
+
     const data = {
         name: form.querySelector('#bm-edit-name').value.trim(),
-        url: form.querySelector('#bm-edit-url').value.trim(),
+        url: url,
         description: form.querySelector('#bm-edit-desc').value.trim(),
         icon: form.querySelector('#bm-edit-icon').value.trim(),
         categoryId: form.querySelector('#bm-edit-category').value,
@@ -264,10 +268,16 @@ document.getElementById('bookmark-edit-form')?.addEventListener('submit', async 
 document.addEventListener('focusout', async (event) => {
     if (event.target.id === 'bm-edit-url') {
         const urlInput = event.target;
-        const url = urlInput.value.trim();
+        let url = urlInput.value.trim();
         const form = urlInput.closest('form');
         
-        if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) return;
+        if (!url) return;
+        
+        // 【修复】自动补全协议头
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            url = 'https://' + url;
+            urlInput.value = url; // 更新输入框，让用户看到
+        }
 
         const nameInput = form.querySelector('#bm-edit-name');
         if (nameInput.value) return;
