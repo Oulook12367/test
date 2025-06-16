@@ -1,5 +1,9 @@
 // admin-bookmarks.js
 
+/**
+ * 渲染“书签管理”标签页的UI结构。
+ * @param {HTMLElement} container - 用于承载内容的DOM元素。
+ */
 function renderBookmarkAdminTab(container) {
     container.innerHTML = `
         <p class="admin-panel-tip" style="margin-bottom: 1rem;">排序、名称和分类的更改将自动保存。网址、描述和图标需点击编辑按钮修改。</p>
@@ -33,15 +37,33 @@ function renderBookmarkAdminTab(container) {
     renderBookmarkList(lastFilter);
 }
 
+/**
+ * 【修复】根据指定的分类ID渲染书签列表，并使用正确的排序逻辑。
+ * @param {string} categoryId - 要筛选的分类ID，或 'all' 表示所有分类。
+ */
 function renderBookmarkList(categoryId) {
     const listEl = document.querySelector('#bookmark-admin-list-container ul');
     if (!listEl) return;
     
-    let bookmarksToDisplay = categoryId === 'all' 
-        ? [...allBookmarks] 
-        : allBookmarks.filter(bm => bm.categoryId === categoryId);
-    
-    bookmarksToDisplay.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    let bookmarksToDisplay;
+
+    if (categoryId === 'all') {
+        bookmarksToDisplay = [...allBookmarks];
+        // 【修复】当显示所有书签时，使用层级排序
+        const sortedCategories = getHierarchicalSortedCategories(allCategories);
+        const categoryOrderMap = new Map(sortedCategories.map((cat, index) => [cat.id, index]));
+        
+        bookmarksToDisplay.sort((a, b) => {
+            const orderA = categoryOrderMap.get(a.categoryId) ?? Infinity;
+            const orderB = categoryOrderMap.get(b.categoryId) ?? Infinity;
+            if (orderA !== orderB) return orderA - orderB;
+            return (a.sortOrder || 0) - (b.sortOrder || 0);
+        });
+    } else {
+        // 当按分类筛选时，只需按书签自身排序
+        bookmarksToDisplay = allBookmarks.filter(bm => bm.categoryId === categoryId);
+        bookmarksToDisplay.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    }
     
     listEl.innerHTML = '';
     bookmarksToDisplay.forEach(bm => {
@@ -62,7 +84,7 @@ function renderBookmarkList(categoryId) {
     });
 }
 
-// 【修复】函数名已从 handleCategoryAutoSave 改为 handleBookmarkAutoSave
+
 const handleBookmarkAutoSave = debounce(async (listItem) => {
     const id = listItem.dataset.id;
     const bookmark = allBookmarks.find(bm => bm.id === id);
@@ -107,10 +129,7 @@ const handleBookmarkAutoSave = debounce(async (listItem) => {
 document.addEventListener('input', event => {
     if (document.getElementById('tab-bookmarks')?.classList.contains('active')) {
         const listItem = event.target.closest('li[data-id]');
-        if (listItem) {
-            // 【修复】调用正确的函数名
-            handleBookmarkAutoSave(listItem);
-        }
+        if (listItem) handleBookmarkAutoSave(listItem);
     }
 });
 
