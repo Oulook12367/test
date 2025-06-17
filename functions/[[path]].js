@@ -27,6 +27,36 @@ const jsonResponse = (data, status = 200, headers = {}) => {
     return new Response(JSON.stringify(data), { status, headers: { ...defaultHeaders, ...headers } });
 };
 
+// --- 凭据验证函数 ---
+function validateUsername(username) {
+    if (!username || username.length < 6) {
+        return "用户名至少需要6位。";
+    }
+    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+        return "用户名只能包含字母、数字、下划线和连字符。";
+    }
+    return null; // No error
+}
+
+function validatePassword(password) {
+    if (!password || password.length < 8) {
+        return "密码至少需要8位。";
+    }
+    if (!/(?=.*[a-z])/.test(password)) {
+        return "密码必须包含至少一个小写字母。";
+    }
+    if (!/(?=.*[A-Z])/.test(password)) {
+        return "密码必须包含至少一个大写字母。";
+    }
+    if (!/(?=.*[0-9])/.test(password)) {
+        return "密码必须包含至少一个数字。";
+    }
+    if (!/(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/.test(password)) {
+        return "密码必须包含至少一个特殊符号。";
+    }
+    return null; // No error
+}
+
 
 // --- 缓存处理函数 ---
 async function purgeDataCache(context) {
@@ -39,7 +69,6 @@ async function purgeDataCache(context) {
         console.error("清除缓存失败:", e);
     }
 }
-
 
 // --- 数据获取与认证函数 ---
 const getSiteData = async (context) => {
@@ -313,7 +342,11 @@ export async function onRequest(context) {
             if (!currentUser.permissions.canEditUsers && apiPath !== 'users/self') return jsonResponse({ error: '权限不足' }, 403);
             if (apiPath === 'users' && request.method === 'POST') {
                 const { username, password, roles, permissions, defaultCategoryId } = await request.json();
-                if (!username || !password || siteData.users[username]) return jsonResponse({ error: '用户名无效或已存在' }, 400);
+                const usernameError = validateUsername(username);
+                if (usernameError) return jsonResponse({ error: usernameError }, 400);
+                const passwordError = validatePassword(password);
+                if (passwordError) return jsonResponse({ error: passwordError }, 400);
+                if (siteData.users[username]) return jsonResponse({ error: '用户名已存在' }, 400);
                 const salt = generateSalt();
                 const passwordHash = await hashPassword(password, salt);
                 const newUser = { username, passwordHash, salt, roles, permissions, defaultCategoryId: defaultCategoryId || 'all' };
@@ -351,15 +384,17 @@ export async function onRequest(context) {
                 if (!userToManage) return jsonResponse({ error: '用户未找到' }, 404);
                 if (request.method === 'PUT') {
                     const { roles, permissions, password, defaultCategoryId } = await request.json();
-                    if (roles) userToManage.roles = roles;
-                    if (permissions && permissions.visibleCategories) {
-                        userToManage.permissions.visibleCategories = permissions.visibleCategories;
-                    }
-                    if (defaultCategoryId !== undefined) userToManage.defaultCategoryId = defaultCategoryId;
                     if (password) {
+                        const passwordError = validatePassword(password);
+                        if (passwordError) return jsonResponse({ error: passwordError }, 400);
                         userToManage.salt = generateSalt();
                         userToManage.passwordHash = await hashPassword(password, userToManage.salt);
                     }
+                    if (roles) userToManage.roles = roles;
+                    if (permissions && permissions.visibleCategories !== undefined) {
+                        userToManage.permissions.visibleCategories = permissions.visibleCategories;
+                    }
+                    if (defaultCategoryId !== undefined) userToManage.defaultCategoryId = defaultCategoryId;
                     await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(userToManage));
                     await purgeDataCache(context);
                     const { passwordHash: p, salt: s, ...safeUser } = userToManage;
