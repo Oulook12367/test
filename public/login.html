@@ -7,13 +7,16 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
-<body class="login-page">
+<body class="login-page is-loading">
+    <!-- 背景动画 -->
     <div class="page-background"></div>
 
+    <!-- 登录表单容器 -->
     <div class="auth-box glass-pane">
         <h1 class="auth-title">导航中心</h1>
         <p class="auth-subtitle">通往您数字世界的传送门</p>
-        <form id="login-form">
+        
+        <form id="login-form" novalidate>
             <div class="form-group">
                 <input type="text" id="username" placeholder="用户名" required autocomplete="username">
             </div>
@@ -25,6 +28,7 @@
         </form>
     </div>
 
+    <!-- 脚本加载 -->
     <script src="shared.js"></script>
     <script src="login.js"></script>
 </body>
