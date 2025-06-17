@@ -15,15 +15,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 2. 全局状态变量 ---
     let allBookmarks = [], allCategories = [], currentUser = null;
-    let categoryMap = new Map(); // 用于快速查找分类信息
+    let categoryMap = new Map();
 
     // --- 3. 核心排序与辅助函数 ---
-    /**
-     * 将扁平的分类数组，转换为按层级优先的排序后数组。
-     * @param {Array} items - 全部分类数组。
-     * @param {string} [parentIdKey='parentId'] - 用于标识父ID的键名。
-     * @returns {Array} - 一个新数组，项目按正确的层级顺序排列。
-     */
     function getHierarchicalSortedData(items, parentIdKey = 'parentId') {
         const itemMap = new Map(items.map(i => [i.id, {...i, children: []}]));
         const tree = [];
@@ -46,8 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
             nodes.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
             nodes.forEach(node => {
                 node.level = level;
-                // 记录每个节点所属的顶级父分类ID，用于分组
-                node.topLevelParentId = topLevelParentId || node.id; 
+                node.topLevelParentId = topLevelParentId || node.id;
                 sortedList.push(node);
                 if (node.children.length > 0) {
                     flattenTree(node.children, level + 1, node.topLevelParentId);
@@ -59,11 +52,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return sortedList;
     }
 
-    /**
-     * 获取一个分类及其所有子孙分类的ID集合。
-     * @param {string} categoryId - 起始分类的ID。
-     * @returns {Set<string>} - 包含所有相关分类ID的Set。
-     */
     function getCategoryWithDescendants(categoryId) {
         const idSet = new Set([categoryId]);
         const queue = [categoryId];
@@ -250,7 +238,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (appLayout) {
         appLayout.addEventListener('click', (e) => {
-            // 当点击侧边栏外部的遮罩层时，关闭侧边栏
             if (e.target === appLayout) {
                  appLayout.classList.remove('sidebar-open');
             }
