@@ -49,6 +49,7 @@ function renderBookmarkList(categoryId) {
 
     if (categoryId === 'all') {
         bookmarksToDisplay = [...allBookmarks];
+        // 当显示所有书签时，使用层级排序
         const sortedCategories = getHierarchicalSortedCategories(allCategories);
         const categoryOrderMap = new Map(sortedCategories.map((cat, index) => [cat.id, index]));
         
@@ -63,6 +64,7 @@ function renderBookmarkList(categoryId) {
             return a.name.localeCompare(b.name);
         });
     } else {
+        // 当按分类筛选时，只需按书签自身排序
         bookmarksToDisplay = allBookmarks.filter(bm => bm.categoryId === categoryId);
         bookmarksToDisplay.sort((a, b) => {
             const sortOrderA = a.sortOrder || 0;
@@ -116,6 +118,7 @@ const handleBookmarkAutoSave = debounce(async (listItem) => {
         return;
     }
 
+    // 乐观更新本地JS数据
     bookmark.name = newName;
     bookmark.sortOrder = newSortOrder;
     bookmark.categoryId = newCategoryId;
@@ -217,7 +220,6 @@ document.getElementById('bookmark-edit-form')?.addEventListener('submit', async 
     const originalText = submitBtn.textContent;
     const id = form.querySelector('#bm-edit-id').value;
     
-    // 【修复】自动补全协议头
     let url = form.querySelector('#bm-edit-url').value.trim();
     if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
         url = 'https://' + url;
@@ -273,10 +275,9 @@ document.addEventListener('focusout', async (event) => {
         
         if (!url) return;
         
-        // 【修复】自动补全协议头
         if (!url.startsWith('http://') && !url.startsWith('https://')) {
             url = 'https://' + url;
-            urlInput.value = url; // 更新输入框，让用户看到
+            urlInput.value = url;
         }
 
         const nameInput = form.querySelector('#bm-edit-name');
