@@ -1,8 +1,55 @@
 // admin-users.js
 
+// --- 前端验证函数 ---
+function validateUsername_fe(username) {
+    if (!username || username.length < 6) {
+        return "用户名至少需要6位。";
+    }
+    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+        return "用户名只能包含字母、数字、下划线和连字符。";
+    }
+    return null; // No error
+}
+
+function validatePassword_fe(password) {
+    if (!password || password.length < 8) {
+        return "密码至少需要8位。";
+    }
+    if (!/(?=.*[a-z])/.test(password)) {
+        return "密码必须包含至少一个小写字母。";
+    }
+    if (!/(?=.*[A-Z])/.test(password)) {
+        return "密码必须包含至少一个大写字母。";
+    }
+    if (!/(?=.*[0-9])/.test(password)) {
+        return "密码必须包含至少一个数字。";
+    }
+    if (!/(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/.test(password)) {
+        return "密码必须包含至少一个特殊符号。";
+    }
+    return null; // No error
+}
+
+/**
+ * 更新验证反馈信息的UI。
+ * @param {HTMLElement} element - 用于显示反馈的<span>元素。
+ * @param {string|null} message - 错误信息，如果为null则表示验证通过。
+ * @param {boolean} [isHint=false] - 这是否是一条预提示信息。
+ */
+function updateFeedback(element, message, isHint = false) {
+    if (!element) return;
+    if (message) {
+        element.textContent = message;
+        element.style.color = isHint ? '#888' : '#f87171'; // 灰色用于提示，红色用于错误
+    } else {
+        element.textContent = '✓';
+        element.style.color = '#34d399'; // 绿色用于验证通过
+    }
+}
+
+
 /**
  * 渲染“用户管理”标签页的UI结构。
- * @param {HTMLElement} container - 用于承载内容的DOM元素。
  */
 function renderUserAdminTab(container) {
     container.innerHTML = `
@@ -12,12 +59,24 @@ function renderUserAdminTab(container) {
                 <ul id="user-list"></ul>
             </div>
             <div class="user-form-container">
-                <form id="user-form">
+                <form id="user-form" novalidate>
                     <h3 id="user-form-title">添加新用户</h3>
                     <div class="user-form-static-fields">
                         <input type="hidden" id="user-form-username-hidden">
-                        <div class="form-group-inline"><label for="user-form-username">用户名:</label><input type="text" id="user-form-username" required autocomplete="off"></div>
-                        <div class="form-group-inline"><label for="user-form-password">密码:</label><input type="password" id="user-form-password" placeholder="留空则不修改" autocomplete="new-password"></div>
+                        <div class="form-group-inline">
+                            <label for="user-form-username">用户名:</label>
+                            <div class="input-with-feedback">
+                                <input type="text" id="user-form-username" required autocomplete="off">
+                                <span id="username-feedback" class="feedback-text"></span>
+                            </div>
+                        </div>
+                        <div class="form-group-inline">
+                            <label for="user-form-password">密码:</label>
+                            <div class="input-with-feedback">
+                                <input type="password" id="user-form-password" placeholder="留空则不修改" autocomplete="new-password">
+                                <span id="password-feedback" class="feedback-text"></span>
+                            </div>
+                        </div>
                         <div class="form-group-inline"><label>角色:</label><div id="user-form-roles" class="checkbox-group horizontal"></div></div>
                         <div class="form-group-inline"><label for="user-form-default-cat">默认显示分类:</label><select id="user-form-default-cat"></select></div>
                     </div>
@@ -67,6 +126,9 @@ function populateUserForm(user) {
     form.querySelector('.modal-error-message').textContent = '';
     form.querySelector('#user-form-title').textContent = `编辑用户: ${user.username}`;
     
+    form.querySelector('#username-feedback').textContent = '';
+    form.querySelector('#password-feedback').textContent = '';
+    
     const usernameInput = form.querySelector('#user-form-username');
     usernameInput.value = user.username;
     usernameInput.readOnly = true;
@@ -86,7 +148,7 @@ function populateUserForm(user) {
 }
 
 /**
- * 清空并重置用户表单，用于新增用户。
+ * 清空并重置用户表单，用于新增用户，并显示预提示。
  */
 function clearUserForm() {
     const form = document.getElementById('user-form'); if (!form) return;
@@ -105,6 +167,9 @@ function clearUserForm() {
     }
 
     form.querySelector('#user-form-username-hidden').value = '';
+    
+    updateFeedback(form.querySelector('#username-feedback'), '至少6位，可包含字母、数字、_、-', true);
+    updateFeedback(form.querySelector('#password-feedback'), '至少8位，含大小写、数字和符号', true);
     
     renderUserFormRoles();
     renderUserFormCategories();
@@ -190,11 +255,8 @@ document.addEventListener('click', event => {
                     await apiRequest(`users/${encodeURIComponent(username)}`, 'DELETE');
                     showToast("用户删除成功！");
                     invalidateCache();
-                    
-                    // 【修复】直接在前端更新数据并重新渲染，而不是调用 initializePage
                     allUsers = allUsers.filter(u => u.username !== username);
                     renderUserAdminTab(document.getElementById('tab-users'));
-
                 } catch (error) { showToast(`删除失败: ${error.message}`, true); }
             });
         } 
@@ -205,6 +267,33 @@ document.addEventListener('click', event => {
         } 
         else if (target.closest('#user-form-clear-btn')) {
             clearUserForm();
+        }
+    }
+});
+
+document.addEventListener('input', event => {
+    if (document.getElementById('tab-users')?.classList.contains('active')) {
+        const form = document.getElementById('user-form');
+        if (!form || !form.contains(event.target)) return;
+        
+        const usernameInput = form.querySelector('#user-form-username');
+        const passwordInput = form.querySelector('#user-form-password');
+        const usernameFeedback = form.querySelector('#username-feedback');
+        const passwordFeedback = form.querySelector('#password-feedback');
+
+        if (event.target === usernameInput && !usernameInput.readOnly) {
+            const error = validateUsername_fe(usernameInput.value);
+            updateFeedback(usernameFeedback, error);
+        }
+
+        if (event.target === passwordInput) {
+            const password = passwordInput.value;
+            if (!password && form.querySelector('#user-form-username-hidden').value) {
+                updateFeedback(passwordFeedback, '如需修改，请输入新密码', true);
+            } else {
+                 const error = validatePassword_fe(password);
+                 updateFeedback(passwordFeedback, error);
+            }
         }
     }
 });
@@ -224,8 +313,20 @@ document.addEventListener('submit', async (e) => {
         const username = form.querySelector('#user-form-username').value.trim();
         const password = form.querySelector('#user-form-password').value;
 
-        if (!username) { errorEl.textContent = '用户名不能为空'; return; }
-        if (!isEditing && !password) { errorEl.textContent = '新用户必须设置密码'; return; }
+        if (!isEditing) {
+            const usernameError = validateUsername_fe(username);
+            if (usernameError) {
+                errorEl.textContent = usernameError;
+                return;
+            }
+        }
+        if (!isEditing || password) {
+            const passwordError = validatePassword_fe(password);
+            if (passwordError) {
+                errorEl.textContent = passwordError;
+                return;
+            }
+        }
 
         const selectedRole = form.querySelector('input[name="role-selection"]:checked').value;
         const userData = {
@@ -249,9 +350,7 @@ document.addEventListener('submit', async (e) => {
 
             if (isEditing) {
                 const userIndex = allUsers.findIndex(u => u.username === savedUser.username);
-                if (userIndex > -1) {
-                    allUsers[userIndex] = savedUser;
-                }
+                if (userIndex > -1) allUsers[userIndex] = savedUser;
             } else {
                 allUsers.push(savedUser);
             }
@@ -259,7 +358,6 @@ document.addEventListener('submit', async (e) => {
             const token = localStorage.getItem('jwt_token');
             if (token && parseJwtPayload(token).sub === savedUser.username && !savedUser.roles.includes('admin')) {
                 showToast('您的管理员权限已被移除，将退出管理后台。', true);
-                localStorage.removeItem('jwt_token');
                 setTimeout(() => window.location.href = 'index.html', 2000);
                 return;
             }
@@ -275,7 +373,6 @@ document.addEventListener('submit', async (e) => {
         }
     }
 });
-
 
 document.addEventListener('change', event => {
     if (document.getElementById('tab-users')?.classList.contains('active')) {
