@@ -3,24 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>管理后台</title>
+    <title>管理后台 - NaviCenter</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body class="is-loading">
+    <!-- 背景动画 -->
     <div class="page-background"></div>
+    
+    <!-- 主容器 -->
     <div id="admin-page-container" style="display: none;">
+        
+        <!-- 顶部标题栏 -->
         <header class="admin-header glass-pane">
             <h1><i class="fas fa-cogs"></i> 控制中心</h1>
             <a href="index.html" class="button"><i class="fas fa-home"></i> 返回主页</a>
         </header>
+        
+        <!-- 主面板容器 -->
         <div class="admin-panel-container glass-pane">
+            
+            <!-- 左侧导航栏 -->
             <nav class="admin-panel-nav">
                 <a href="#" class="admin-tab-link active" data-tab="tab-categories"><i class="fas fa-folder-tree fa-fw"></i> 分类管理</a>
                 <a href="#" class="admin-tab-link" data-tab="tab-users"><i class="fas fa-users fa-fw"></i> 用户管理</a>
                 <a href="#" class="admin-tab-link" data-tab="tab-bookmarks"><i class="fas fa-bookmark fa-fw"></i> 书签管理</a>
-                <a href="#" class="admin-tab-link" data-tab="tab-system"><i class="fas fa-tools fa-fw"></i> 导入书签</a>
+                <a href="#" class="admin-tab-link" data-tab="tab-system"><i class="fas fa-tools fa-fw"></i> 系统工具</a>
             </nav>
+            
+            <!-- 右侧内容区 -->
             <main class="admin-panel-content">
                 <div id="tab-categories" class="admin-tab-content active"></div>
                 <div id="tab-users" class="admin-tab-content"></div>
@@ -30,12 +41,15 @@
         </div>
     </div>
 
+    <!-- 全局模态框容器 -->
     <div id="modal-backdrop" class="modal-backdrop">
+        
+        <!-- 书签编辑模态框 -->
         <div id="bookmark-edit-modal" class="modal glass-pane">
             <div class="modal-content">
                 <span class="close-btn">&times;</span>
                 <h2 id="bookmark-modal-title">编辑书签</h2>
-                <form id="bookmark-edit-form">
+                <form id="bookmark-edit-form" novalidate>
                     <input type="hidden" id="bm-edit-id">
                     <div class="form-group">
                         <label for="bm-edit-name">名称:</label>
@@ -62,6 +76,8 @@
                 </form>
             </div>
         </div>
+        
+        <!-- 确认对话框 -->
         <div id="confirm-modal" class="modal glass-pane">
              <div class="modal-content small">
                 <h3 id="confirm-title"></h3>
@@ -74,8 +90,9 @@
         </div>
     </div>
 
-    <!-- 【修复】调整脚本加载顺序 -->
+    <!-- 脚本加载 -->
     <script src="shared.js"></script>
+    <!-- 【重要】修复后的脚本加载顺序 -->
     <!-- 先加载所有定义了渲染函数的模块文件 -->
     <script src="admin-categories.js"></script>
     <script src="admin-bookmarks.js"></script>
