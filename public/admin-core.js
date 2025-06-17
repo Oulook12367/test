@@ -1,15 +1,18 @@
 // admin-core.js
 
 // --- 1. 全局状态定义 ---
+// 这些变量将在整个管理后台的所有模块中共享
 let allBookmarks = [], allCategories = [], allUsers = [];
 
-// --- 【新增】核心排序工具函数 ---
+// --- 2. 核心排序工具函数 ---
 /**
  * 将扁平的分类数组，转换为按层级优先的排序后数组。
+ * 这是所有排序功能的基础，确保了分类和书签的显示顺序正确。
  * @param {Array} categories - 全部分类数组。
  * @returns {Array} - 一个新数组，分类按正确的层级顺序排列。
  */
 function getHierarchicalSortedCategories(categories) {
+    if (!Array.isArray(categories)) return [];
     const categoryMap = new Map(categories.map(c => [c.id, {...c, children: []}]));
     const tree = [];
     const sortedList = [];
@@ -50,9 +53,14 @@ function getHierarchicalSortedCategories(categories) {
     return sortedList;
 }
 
-
+// --- 3. 主程序入口 ---
 document.addEventListener('DOMContentLoaded', () => {
-    // --- 2. 核心初始化函数 (带缓存逻辑) ---
+    // --- 3.1. 全局元素选择器 ---
+    const adminPageContainer = document.getElementById('admin-page-container');
+    const adminPanelNav = document.querySelector('.admin-panel-nav');
+    const adminTabContents = document.querySelectorAll('.admin-tab-content');
+    
+    // --- 3.2. 核心初始化函数 (带缓存逻辑) ---
     async function initializePage(activeTabId = 'tab-categories') {
         try {
             const token = localStorage.getItem('jwt_token');
@@ -69,16 +77,17 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 console.log("缓存未命中，从API获取数据...");
                 const data = await apiRequest('data');
-                if (!data || !data.users.find(u => u.username === payload.sub)?.roles.includes('admin')) {
+                const usersArray = Array.isArray(data.users) ? data.users : Object.values(data.users);
+                if (!data || !usersArray.find(u => u.username === payload.sub)?.roles.includes('admin')) {
                     throw new Error("用户权限不足或数据获取失败。");
                 }
                 allCategories = data.categories || [];
                 allBookmarks = data.bookmarks || [];
-                allUsers = data.users || [];
+                allUsers = usersArray || [];
                 sessionStorage.setItem('adminDataCache', JSON.stringify({categories: allCategories, bookmarks: allBookmarks, users: allUsers}));
             }
 
-            if (document.getElementById('admin-page-container')) document.getElementById('admin-page-container').style.display = 'flex';
+            if (adminPageContainer) adminPageContainer.style.display = 'flex';
             document.body.classList.remove('is-loading');
 
             const linkToClick = document.querySelector(`.admin-tab-link[data-tab="${activeTabId}"]`);
@@ -98,7 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- 3. 标签页渲染与切换 ---
+    // --- 3.3. 标签页渲染与切换 ---
     const renderAdminTab = (tabId) => {
         const container = document.getElementById(tabId);
         if (!container) return;
@@ -120,7 +129,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const adminPanelNav = document.querySelector('.admin-panel-nav');
     if (adminPanelNav) {
         adminPanelNav.addEventListener('click', (e) => {
             e.preventDefault();
@@ -131,23 +139,31 @@ document.addEventListener('DOMContentLoaded', () => {
             link.classList.add('active');
             
             const tabId = link.dataset.tab;
-            document.querySelectorAll('.admin-tab-content').forEach(content => content.classList.toggle('active', content.id === tabId));
+            adminTabContents.forEach(content => content.classList.toggle('active', content.id === tabId));
             
             renderAdminTab(tabId);
         });
     }
 
-    // --- 4. 启动页面 ---
+    // --- 3.4. 启动页面 ---
     initializePage();
 });
 
-// --- 5. 全局共享工具函数 ---
+// --- 4. 全局共享工具函数 ---
 
+/**
+ * 使前端缓存失效，强制下次从API重新加载数据。
+ */
 function invalidateCache() {
     console.log("前端缓存已失效，下次将重新获取。");
     sessionStorage.removeItem('adminDataCache');
 }
 
+/**
+ * 显示一个非阻塞的消息提示（Toast）。
+ * @param {string} message - 要显示的消息内容。
+ * @param {boolean} [isError=false] - 是否为错误消息。
+ */
 function showToast(message, isError = false) {
     let toast = document.querySelector('.toast-message');
     if (!toast) {
@@ -168,6 +184,10 @@ function showToast(message, isError = false) {
     setTimeout(() => { toast.style.opacity = '0'; }, 3000);
 }
 
+/**
+ * 显示指定的模态框。
+ * @param {HTMLElement} modalElement - 要显示的模态框DOM元素。
+ */
 function showModal(modalElement) {
     const modalBackdrop = document.getElementById('modal-backdrop');
     hideAllModals();
@@ -177,12 +197,21 @@ function showModal(modalElement) {
     }
 }
 
+/**
+ * 隐藏所有模态框。
+ */
 function hideAllModals() {
     const modalBackdrop = document.getElementById('modal-backdrop');
     if (modalBackdrop) modalBackdrop.style.display = 'none';
     document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
 }
 
+/**
+ * 显示一个确认对话框。
+ * @param {string} title - 对话框标题。
+ * @param {string} text - 对话框正文。
+ * @param {Function} onConfirm - 用户点击“确认”后执行的回调函数。
+ */
 function showConfirm(title, text, onConfirm) {
     const confirmModal = document.getElementById('confirm-modal');
     const confirmTitle = document.getElementById('confirm-title');
@@ -203,13 +232,20 @@ function showConfirm(title, text, onConfirm) {
     };
 }
 
+/**
+ * 填充一个<select>元素，支持层级显示。
+ * @param {HTMLElement} selectElement - 要填充的<select>元素。
+ * @param {Array} categories - 全部分类数据数组。
+ * @param {string|null} selectedId - 应被选中的分类ID。
+ * @param {string|null} ignoreId - 不应出现在下拉列表中的分类ID（通常是自身）。
+ * @param {object} options - 其他选项，如 { allowNoParent: boolean }。
+ */
 function populateCategoryDropdown(selectElement, categories, selectedId = null, ignoreId = null, options = { allowNoParent: true }) {
     selectElement.innerHTML = '';
     if (options.allowNoParent) {
         selectElement.innerHTML = '<option value=""> 顶级分类 </option>';
     }
     
-    // 使用新的排序函数来保证下拉列表的顺序
     const sortedCategories = getHierarchicalSortedCategories(categories);
 
     sortedCategories.forEach(cat => {
