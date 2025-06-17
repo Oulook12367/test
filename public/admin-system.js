@@ -72,7 +72,7 @@ async function parseAndImport(htmlContent) {
 
             // 如果节点是书签 (A)
             } else if (link) {
-                 const highestBmSortOrder = allBookmarks.filter(b => b.categoryId === parentId).length > 0 ? Math.max(-1, ...allBookmarks.filter(b => b.categoryId === parentId).map(bm => bm.sortOrder || 0)) : -1;
+                const highestBmSortOrder = allBookmarks.filter(b => b.categoryId === parentId).length > 0 ? Math.max(-1, ...allBookmarks.filter(b => b.categoryId === parentId).map(bm => bm.sortOrder || 0)) : -1;
                 importedBookmarks.push({
                     id: generateId('bm'), 
                     name: link.textContent.trim(), 
@@ -104,7 +104,7 @@ async function parseAndImport(htmlContent) {
         invalidateCache();
         // 导入成功后，需要重新加载数据以确保UI同步
         // 由于initializePage在其他文件，最好的方式是提示用户并刷新
-        showConfirm("导入成功", "数据已成功导入，请刷新页面查看最新内容。", () => {
+        showConfirm("导入成功", "数据已成功导入，请刷新页面以查看最新内容。", () => {
             location.reload();
         });
     } catch (error) {
