@@ -2,7 +2,7 @@
 
 // --- 1. 全局状态定义 ---
 // 这些变量将在整个管理后台的所有模块中共享
-let allBookmarks = [], allCategories = [], allUsers = [];
+let allBookmarks = [], allCategories = [], allUsers = [], siteSettings = {};
 
 // --- 2. 核心排序工具函数 ---
 /**
@@ -74,6 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 allCategories = data.categories || [];
                 allBookmarks = data.bookmarks || [];
                 allUsers = data.users || [];
+                siteSettings = data.siteSettings || {};
             } else {
                 console.log("缓存未命中，从API获取数据...");
                 const data = await apiRequest('data');
@@ -84,7 +85,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 allCategories = data.categories || [];
                 allBookmarks = data.bookmarks || [];
                 allUsers = usersArray || [];
-                sessionStorage.setItem('adminDataCache', JSON.stringify({categories: allCategories, bookmarks: allBookmarks, users: allUsers}));
+                siteSettings.publicModeEnabled = data.publicModeEnabled || false;
+                
+                sessionStorage.setItem('adminDataCache', JSON.stringify({
+                    categories: allCategories, 
+                    bookmarks: allBookmarks, 
+                    users: allUsers,
+                    siteSettings: siteSettings
+                }));
             }
 
             if (adminPageContainer) adminPageContainer.style.display = 'flex';
@@ -113,6 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!container) return;
         container.innerHTML = '';
         
+        // 根据 tabId 调用不同模块的渲染函数 (这些函数在各自的文件中定义)
         switch (tabId) {
             case 'tab-categories':
                 renderCategoryAdminTab(container);
@@ -258,6 +267,7 @@ function populateCategoryDropdown(selectElement, categories, selectedId = null, 
     });
 }
 
+// 初始化所有模态框的关闭按钮事件
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.close-btn, #confirm-btn-no').forEach(btn => {
         btn.addEventListener('click', hideAllModals);
