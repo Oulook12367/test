@@ -159,7 +159,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
     
-    // 【修复】全新的、更简单的书签渲染逻辑
     const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
         if (!bookmarksGrid) return;
         
@@ -174,13 +173,12 @@ document.addEventListener('DOMContentLoaded', () => {
             filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lower) || bm.url.toLowerCase().includes(lower));
         }
         
-        // 按分类的层级顺序给书签排序
         const categoryOrderMap = new Map(allCategories.map((cat, index) => [cat.id, index]));
         filteredBookmarks.sort((a, b) => {
             const orderA = categoryOrderMap.get(a.categoryId) ?? Infinity;
             const orderB = categoryOrderMap.get(b.categoryId) ?? Infinity;
             if (orderA !== orderB) return orderA - orderB;
-            return (a.sortOrder || 0) - (b.sortOrder || 0); // 组内再按自身排序
+            return (a.sortOrder || 0) - (b.sortOrder || 0);
         });
         
         bookmarksGrid.innerHTML = '';
@@ -197,7 +195,6 @@ document.addEventListener('DOMContentLoaded', () => {
         filteredBookmarks.forEach((bm, index) => {
             const currentCategoryId = bm.categoryId;
             
-            // 【修复】只要分类ID和上一个不同，就插入分隔符
             if (index > 0 && currentCategoryId !== previousCategoryId) {
                 htmlChunks.push('<div class="bookmark-level-separator"></div>');
             }
@@ -207,10 +204,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const gStaticIconUrl = `https://www.google.com/s2/favicons?sz=64&domain_url=${domain}`;
             const finalIconSrc = bm.icon || gStaticIconUrl;
             
+            // 【修复】只有在描述存在时才渲染<p>标签
+            let descriptionHTML = '';
+            if (bm.description && bm.description.trim() !== '') {
+                descriptionHTML = `<p>${escapeHTML(bm.description)}</p>`;
+            }
+
             htmlChunks.push(
                 `<a href="${bm.url}" class="bookmark-card glass-pane" target="_blank" rel="noopener noreferrer">
                     <h3><img src="${finalIconSrc}" alt="" onerror="this.onerror=null;this.src='${fallbackIcon}'"> ${escapeHTML(bm.name)}</h3>
-                    <p>${escapeHTML(bm.description || '')}</p>
+                    ${descriptionHTML}
                 </a>`
             );
             
