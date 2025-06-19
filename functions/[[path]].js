@@ -26,37 +26,19 @@ const jsonResponse = (data, status = 200, headers = {}) => {
     }
     return new Response(JSON.stringify(data), { status, headers: { ...defaultHeaders, ...headers } });
 };
-
-// --- 凭据验证函数 ---
 function validateUsername(username) {
-    if (!username || username.length < 6) {
-        return "用户名至少需要6位。";
-    }
-    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
-        return "用户名只能包含字母、数字、下划线和连字符。";
-    }
-    return null; // No error
+    if (!username || username.length < 6) return "用户名至少需要6位。";
+    if (!/^[a-zA-Z0-9_-]+$/.test(username)) return "用户名只能包含字母、数字、下划线和连字符。";
+    return null;
 }
-
 function validatePassword(password) {
-    if (!password || password.length < 8) {
-        return "密码至少需要8位。";
-    }
-    if (!/(?=.*[a-z])/.test(password)) {
-        return "密码必须包含至少一个小写字母。";
-    }
-    if (!/(?=.*[A-Z])/.test(password)) {
-        return "密码必须包含至少一个大写字母。";
-    }
-    if (!/(?=.*[0-9])/.test(password)) {
-        return "密码必须包含至少一个数字。";
-    }
-    if (!/(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/.test(password)) {
-        return "密码必须包含至少一个特殊符号。";
-    }
-    return null; // No error
+    if (!password || password.length < 8) return "密码至少需要8位。";
+    if (!/(?=.*[a-z])/.test(password)) return "密码必须包含至少一个小写字母。";
+    if (!/(?=.*[A-Z])/.test(password)) return "密码必须包含至少一个大写字母。";
+    if (!/(?=.*[0-9])/.test(password)) return "密码必须包含至少一个数字。";
+    if (!/(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/.test(password)) return "密码必须包含至少一个特殊符号。";
+    return null;
 }
-
 
 // --- 缓存处理函数 ---
 async function purgeDataCache(context) {
@@ -75,13 +57,11 @@ const getSiteData = async (context) => {
     const { request, env } = context;
     const cache = caches.default;
     const cacheKey = new Request(new URL(request.url).origin + '/api/data_cache_key');
-
     const cachedResponse = await cache.match(cacheKey);
     if (cachedResponse) {
         console.log("缓存命中！直接从Cache API返回数据。");
         return cachedResponse.json();
     }
-
     console.log("缓存未命中。正在从KV获取数据...");
     const [userIndex, categoryIndex, bookmarkIndex, jwtSecret, publicModeSetting] = await Promise.all([
         env.NAVI_DATA.get('_index:users', 'json').then(res => res || null),
@@ -90,7 +70,6 @@ const getSiteData = async (context) => {
         env.NAVI_DATA.get('jwtSecret'),
         env.NAVI_DATA.get('setting:publicModeEnabled')
     ]);
-
     if (userIndex === null) {
         console.log("首次运行检测到，正在初始化原子数据...");
         const adminSalt = generateSalt();
@@ -102,7 +81,6 @@ const getSiteData = async (context) => {
         const publicUser = { username: 'public', roles: ['viewer'], permissions: { visibleCategories: [publicCatId] }, defaultCategoryId: publicCatId };
         const defaultCategory = { id: parentCatId, name: '默认分类', parentId: null, sortOrder: 0 };
         const publicCategory = { id: publicCatId, name: '公共分类', parentId: null, sortOrder: 1 };
-        
         await Promise.all([
             env.NAVI_DATA.put('user:admin', JSON.stringify(adminUser)),
             env.NAVI_DATA.put('user:public', JSON.stringify(publicUser)),
@@ -116,17 +94,14 @@ const getSiteData = async (context) => {
         ]);
         return getSiteData(context);
     }
-    
     const userKeys = userIndex.map(username => `user:${username}`);
     const categoryKeys = categoryIndex.map(id => `category:${id}`);
     const bookmarkKeys = bookmarkIndex.map(id => `bookmark:${id}`);
-
     const [usersData, categoriesData, bookmarksData] = await Promise.all([
         userKeys.length > 0 ? Promise.all(userKeys.map(key => env.NAVI_DATA.get(key, 'json'))) : Promise.resolve([]),
         categoryKeys.length > 0 ? Promise.all(categoryKeys.map(key => env.NAVI_DATA.get(key, 'json'))) : Promise.resolve([]),
         bookmarkKeys.length > 0 ? Promise.all(bookmarkKeys.map(key => env.NAVI_DATA.get(key, 'json'))) : Promise.resolve([])
     ]);
-
     const siteData = {
         users: Object.fromEntries(usersData.filter(Boolean).map(user => [user.username, user])),
         categories: categoriesData.filter(Boolean),
@@ -134,7 +109,6 @@ const getSiteData = async (context) => {
         jwtSecret: jwtSecret,
         publicModeEnabled: publicModeSetting === 'true'
     };
-    
     if (siteData.users) {
         for (const username in siteData.users) {
             const user = siteData.users[username];
@@ -149,10 +123,8 @@ const getSiteData = async (context) => {
             if (!user.permissions.visibleCategories) user.permissions.visibleCategories = [];
         }
     }
-    
     const responseToCache = new Response(JSON.stringify(siteData), { headers: { 'Content-Type': 'application/json' } });
     context.waitUntil(cache.put(cacheKey, responseToCache.clone(), { expirationTtl: 3600 }));
-    
     return siteData;
 };
 
@@ -177,19 +149,13 @@ export async function onRequest(context) {
         const { request, env, next } = context;
         const url = new URL(request.url);
         const path = url.pathname;
-
-        if (!path.startsWith('/api/')) {
-            return next();
-        }
-
+        if (!path.startsWith('/api/')) return next();
         let apiPath = path.substring(5);
         if (apiPath.endsWith('/')) apiPath = apiPath.slice(0, -1);
 
         const siteData = await getSiteData(context);
         globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteData.jwtSecret;
-        if (!globalThis.JWT_SECRET_STRING) {
-            return jsonResponse({ error: 'Critical Configuration Error: JWT_SECRET is missing.' }, 500);
-        }
+        if (!globalThis.JWT_SECRET_STRING) return jsonResponse({ error: 'Critical Configuration Error: JWT_SECRET is missing.' }, 500);
         
         if (apiPath === 'scrape-url') {
             const authResultForScrape = await authenticateRequest(request, siteData);
@@ -199,15 +165,11 @@ export async function onRequest(context) {
             const response = await fetch(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
             if (!response.ok) throw new Error(`Fetch failed with status: ${response.status}`);
             let title = '', description = '', icon = '';
-            const rewriter = new HTMLRewriter()
-                .on('title', { text(text) { title += text.text; }})
-                .on('meta[name="description"]', { element(element) { description = element.getAttribute('content'); }})
-                .on('link[rel*="icon"]', { element(element) { if (!icon) { let href = element.getAttribute('href'); if (href) icon = new URL(href, targetUrl).toString(); } } });
+            const rewriter = new HTMLRewriter().on('title', { text(text) { title += text.text; } }).on('meta[name="description"]', { element(element) { description = element.getAttribute('content'); } }).on('link[rel*="icon"]', { element(element) { if (!icon) { let href = element.getAttribute('href'); if (href) icon = new URL(href, targetUrl).toString(); } } });
             await rewriter.transform(response).arrayBuffer();
             if (!icon) { try { const iconUrl = new URL('/favicon.ico', targetUrl); const iconCheck = await fetch(iconUrl.toString(), { method: 'HEAD' }); if(iconCheck.ok) icon = iconUrl.toString(); } catch (e) {} }
             return jsonResponse({ title: cleanTitle(title), description: description || '', icon: icon || '' });
         }
-
         if (apiPath === 'login' && request.method === 'POST') {
             const { username, password } = await request.json();
             const user = siteData.users[username];
@@ -218,7 +180,6 @@ export async function onRequest(context) {
             const token = await new SignJWT({ sub: safeUser.username, roles: safeUser.roles }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('1d').sign(await JWT_SECRET());
             return jsonResponse({ token, user: safeUser });
         }
-
         if (apiPath === 'data' && request.method === 'GET') {
             const authHeader = request.headers.get('Authorization');
             if (siteData.publicModeEnabled && !authHeader) {
@@ -245,6 +206,37 @@ export async function onRequest(context) {
         const authResult = await authenticateRequest(request, siteData);
         if (authResult.error) return jsonResponse(authResult, authResult.status);
         const currentUser = authResult.user;
+
+        if (apiPath === 'cleanup-orphan-bookmarks' && request.method === 'POST') {
+            if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
+            const categoryIds = new Set(siteData.categories.map(c => c.id));
+            const orphanBookmarks = siteData.bookmarks.filter(bm => !bm.categoryId || !categoryIds.has(bm.categoryId));
+            if (orphanBookmarks.length === 0) return jsonResponse({ message: '没有找到需要修复的书签。', fixedCount: 0 });
+            let uncategorizedCat = siteData.categories.find(c => c.name === '未分类书签' && c.parentId === null);
+            if (!uncategorizedCat) {
+                uncategorizedCat = { id: `cat-${Date.now()}`, name: '未分类书签', parentId: null, sortOrder: (siteData.categories.length > 0 ? Math.max(...siteData.categories.map(c => c.sortOrder || 0)) : -1) + 1 };
+                await env.NAVI_DATA.put(`category:${uncategorizedCat.id}`, JSON.stringify(uncategorizedCat));
+                const categoryIndex = await env.NAVI_DATA.get('_index:categories', 'json') || [];
+                categoryIndex.push(uncategorizedCat.id);
+                await env.NAVI_DATA.put('_index:categories', JSON.stringify(categoryIndex));
+            }
+            const fixPromises = orphanBookmarks.map(bm => {
+                bm.categoryId = uncategorizedCat.id;
+                return env.NAVI_DATA.put(`bookmark:${bm.id}`, JSON.stringify(bm));
+            });
+            await Promise.all(fixPromises);
+            await purgeDataCache(context);
+            return jsonResponse({ message: `成功修复了 ${orphanBookmarks.length} 个书签。`, fixedCount: orphanBookmarks.length });
+        }
+        
+        if (apiPath === 'system-settings' && request.method === 'PUT') {
+            if (!currentUser.roles.includes('admin')) return jsonResponse({ error: '权限不足，只有管理员才能修改系统设置。' }, 403);
+            const { publicModeEnabled } = await request.json();
+            if (typeof publicModeEnabled !== 'boolean') return jsonResponse({ error: '无效的参数。' }, 400);
+            await env.NAVI_DATA.put('setting:publicModeEnabled', String(publicModeEnabled));
+            await purgeDataCache(context);
+            return jsonResponse({ success: true, publicModeEnabled });
+        }
 
         if (apiPath === 'bookmarks' && request.method === 'POST') {
             if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
@@ -306,17 +298,11 @@ export async function onRequest(context) {
             if (request.method === 'DELETE') {
                 if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
                 const getDescendants = (catId, allCats) => {
-                    let descendants = new Set();
-                    let queue = [catId];
+                    let descendants = new Set(); let queue = [catId];
                     while(queue.length > 0) {
                         let currentId = queue.shift();
                         let children = allCats.filter(c => c.parentId === currentId);
-                        for (const child of children) {
-                            if (!descendants.has(child.id)) {
-                                descendants.add(child.id);
-                                queue.push(child.id);
-                            }
-                        }
+                        for (const child of children) { if (!descendants.has(child.id)) { descendants.add(child.id); queue.push(child.id); } }
                     }
                     return descendants;
                 };
@@ -339,27 +325,17 @@ export async function onRequest(context) {
             if (!currentUser.permissions.canEditUsers && apiPath !== 'users/self') return jsonResponse({ error: '权限不足' }, 403);
             if (apiPath === 'users' && request.method === 'POST') {
                 const { username, password, roles, permissions, defaultCategoryId } = await request.json();
-                const usernameError = validateUsername(username);
-                if (usernameError) return jsonResponse({ error: usernameError }, 400);
-                const passwordError = validatePassword(password);
-                if (passwordError) return jsonResponse({ error: passwordError }, 400);
+                const usernameError = validateUsername(username); if (usernameError) return jsonResponse({ error: usernameError }, 400);
+                const passwordError = validatePassword(password); if (passwordError) return jsonResponse({ error: passwordError }, 400);
                 if (siteData.users[username]) return jsonResponse({ error: '用户名已存在' }, 400);
-                const salt = generateSalt();
-                const passwordHash = await hashPassword(password, salt);
+                const salt = generateSalt(); const passwordHash = await hashPassword(password, salt);
                 const newUser = { username, passwordHash, salt, roles, permissions, defaultCategoryId: defaultCategoryId || 'all' };
                 await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(newUser));
                 const latestUserIndex = await env.NAVI_DATA.get('_index:users', 'json') || [];
-                if (!latestUserIndex.includes(username)) {
-                    latestUserIndex.push(username);
-                    await env.NAVI_DATA.put('_index:users', JSON.stringify(latestUserIndex));
-                }
+                if (!latestUserIndex.includes(username)) { latestUserIndex.push(username); await env.NAVI_DATA.put('_index:users', JSON.stringify(latestUserIndex)); }
                 await purgeDataCache(context);
                 const { passwordHash: p, salt: s, ...safeUser } = newUser;
-                Object.assign(safeUser.permissions, {
-                    canEditBookmarks: roles.includes('editor') || roles.includes('admin'),
-                    canEditCategories: roles.includes('editor') || roles.includes('admin'),
-                    canEditUsers: roles.includes('admin'),
-                });
+                Object.assign(safeUser.permissions, { canEditBookmarks: roles.includes('editor') || roles.includes('admin'), canEditCategories: roles.includes('editor') || roles.includes('admin'), canEditUsers: roles.includes('admin') });
                 return jsonResponse(safeUser, 201);
             }
             if (apiPath.startsWith('users/')) {
@@ -382,15 +358,12 @@ export async function onRequest(context) {
                 if (request.method === 'PUT') {
                     const { roles, permissions, password, defaultCategoryId } = await request.json();
                     if (password) {
-                        const passwordError = validatePassword(password);
-                        if (passwordError) return jsonResponse({ error: passwordError }, 400);
+                        const passwordError = validatePassword(password); if (passwordError) return jsonResponse({ error: passwordError }, 400);
                         userToManage.salt = generateSalt();
                         userToManage.passwordHash = await hashPassword(password, userToManage.salt);
                     }
                     if (roles) userToManage.roles = roles;
-                    if (permissions && permissions.visibleCategories !== undefined) {
-                        userToManage.permissions.visibleCategories = permissions.visibleCategories;
-                    }
+                    if (permissions && permissions.visibleCategories !== undefined) userToManage.permissions.visibleCategories = permissions.visibleCategories;
                     if (defaultCategoryId !== undefined) userToManage.defaultCategoryId = defaultCategoryId;
                     await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(userToManage));
                     await purgeDataCache(context);
@@ -432,15 +405,6 @@ export async function onRequest(context) {
             }
             await purgeDataCache(context);
             return jsonResponse({ success: true, importedCategories: newCategories.length, importedBookmarks: newBookmarks.length });
-        }
-        
-        if (apiPath === 'system-settings' && request.method === 'PUT') {
-            if (!currentUser.roles.includes('admin')) return jsonResponse({ error: '权限不足，只有管理员才能修改系统设置。' }, 403);
-            const { publicModeEnabled } = await request.json();
-            if (typeof publicModeEnabled !== 'boolean') return jsonResponse({ error: '无效的参数。' }, 400);
-            await env.NAVI_DATA.put('setting:publicModeEnabled', String(publicModeEnabled));
-            await purgeDataCache(context);
-            return jsonResponse({ success: true, publicModeEnabled });
         }
 
         return jsonResponse({ error: 'API endpoint not found' }, 404);
