@@ -159,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
     
-    // 【修复】全新的书签渲染逻辑
+    // 【修复】全新的、更简单的书签渲染逻辑
     const renderBookmarks = (categoryId = 'all', searchTerm = '') => {
         if (!bookmarksGrid) return;
         
@@ -174,57 +174,47 @@ document.addEventListener('DOMContentLoaded', () => {
             filteredBookmarks = filteredBookmarks.filter(bm => bm.name.toLowerCase().includes(lower) || bm.url.toLowerCase().includes(lower));
         }
         
-        // 先按书签自身排序
-        filteredBookmarks.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-
+        // 按分类的层级顺序给书签排序
+        const categoryOrderMap = new Map(allCategories.map((cat, index) => [cat.id, index]));
+        filteredBookmarks.sort((a, b) => {
+            const orderA = categoryOrderMap.get(a.categoryId) ?? Infinity;
+            const orderB = categoryOrderMap.get(b.categoryId) ?? Infinity;
+            if (orderA !== orderB) return orderA - orderB;
+            return (a.sortOrder || 0) - (b.sortOrder || 0); // 组内再按自身排序
+        });
+        
         bookmarksGrid.innerHTML = '';
         if(filteredBookmarks.length === 0){
             bookmarksGrid.innerHTML = '<p class="empty-message">这里什么都没有...</p>';
             return;
         }
-
-        // 【修复】第一步：将书签按顶级分类分组
-        const groupedBookmarks = filteredBookmarks.reduce((groups, bm) => {
-            const category = categoryMap.get(bm.categoryId);
-            const topLevelId = category ? category.topLevelParentId : null;
-            if (topLevelId) {
-                if (!groups[topLevelId]) {
-                    groups[topLevelId] = [];
-                }
-                groups[topLevelId].push(bm);
-            }
-            return groups;
-        }, {});
         
-        // 获取所有顶级分类并排序
-        const topLevelCategories = allCategories.filter(c => c.level === 0).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-
         const fallbackIcon = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L8 12v1c0 1.1.9 2 2 2v1.93zM17.99 9.21c-.23-.6-.53-1.15-.9-1.64L13 12v-1c0-1.1-.9-2-2-2V7.07c3.95.49 7 3.85 7 7.93 0 .62-.08 1.21-.21 1.79z'/%3E%3C/svg%3E`;
 
         let htmlChunks = [];
-        
-        // 【修复】第二步：按顶级分类的顺序渲染每个分组
-        topLevelCategories.forEach((topCat, index) => {
-            const bookmarksInGroup = groupedBookmarks[topCat.id];
-            if (bookmarksInGroup && bookmarksInGroup.length > 0) {
-                // 在分组之间插入分隔符
-                if (htmlChunks.length > 0) {
-                    htmlChunks.push('<div class="bookmark-level-separator"></div>');
-                }
-                
-                bookmarksInGroup.forEach(bm => {
-                    let domain = '';
-                    try { domain = new URL(bm.url).hostname; } catch (e) {}
-                    const gStaticIconUrl = `https://www.google.com/s2/favicons?sz=64&domain_url=${domain}`;
-                    const finalIconSrc = bm.icon || gStaticIconUrl;
-                    htmlChunks.push(
-                        `<a href="${bm.url}" class="bookmark-card glass-pane" target="_blank" rel="noopener noreferrer">
-                            <h3><img src="${finalIconSrc}" alt="" onerror="this.onerror=null;this.src='${fallbackIcon}'"> ${escapeHTML(bm.name)}</h3>
-                            <p>${escapeHTML(bm.description || '')}</p>
-                        </a>`
-                    );
-                });
+        let previousCategoryId = null;
+
+        filteredBookmarks.forEach((bm, index) => {
+            const currentCategoryId = bm.categoryId;
+            
+            // 【修复】只要分类ID和上一个不同，就插入分隔符
+            if (index > 0 && currentCategoryId !== previousCategoryId) {
+                htmlChunks.push('<div class="bookmark-level-separator"></div>');
             }
+
+            let domain = '';
+            try { domain = new URL(bm.url).hostname; } catch (e) {}
+            const gStaticIconUrl = `https://www.google.com/s2/favicons?sz=64&domain_url=${domain}`;
+            const finalIconSrc = bm.icon || gStaticIconUrl;
+            
+            htmlChunks.push(
+                `<a href="${bm.url}" class="bookmark-card glass-pane" target="_blank" rel="noopener noreferrer">
+                    <h3><img src="${finalIconSrc}" alt="" onerror="this.onerror=null;this.src='${fallbackIcon}'"> ${escapeHTML(bm.name)}</h3>
+                    <p>${escapeHTML(bm.description || '')}</p>
+                </a>`
+            );
+            
+            previousCategoryId = currentCategoryId;
         });
         
         bookmarksGrid.innerHTML = htmlChunks.join('');
