@@ -5,6 +5,10 @@
  * @param {HTMLElement} container - 用于承载内容的DOM元素。
  */
 function renderSystemSettingsTab(container) {
+    const usersArray = Array.isArray(allUsers) ? allUsers : Object.values(allUsers);
+    const currentUser = usersArray.find(u => u.username === parseJwtPayload(localStorage.getItem('jwt_token'))?.sub);
+
+    // 基础HTML结构
     container.innerHTML = `
         <div class="system-setting-item">
             <p style="margin-bottom: 1.5rem;">从浏览器导出的HTML文件（Netscape书签格式）导入书签。此操作会合并现有书签，不会清空原有数据。</p>
@@ -13,7 +17,40 @@ function renderSystemSettingsTab(container) {
                 <button id="import-bookmarks-btn-admin" class="button">选择HTML文件</button>
                 <input type="file" id="import-file-input-admin" accept=".html,.htm" style="display: none;">
             </div>
+        </div>
+        <div style="border-top: 1px solid rgba(255,255,255,0.2); margin: 2rem 0;"></div>
+        <div class="system-setting-item">
+            <p style="margin-bottom: 1.5rem;">如果因之前导入错误等原因导致部分书签无法显示，可以尝试使用此工具进行修复。它会自动找出所有“无家可归”的书签，并将它们放入一个名为“未分类书签”的文件夹中。</p>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <h3 style="margin: 0; flex-shrink: 0;"><i class="fas fa-medkit"></i> 数据修复</h3>
+                <button id="cleanup-orphan-bookmarks-btn" class="button">修复孤儿书签</button>
+            </div>
         </div>`;
+
+    // 只有管理员才能看到公共模式的设置
+    if (currentUser && currentUser.roles.includes('admin')) {
+        const publicModeSection = document.createElement('div');
+        publicModeSection.className = 'system-setting-item';
+        Object.assign(publicModeSection.style, {
+            marginTop: '2rem',
+            borderTop: '1px solid rgba(255,255,255,0.2)',
+            paddingTop: '2rem'
+        });
+
+        const isChecked = siteSettings.publicModeEnabled ? 'checked' : '';
+
+        publicModeSection.innerHTML = `
+            <p style="margin-bottom: 1.5rem;">开启后，未登录的访客将可以看到您在“用户管理”中为'public'账户分配的分类和书签。</p>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <h3 style="margin: 0; flex-shrink: 0;"><i class="fas fa-globe-asia"></i> 公共模式</h3>
+                <label class="switch">
+                    <input type="checkbox" id="public-mode-toggle" ${isChecked}>
+                    <span class="slider round"></span>
+                </label>
+            </div>
+        `;
+        container.appendChild(publicModeSection);
+    }
 }
 
 /**
@@ -29,48 +66,28 @@ async function parseAndImport(htmlContent) {
     
     const generateId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
-    // 使用现有数据来计算起始排序值，避免冲突
     const highestCatSortOrder = allCategories.length > 0 ? Math.max(-1, ...allCategories.map(c => c.sortOrder || 0)) : -1;
     let currentCatSort = highestCatSortOrder + 1;
 
-    /**
-     * 递归解析DOM节点。
-     * @param {HTMLElement} node - 当前要解析的DOM节点 (通常是 <DL> 或 <DT>)。
-     * @param {string|null} parentId - 当前节点的父分类ID。
-     */
     function parseNode(node, parentId) {
         if (!node || !node.children) return;
 
         for (const child of node.children) {
-            // 标准的Netscape格式是DT包裹着A或H3
             if (child.tagName !== 'DT') continue;
             
             const folderHeader = child.querySelector('h3');
             const link = child.querySelector('a');
             
-            // 如果节点是文件夹 (H3)
             if (folderHeader) {
                 const newCategoryId = generateId('cat');
                 const categoryName = folderHeader.textContent.trim();
-                
-                // 检查同级下是否已有同名分类，以避免重复创建
                 let existingCategory = allCategories.find(c => c.name === categoryName && c.parentId === parentId);
                 let categoryToUseId = existingCategory ? existingCategory.id : newCategoryId;
-                
                 if (!existingCategory) {
-                    importedCategories.push({ 
-                        id: categoryToUseId, 
-                        name: categoryName, 
-                        parentId: parentId, 
-                        sortOrder: currentCatSort++ 
-                    });
+                    importedCategories.push({ id: categoryToUseId, name: categoryName, parentId: parentId, sortOrder: currentCatSort++ });
                 }
-                
-                // 递归解析子列表
                 let subList = child.querySelector('dl');
                 if (subList) parseNode(subList, categoryToUseId);
-
-            // 如果节点是书签 (A)
             } else if (link) {
                 const highestBmSortOrder = allBookmarks.filter(b => b.categoryId === parentId).length > 0 ? Math.max(-1, ...allBookmarks.filter(b => b.categoryId === parentId).map(bm => bm.sortOrder || 0)) : -1;
                 importedBookmarks.push({
@@ -89,7 +106,24 @@ async function parseAndImport(htmlContent) {
     const rootDl = doc.querySelector('dl');
     if (!rootDl) throw new Error('无效的书签文件格式，未找到根<DL>元素。');
     
-    parseNode(rootDl, null); // 从根节点开始解析
+    let uncategorizedCatId = null;
+    if (Array.from(rootDl.children).some(child => child.tagName === 'DT' && child.querySelector('A'))) {
+        let uncategorizedCat = allCategories.find(c => c.name === '导入的未分类书签' && c.parentId === null);
+        if (uncategorizedCat) {
+            uncategorizedCatId = uncategorizedCat.id;
+        } else {
+            uncategorizedCatId = generateId('cat');
+            importedCategories.push({ id: uncategorizedCatId, name: '导入的未分类书签', parentId: null, sortOrder: currentCatSort++ });
+        }
+    }
+
+    parseNode(rootDl, null);
+
+    importedBookmarks.forEach(bm => {
+        if (bm.categoryId === null && uncategorizedCatId) {
+            bm.categoryId = uncategorizedCatId;
+        }
+    });
 
     if (importedCategories.length === 0 && importedBookmarks.length === 0) {
         throw new Error('未在文件中找到可导入的书签或文件夹。');
@@ -102,8 +136,6 @@ async function parseAndImport(htmlContent) {
         });
         showToast("书签导入成功！");
         invalidateCache();
-        // 导入成功后，需要重新加载数据以确保UI同步
-        // 由于initializePage在其他文件，最好的方式是提示用户并刷新
         showConfirm("导入成功", "数据已成功导入，请刷新页面以查看最新内容。", () => {
             location.reload();
         });
@@ -115,25 +147,53 @@ async function parseAndImport(htmlContent) {
 
 // --- 事件监听器 ---
 
-// 处理“选择文件”按钮的点击事件
 document.addEventListener('click', event => {
     if (document.getElementById('tab-system')?.classList.contains('active')) {
-        if (event.target.closest('#import-bookmarks-btn-admin')) {
+        const target = event.target;
+        
+        if (target.closest('#import-bookmarks-btn-admin')) {
             document.getElementById('import-file-input-admin')?.click();
+        }
+
+        if (target.closest('#cleanup-orphan-bookmarks-btn')) {
+            showConfirm(
+                '确认修复数据？', 
+                '此操作会查找所有没有有效分类的书签，并将它们移动到“未分类书签”文件夹中。这是一个安全的操作。是否继续？', 
+                async () => {
+                    const button = target.closest('#cleanup-orphan-bookmarks-btn');
+                    const originalText = button.innerHTML;
+                    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在修复...';
+                    button.disabled = true;
+
+                    try {
+                        const result = await apiRequest('cleanup-orphan-bookmarks', 'POST');
+                        showToast(result.message || "操作完成。");
+                        if (result.fixedCount > 0) {
+                            invalidateCache();
+                            showConfirm("修复完成", "数据已修复，建议刷新页面以查看最新状态。", () => location.reload());
+                        }
+                    } catch (error) {
+                        showToast(`修复失败: ${error.message}`, true);
+                    } finally {
+                        button.innerHTML = originalText;
+                        button.disabled = false;
+                    }
+                }
+            );
         }
     }
 });
 
-// 处理文件输入框的选择事件
 document.addEventListener('change', event => {
     if (document.getElementById('tab-system')?.classList.contains('active')) {
-        if (event.target.id === 'import-file-input-admin') {
-            const file = event.target.files[0];
+        const target = event.target;
+        
+        if (target.id === 'import-file-input-admin') {
+            const file = target.files[0];
             if (!file) return;
             const reader = new FileReader();
             reader.onload = async (e) => {
                 try {
-                    // 开始解析文件内容
                     await parseAndImport(e.target.result);
                 } catch (error) { 
                     showToast(`导入失败: ${error.message}`, true); 
@@ -143,8 +203,25 @@ document.addEventListener('change', event => {
                 showToast(`读取文件失败！`, true);
             };
             reader.readAsText(file);
-            // 清空文件选择，以便用户可以再次选择同一个文件
-            event.target.value = '';
+            target.value = '';
+        }
+
+        if (target.id === 'public-mode-toggle') {
+            const isEnabled = target.checked;
+            (async () => {
+                const originalState = !isEnabled;
+                try {
+                    showToast("正在保存设置...");
+                    await apiRequest('system-settings', 'PUT', { publicModeEnabled: isEnabled });
+                    showToast("设置已保存！");
+                    invalidateCache(); 
+                    siteSettings.publicModeEnabled = isEnabled;
+                } catch (error) {
+                    showToast(`保存失败: ${error.message}`, true);
+                    target.checked = originalState;
+                }
+            })();
         }
     }
 });
+
