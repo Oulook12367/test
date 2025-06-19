@@ -83,11 +83,12 @@ const getSiteData = async (context) => {
     }
 
     console.log("缓存未命中。正在从KV获取数据...");
-    const [userIndex, categoryIndex, bookmarkIndex, jwtSecret] = await Promise.all([
+    const [userIndex, categoryIndex, bookmarkIndex, jwtSecret, publicModeSetting] = await Promise.all([
         env.NAVI_DATA.get('_index:users', 'json').then(res => res || null),
         env.NAVI_DATA.get('_index:categories', 'json').then(res => res || []),
         env.NAVI_DATA.get('_index:bookmarks', 'json').then(res => res || []),
-        env.NAVI_DATA.get('jwtSecret')
+        env.NAVI_DATA.get('jwtSecret'),
+        env.NAVI_DATA.get('setting:publicModeEnabled')
     ]);
 
     if (userIndex === null) {
@@ -110,7 +111,8 @@ const getSiteData = async (context) => {
             env.NAVI_DATA.put('_index:users', JSON.stringify(['admin', 'public'])),
             env.NAVI_DATA.put('_index:categories', JSON.stringify([parentCatId, publicCatId])),
             env.NAVI_DATA.put('_index:bookmarks', JSON.stringify([])),
-            env.NAVI_DATA.put('jwtSecret', newJwtSecret)
+            env.NAVI_DATA.put('jwtSecret', newJwtSecret),
+            env.NAVI_DATA.put('setting:publicModeEnabled', 'false')
         ]);
         return getSiteData(context);
     }
@@ -129,7 +131,8 @@ const getSiteData = async (context) => {
         users: Object.fromEntries(usersData.filter(Boolean).map(user => [user.username, user])),
         categories: categoriesData.filter(Boolean),
         bookmarks: bookmarksData.filter(Boolean),
-        jwtSecret: jwtSecret
+        jwtSecret: jwtSecret,
+        publicModeEnabled: publicModeSetting === 'true'
     };
     
     if (siteData.users) {
@@ -179,11 +182,6 @@ export async function onRequest(context) {
             return next();
         }
 
-        const publicModeValue = env.PUBLIC_MODE_ENABLED;
-        if (publicModeValue !== 'true' && publicModeValue !== 'false') {
-            return new Response('<h1>Configuration Error</h1>', { status: 500, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-        }
-
         let apiPath = path.substring(5);
         if (apiPath.endsWith('/')) apiPath = apiPath.slice(0, -1);
 
@@ -223,7 +221,6 @@ export async function onRequest(context) {
 
         if (apiPath === 'data' && request.method === 'GET') {
             const authHeader = request.headers.get('Authorization');
-            siteData.publicModeEnabled = env.PUBLIC_MODE_ENABLED === 'true';
             if (siteData.publicModeEnabled && !authHeader) {
                 const publicUser = siteData.users.public || { permissions: { visibleCategories: [] }};
                 const publicCategories = siteData.categories.filter(cat => publicUser.permissions.visibleCategories.includes(cat.id));
@@ -402,7 +399,7 @@ export async function onRequest(context) {
                 }
                 if (request.method === 'DELETE') {
                     if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
-                    if (username === 'public' && env.PUBLIC_MODE_ENABLED === 'true') return jsonResponse({ error: '公共模式已启用，无法删除 public 账户。' }, 403);
+                    if (username === 'public' && siteData.publicModeEnabled) return jsonResponse({ error: '公共模式已启用，无法删除 public 账户。' }, 403);
                     if (userToManage.roles.includes('admin')) {
                         const adminCount = Object.values(siteData.users).filter(u => u.roles.includes('admin')).length;
                         if (adminCount <= 1) return jsonResponse({ error: '无法删除最后一个管理员账户' }, 403);
@@ -435,6 +432,15 @@ export async function onRequest(context) {
             }
             await purgeDataCache(context);
             return jsonResponse({ success: true, importedCategories: newCategories.length, importedBookmarks: newBookmarks.length });
+        }
+        
+        if (apiPath === 'system-settings' && request.method === 'PUT') {
+            if (!currentUser.roles.includes('admin')) return jsonResponse({ error: '权限不足，只有管理员才能修改系统设置。' }, 403);
+            const { publicModeEnabled } = await request.json();
+            if (typeof publicModeEnabled !== 'boolean') return jsonResponse({ error: '无效的参数。' }, 400);
+            await env.NAVI_DATA.put('setting:publicModeEnabled', String(publicModeEnabled));
+            await purgeDataCache(context);
+            return jsonResponse({ success: true, publicModeEnabled });
         }
 
         return jsonResponse({ error: 'API endpoint not found' }, 404);
