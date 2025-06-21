@@ -58,7 +58,7 @@ function renderSystemSettingsTab(container) {
 }
 
 /**
- * 【修复】解析浏览器导出的HTML书签文件并准备导入数据。
+ * 【最终版】解析浏览器导出的HTML书签文件并准备导入数据。
  * @param {string} htmlContent - 从文件读取的HTML字符串内容。
  */
 async function parseAndImport(htmlContent) {
@@ -73,15 +73,12 @@ async function parseAndImport(htmlContent) {
     const highestCatSortOrder = allCategories.length > 0 ? Math.max(-1, ...allCategories.map(c => c.sortOrder || 0)) : -1;
     let currentCatSort = highestCatSortOrder + 1;
 
-    // 【修复】全新的、更健壮的递归解析函数
+    // 采纳了您提供的更健壮的解析逻辑
     function parseNode(node, parentId) {
-        if (!node) return;
-        
-        const children = Array.from(node.children);
-        for (let i = 0; i < children.length; i++) {
-            const child = children[i];
+        if (!node || !node.children) return;
+        for (const child of node.children) {
             if (child.tagName !== 'DT') continue;
-
+            
             const folderHeader = child.querySelector('h3');
             const link = child.querySelector('a');
 
@@ -94,13 +91,16 @@ async function parseAndImport(htmlContent) {
                     importedCategories.push({ id: categoryToUseId, name: categoryName, parentId: parentId, sortOrder: currentCatSort++ });
                 }
                 
-                // 【关键修复】寻找下一个兄弟节点<DL>作为子列表进行递归
-                const subList = child.nextElementSibling;
-                if (subList && subList.tagName === 'DL') {
-                    parseNode(subList, categoryToUseId);
-                    // 由于subList不是node的直接子节点，我们不需要手动跳过，
-                    // 循环会自然地处理下一个<DT>
+                let subList = child.querySelector('dl');
+                if (!subList) {
+                    let nextSibling = child.nextElementSibling;
+                    while(nextSibling && nextSibling.tagName !== 'DL') {
+                        nextSibling = nextSibling.nextElementSibling; 
+                    }
+                    subList = nextSibling;
                 }
+                if (subList) parseNode(subList, categoryToUseId);
+
             } else if (link) {
                 const highestBmSortOrder = [...allBookmarks, ...importedBookmarks].filter(b => b.categoryId === parentId).length > 0 
                     ? Math.max(-1, ...[...allBookmarks, ...importedBookmarks].filter(b => b.categoryId === parentId).map(bm => bm.sortOrder || 0)) 
@@ -140,6 +140,7 @@ async function parseAndImport(htmlContent) {
         throw new Error('未在文件中找到可导入的书签或文件夹。');
     }
     
+    // 使用正确的、与新架构匹配的API接口
     try {
         await apiRequest('import-data', 'POST', { 
             newCategories: importedCategories, 
