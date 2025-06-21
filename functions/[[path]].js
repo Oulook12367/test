@@ -54,7 +54,7 @@ function escapeHTMLExport(str) {
 
 // --- 缓存处理函数 ---
 const CACHE_KEY_STRING = "https://navicenter.cache/api/data";
-async function purgeDataCache(context) {
+async function purgeDataCache() {
     try {
         const cache = caches.default;
         const cacheKey = new Request(CACHE_KEY_STRING);
@@ -72,8 +72,10 @@ const getSiteData = async (context) => {
     const cacheKey = new Request(CACHE_KEY_STRING);
     const cachedResponse = await cache.match(cacheKey);
     if (cachedResponse) {
+        console.log("缓存命中！直接从Cache API返回数据。");
         return cachedResponse.json();
     }
+    console.log("缓存未命中。正在从KV获取数据...");
     const [userIndex, categoryIndex, bookmarkIndex, jwtSecret, publicModeSetting] = await Promise.all([
         env.NAVI_DATA.get('_index:users', 'json').then(res => res || null),
         env.NAVI_DATA.get('_index:categories', 'json').then(res => res || []),
@@ -285,7 +287,7 @@ export async function onRequest(context) {
             }
             const fixPromises = orphanBookmarks.map(bm => { bm.categoryId = uncategorizedCat.id; return env.NAVI_DATA.put(`bookmark:${bm.id}`, JSON.stringify(bm)); });
             await Promise.all(fixPromises);
-            await purgeDataCache();
+            await purgeDataCache(context);
             return jsonResponse({ message: `成功修复了 ${orphanBookmarks.length} 个书签。`, fixedCount: orphanBookmarks.length });
         }
         if (apiPath === 'system-settings' && request.method === 'PUT') {
