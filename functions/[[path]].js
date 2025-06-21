@@ -74,7 +74,6 @@ const getSiteData = async (context) => {
     if (cachedResponse) {
         return cachedResponse.json();
     }
-    console.log("缓存未命中。正在从KV获取数据...");
     const [userIndex, categoryIndex, bookmarkIndex, jwtSecret, publicModeSetting] = await Promise.all([
         env.NAVI_DATA.get('_index:users', 'json').then(res => res || null),
         env.NAVI_DATA.get('_index:categories', 'json').then(res => res || []),
@@ -169,19 +168,6 @@ export async function onRequest(context) {
         globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteData.jwtSecret;
         if (!globalThis.JWT_SECRET_STRING) return jsonResponse({ error: 'Critical Configuration Error: JWT_SECRET is missing.' }, 500);
         
-        if (apiPath === 'scrape-url') {
-            const authResultForScrape = await authenticateRequest(request, siteData);
-            if (authResultForScrape.error) return jsonResponse(authResultForScrape, authResultForScrape.status);
-            const targetUrl = url.searchParams.get('url');
-            if (!targetUrl) return jsonResponse({ error: 'URL parameter is missing' }, 400);
-            const response = await fetch(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-            if (!response.ok) throw new Error(`Fetch failed with status: ${response.status}`);
-            let title = '', description = '', icon = '';
-            const rewriter = new HTMLRewriter().on('title', { text(text) { title += text.text; } }).on('meta[name="description"]', { element(element) { description = element.getAttribute('content'); } }).on('link[rel*="icon"]', { element(element) { if (!icon) { let href = element.getAttribute('href'); if (href) icon = new URL(href, targetUrl).toString(); } } });
-            await rewriter.transform(response).arrayBuffer();
-            if (!icon) { try { const iconUrl = new URL('/favicon.ico', targetUrl); const iconCheck = await fetch(iconUrl.toString(), { method: 'HEAD' }); if(iconCheck.ok) icon = iconUrl.toString(); } catch (e) {} }
-            return jsonResponse({ title: cleanTitle(title), description: description || '', icon: icon || '' });
-        }
         if (apiPath === 'login' && request.method === 'POST') {
             const { username, password } = await request.json();
             const user = siteData.users[username];
@@ -218,6 +204,18 @@ export async function onRequest(context) {
         const authResult = await authenticateRequest(request, siteData);
         if (authResult.error) return jsonResponse(authResult, authResult.status);
         const currentUser = authResult.user;
+
+        if (apiPath === 'scrape-url') {
+            const targetUrl = url.searchParams.get('url');
+            if (!targetUrl) return jsonResponse({ error: 'URL parameter is missing' }, 400);
+            const response = await fetch(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+            if (!response.ok) throw new Error(`Fetch failed with status: ${response.status}`);
+            let title = '', description = '', icon = '';
+            const rewriter = new HTMLRewriter().on('title', { text(text) { title += text.text; } }).on('meta[name="description"]', { element(element) { description = element.getAttribute('content'); } }).on('link[rel*="icon"]', { element(element) { if (!icon) { let href = element.getAttribute('href'); if (href) icon = new URL(href, targetUrl).toString(); } } });
+            await rewriter.transform(response).arrayBuffer();
+            if (!icon) { try { const iconUrl = new URL('/favicon.ico', targetUrl); const iconCheck = await fetch(iconUrl.toString(), { method: 'HEAD' }); if(iconCheck.ok) icon = iconUrl.toString(); } catch (e) {} }
+            return jsonResponse({ title: cleanTitle(title), description: description || '', icon: icon || '' });
+        }
 
         if (apiPath === 'export-data' && request.method === 'GET') {
             let categoriesToExport = []; let bookmarksToExport = [];
@@ -281,13 +279,13 @@ export async function onRequest(context) {
             if (!uncategorizedCat) {
                 uncategorizedCat = { id: `cat-${Date.now()}`, name: '未分类书签', parentId: null, sortOrder: (siteData.categories.length > 0 ? Math.max(...siteData.categories.map(c => c.sortOrder || 0)) : -1) + 1 };
                 await env.NAVI_DATA.put(`category:${uncategorizedCat.id}`, JSON.stringify(uncategorizedCat));
-                const categoryIndex = await env.NAVI_DATA.get('_index:categories', 'json') || [];
+                const categoryIndex = siteData.categories.map(c => c.id);
                 categoryIndex.push(uncategorizedCat.id);
                 await env.NAVI_DATA.put('_index:categories', JSON.stringify(categoryIndex));
             }
             const fixPromises = orphanBookmarks.map(bm => { bm.categoryId = uncategorizedCat.id; return env.NAVI_DATA.put(`bookmark:${bm.id}`, JSON.stringify(bm)); });
             await Promise.all(fixPromises);
-            await purgeDataCache(context);
+            await purgeDataCache();
             return jsonResponse({ message: `成功修复了 ${orphanBookmarks.length} 个书签。`, fixedCount: orphanBookmarks.length });
         }
         if (apiPath === 'system-settings' && request.method === 'PUT') {
@@ -306,8 +304,9 @@ export async function onRequest(context) {
             const maxOrder = bookmarksInCategory.length > 0 ? Math.max(...bookmarksInCategory.map(b => b.sortOrder || 0)) : -1;
             bookmark.sortOrder = maxOrder + 1;
             await env.NAVI_DATA.put(`bookmark:${bookmark.id}`, JSON.stringify(bookmark));
-            const latestBookmarkIndex = await env.NAVI_DATA.get('_index:bookmarks', 'json') || [];
-            if (!latestBookmarkIndex.includes(bookmark.id)) { latestBookmarkIndex.push(bookmark.id); await env.NAVI_DATA.put('_index:bookmarks', JSON.stringify(latestBookmarkIndex)); }
+            const latestBookmarkIndex = siteData.bookmarks.map(b => b.id);
+            latestBookmarkIndex.push(bookmark.id);
+            await env.NAVI_DATA.put('_index:bookmarks', JSON.stringify(latestBookmarkIndex));
             await purgeDataCache(context);
             return jsonResponse(bookmark, 201);
         }
@@ -334,8 +333,9 @@ export async function onRequest(context) {
             const { name, parentId, sortOrder } = await request.json();
             const newCategory = { id: `cat-${Date.now()}`, name, parentId, sortOrder };
             await env.NAVI_DATA.put(`category:${newCategory.id}`, JSON.stringify(newCategory));
-            const latestCategoryIndex = await env.NAVI_DATA.get('_index:categories', 'json') || [];
-            if (!latestCategoryIndex.includes(newCategory.id)) { latestCategoryIndex.push(newCategory.id); await env.NAVI_DATA.put('_index:categories', JSON.stringify(latestCategoryIndex)); }
+            const latestCategoryIndex = siteData.categories.map(c => c.id);
+            latestCategoryIndex.push(newCategory.id);
+            await env.NAVI_DATA.put('_index:categories', JSON.stringify(latestCategoryIndex));
             await purgeDataCache(context);
             return jsonResponse(newCategory, 201);
         }
@@ -375,8 +375,9 @@ export async function onRequest(context) {
                 const salt = generateSalt(); const passwordHash = await hashPassword(password, salt);
                 const newUser = { username, passwordHash, salt, roles, permissions, defaultCategoryId: defaultCategoryId || 'all' };
                 await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(newUser));
-                const latestUserIndex = await env.NAVI_DATA.get('_index:users', 'json') || [];
-                if (!latestUserIndex.includes(username)) { latestUserIndex.push(username); await env.NAVI_DATA.put('_index:users', JSON.stringify(latestUserIndex)); }
+                const latestUserIndex = Object.keys(siteData.users);
+                latestUserIndex.push(username);
+                await env.NAVI_DATA.put('_index:users', JSON.stringify(latestUserIndex));
                 await purgeDataCache(context);
                 const { passwordHash: p, salt: s, ...safeUser } = newUser;
                 Object.assign(safeUser.permissions, { canEditBookmarks: roles.includes('editor') || roles.includes('admin'), canEditCategories: roles.includes('editor') || roles.includes('admin'), canEditUsers: roles.includes('admin') });
@@ -435,14 +436,14 @@ export async function onRequest(context) {
             if (newCategories && newCategories.length > 0) {
                 const categoryPuts = newCategories.map(c => env.NAVI_DATA.put(`category:${c.id}`, JSON.stringify(c)));
                 await Promise.all(categoryPuts);
-                const latestCategoryIndex = await env.NAVI_DATA.get('_index:categories', 'json') || [];
+                const latestCategoryIndex = siteData.categories.map(c => c.id);
                 const newCategoryIds = newCategories.map(c => c.id).filter(id => !latestCategoryIndex.includes(id));
                 await env.NAVI_DATA.put('_index:categories', JSON.stringify([...latestCategoryIndex, ...newCategoryIds]));
             }
             if (newBookmarks && newBookmarks.length > 0) {
                 const bookmarkPuts = newBookmarks.map(b => env.NAVI_DATA.put(`bookmark:${b.id}`, JSON.stringify(b)));
                 await Promise.all(bookmarkPuts);
-                const latestBookmarkIndex = await env.NAVI_DATA.get('_index:bookmarks', 'json') || [];
+                const latestBookmarkIndex = siteData.bookmarks.map(b => b.id);
                 const newBookmarkIds = newBookmarks.map(b => b.id).filter(id => !latestBookmarkIndex.includes(id));
                 await env.NAVI_DATA.put('_index:bookmarks', JSON.stringify([...latestBookmarkIndex, ...newBookmarkIds]));
             }
