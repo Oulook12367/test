@@ -54,7 +54,7 @@ function escapeHTMLExport(str) {
 
 // --- 缓存处理函数 ---
 const CACHE_KEY_STRING = "https://navicenter.cache/api/data";
-async function purgeDataCache() {
+async function purgeDataCache(context) {
     try {
         const cache = caches.default;
         const cacheKey = new Request(CACHE_KEY_STRING);
@@ -74,6 +74,7 @@ const getSiteData = async (context) => {
     if (cachedResponse) {
         return cachedResponse.json();
     }
+    console.log("缓存未命中。正在从KV获取数据...");
     const [userIndex, categoryIndex, bookmarkIndex, jwtSecret, publicModeSetting] = await Promise.all([
         env.NAVI_DATA.get('_index:users', 'json').then(res => res || null),
         env.NAVI_DATA.get('_index:categories', 'json').then(res => res || []),
@@ -82,6 +83,7 @@ const getSiteData = async (context) => {
         env.NAVI_DATA.get('setting:publicModeEnabled')
     ]);
     if (userIndex === null) {
+        console.log("首次运行检测到，正在初始化原子数据...");
         const adminSalt = generateSalt();
         const adminPasswordHash = await hashPassword('admin123', adminSalt);
         const parentCatId = `cat-${Date.now()}`;
@@ -167,6 +169,19 @@ export async function onRequest(context) {
         globalThis.JWT_SECRET_STRING = env.JWT_SECRET || siteData.jwtSecret;
         if (!globalThis.JWT_SECRET_STRING) return jsonResponse({ error: 'Critical Configuration Error: JWT_SECRET is missing.' }, 500);
         
+        if (apiPath === 'scrape-url') {
+            const authResultForScrape = await authenticateRequest(request, siteData);
+            if (authResultForScrape.error) return jsonResponse(authResultForScrape, authResultForScrape.status);
+            const targetUrl = url.searchParams.get('url');
+            if (!targetUrl) return jsonResponse({ error: 'URL parameter is missing' }, 400);
+            const response = await fetch(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+            if (!response.ok) throw new Error(`Fetch failed with status: ${response.status}`);
+            let title = '', description = '', icon = '';
+            const rewriter = new HTMLRewriter().on('title', { text(text) { title += text.text; } }).on('meta[name="description"]', { element(element) { description = element.getAttribute('content'); } }).on('link[rel*="icon"]', { element(element) { if (!icon) { let href = element.getAttribute('href'); if (href) icon = new URL(href, targetUrl).toString(); } } });
+            await rewriter.transform(response).arrayBuffer();
+            if (!icon) { try { const iconUrl = new URL('/favicon.ico', targetUrl); const iconCheck = await fetch(iconUrl.toString(), { method: 'HEAD' }); if(iconCheck.ok) icon = iconUrl.toString(); } catch (e) {} }
+            return jsonResponse({ title: cleanTitle(title), description: description || '', icon: icon || '' });
+        }
         if (apiPath === 'login' && request.method === 'POST') {
             const { username, password } = await request.json();
             const user = siteData.users[username];
@@ -204,7 +219,6 @@ export async function onRequest(context) {
         if (authResult.error) return jsonResponse(authResult, authResult.status);
         const currentUser = authResult.user;
 
-        // 【修复】导出数据API
         if (apiPath === 'export-data' && request.method === 'GET') {
             let categoriesToExport = []; let bookmarksToExport = [];
             if (currentUser.roles.includes('admin')) {
@@ -221,7 +235,6 @@ export async function onRequest(context) {
                 categoriesToExport = siteData.categories.filter(c => visibleCategoryIds.has(c.id));
                 bookmarksToExport = siteData.bookmarks.filter(b => visibleCategoryIds.has(b.categoryId));
             }
-
             const buildHtml = (categories, bookmarks) => {
                 const categoryMap = new Map(categories.map(c => c && c.id ? [c.id, {...c, children: []}] : null).filter(Boolean));
                 const tree = [];
@@ -235,7 +248,6 @@ export async function onRequest(context) {
                         tree.push(node); 
                     } 
                 });
-                
                 const buildDl = (nodes, visited) => {
                     if (!nodes || nodes.length === 0) return '';
                     let dlContent = '<DL><p>\n';
@@ -257,13 +269,186 @@ export async function onRequest(context) {
                 }
                 return buildDl(tree, new Set());
             };
-            
             let htmlContent = `<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n${buildHtml(categoriesToExport, bookmarksToExport)}`;
             return new Response(htmlContent, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Disposition': `attachment; filename="navicenter_bookmarks_${new Date().toISOString().split('T')[0]}.html"` } });
         }
-        
-        // ... (其他所有API接口逻辑保持不变) ...
-
+        if (apiPath === 'cleanup-orphan-bookmarks' && request.method === 'POST') {
+            if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
+            const categoryIds = new Set(siteData.categories.map(c => c.id));
+            const orphanBookmarks = siteData.bookmarks.filter(bm => !bm.categoryId || !categoryIds.has(bm.categoryId));
+            if (orphanBookmarks.length === 0) return jsonResponse({ message: '没有找到需要修复的书签。', fixedCount: 0 });
+            let uncategorizedCat = siteData.categories.find(c => c.name === '未分类书签' && c.parentId === null);
+            if (!uncategorizedCat) {
+                uncategorizedCat = { id: `cat-${Date.now()}`, name: '未分类书签', parentId: null, sortOrder: (siteData.categories.length > 0 ? Math.max(...siteData.categories.map(c => c.sortOrder || 0)) : -1) + 1 };
+                await env.NAVI_DATA.put(`category:${uncategorizedCat.id}`, JSON.stringify(uncategorizedCat));
+                const categoryIndex = await env.NAVI_DATA.get('_index:categories', 'json') || [];
+                categoryIndex.push(uncategorizedCat.id);
+                await env.NAVI_DATA.put('_index:categories', JSON.stringify(categoryIndex));
+            }
+            const fixPromises = orphanBookmarks.map(bm => { bm.categoryId = uncategorizedCat.id; return env.NAVI_DATA.put(`bookmark:${bm.id}`, JSON.stringify(bm)); });
+            await Promise.all(fixPromises);
+            await purgeDataCache(context);
+            return jsonResponse({ message: `成功修复了 ${orphanBookmarks.length} 个书签。`, fixedCount: orphanBookmarks.length });
+        }
+        if (apiPath === 'system-settings' && request.method === 'PUT') {
+            if (!currentUser.roles.includes('admin')) return jsonResponse({ error: '权限不足，只有管理员才能修改系统设置。' }, 403);
+            const { publicModeEnabled } = await request.json();
+            if (typeof publicModeEnabled !== 'boolean') return jsonResponse({ error: '无效的参数。' }, 400);
+            await env.NAVI_DATA.put('setting:publicModeEnabled', String(publicModeEnabled));
+            await purgeDataCache(context);
+            return jsonResponse({ success: true, publicModeEnabled });
+        }
+        if (apiPath === 'bookmarks' && request.method === 'POST') {
+            if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
+            const bookmark = await request.json();
+            bookmark.id = `bm-${Date.now()}`;
+            const bookmarksInCategory = siteData.bookmarks.filter(b => b.categoryId === bookmark.categoryId);
+            const maxOrder = bookmarksInCategory.length > 0 ? Math.max(...bookmarksInCategory.map(b => b.sortOrder || 0)) : -1;
+            bookmark.sortOrder = maxOrder + 1;
+            await env.NAVI_DATA.put(`bookmark:${bookmark.id}`, JSON.stringify(bookmark));
+            const latestBookmarkIndex = await env.NAVI_DATA.get('_index:bookmarks', 'json') || [];
+            if (!latestBookmarkIndex.includes(bookmark.id)) { latestBookmarkIndex.push(bookmark.id); await env.NAVI_DATA.put('_index:bookmarks', JSON.stringify(latestBookmarkIndex)); }
+            await purgeDataCache(context);
+            return jsonResponse(bookmark, 201);
+        }
+        if (apiPath.startsWith('bookmarks/')) {
+            const id = apiPath.split('/')[1];
+            if (request.method === 'PUT') {
+                if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
+                const updatedBookmark = await request.json();
+                await env.NAVI_DATA.put(`bookmark:${id}`, JSON.stringify(updatedBookmark));
+                await purgeDataCache(context);
+                return jsonResponse(updatedBookmark);
+            }
+            if (request.method === 'DELETE') {
+                if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
+                await env.NAVI_DATA.delete(`bookmark:${id}`);
+                const newIndex = siteData.bookmarks.filter(b => b.id !== id).map(b => b.id);
+                await env.NAVI_DATA.put('_index:bookmarks', JSON.stringify(newIndex));
+                await purgeDataCache(context);
+                return jsonResponse(null);
+            }
+        }
+        if (apiPath === 'categories' && request.method === 'POST') {
+            if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
+            const { name, parentId, sortOrder } = await request.json();
+            const newCategory = { id: `cat-${Date.now()}`, name, parentId, sortOrder };
+            await env.NAVI_DATA.put(`category:${newCategory.id}`, JSON.stringify(newCategory));
+            const latestCategoryIndex = await env.NAVI_DATA.get('_index:categories', 'json') || [];
+            if (!latestCategoryIndex.includes(newCategory.id)) { latestCategoryIndex.push(newCategory.id); await env.NAVI_DATA.put('_index:categories', JSON.stringify(latestCategoryIndex)); }
+            await purgeDataCache(context);
+            return jsonResponse(newCategory, 201);
+        }
+        if (apiPath.startsWith('categories/')) {
+            const id = apiPath.split('/')[1];
+            if (request.method === 'PUT') {
+                if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
+                const updatedCategory = await request.json();
+                await env.NAVI_DATA.put(`category:${id}`, JSON.stringify(updatedCategory));
+                await purgeDataCache(context);
+                return jsonResponse(updatedCategory);
+            }
+            if (request.method === 'DELETE') {
+                if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
+                const getDescendants = (catId, allCats) => { let descendants = new Set(); let queue = [catId]; while(queue.length > 0) { let currentId = queue.shift(); let children = allCats.filter(c => c.parentId === currentId); for (const child of children) { if (!descendants.has(child.id)) { descendants.add(child.id); queue.push(child.id); } } } return descendants; };
+                const allCategoryIdsToDelete = new Set([id, ...getDescendants(id, siteData.categories)]);
+                const allBookmarkIdsToDelete = siteData.bookmarks.filter(bm => allCategoryIdsToDelete.has(bm.categoryId)).map(bm => bm.id);
+                const categoryKeysToDelete = Array.from(allCategoryIdsToDelete).map(catId => `category:${catId}`);
+                const bookmarkKeysToDelete = allBookmarkIdsToDelete.map(bmId => `bookmark:${bmId}`);
+                if (categoryKeysToDelete.length > 0) await Promise.all(categoryKeysToDelete.map(key => env.NAVI_DATA.delete(key)));
+                if (bookmarkKeysToDelete.length > 0) await Promise.all(bookmarkKeysToDelete.map(key => env.NAVI_DATA.delete(key)));
+                const newCategoryIndex = siteData.categories.filter(c => !allCategoryIdsToDelete.has(c.id)).map(c => c.id);
+                const newBookmarkIndex = siteData.bookmarks.filter(b => !allBookmarkIdsToDelete.includes(b.id)).map(b => b.id);
+                await env.NAVI_DATA.put('_index:categories', JSON.stringify(newCategoryIndex));
+                await env.NAVI_DATA.put('_index:bookmarks', JSON.stringify(newBookmarkIndex));
+                await purgeDataCache(context);
+                return jsonResponse(null);
+            }
+        }
+        if (apiPath.startsWith('users')) {
+            if (!currentUser.permissions.canEditUsers && apiPath !== 'users/self') return jsonResponse({ error: '权限不足' }, 403);
+            if (apiPath === 'users' && request.method === 'POST') {
+                const { username, password, roles, permissions, defaultCategoryId } = await request.json();
+                const usernameError = validateUsername(username); if (usernameError) return jsonResponse({ error: usernameError }, 400);
+                const passwordError = validatePassword(password); if (passwordError) return jsonResponse({ error: passwordError }, 400);
+                if (siteData.users[username]) return jsonResponse({ error: '用户名已存在' }, 400);
+                const salt = generateSalt(); const passwordHash = await hashPassword(password, salt);
+                const newUser = { username, passwordHash, salt, roles, permissions, defaultCategoryId: defaultCategoryId || 'all' };
+                await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(newUser));
+                const latestUserIndex = await env.NAVI_DATA.get('_index:users', 'json') || [];
+                if (!latestUserIndex.includes(username)) { latestUserIndex.push(username); await env.NAVI_DATA.put('_index:users', JSON.stringify(latestUserIndex)); }
+                await purgeDataCache(context);
+                const { passwordHash: p, salt: s, ...safeUser } = newUser;
+                Object.assign(safeUser.permissions, { canEditBookmarks: roles.includes('editor') || roles.includes('admin'), canEditCategories: roles.includes('editor') || roles.includes('admin'), canEditUsers: roles.includes('admin') });
+                return jsonResponse(safeUser, 201);
+            }
+            if (apiPath.startsWith('users/')) {
+                let username = decodeURIComponent(apiPath.substring('users/'.length));
+                if (username === 'self' && request.method === 'PUT') {
+                     username = currentUser.username;
+                     const { defaultCategoryId } = await request.json();
+                     const userToUpdate = siteData.users[username];
+                     if (userToUpdate) {
+                         userToUpdate.defaultCategoryId = defaultCategoryId;
+                         await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(userToUpdate));
+                         await purgeDataCache(context);
+                         const { passwordHash, salt, ...safeUser } = userToUpdate;
+                         return jsonResponse(safeUser);
+                     }
+                     return jsonResponse({ error: '用户未找到'}, 404);
+                }
+                const userToManage = siteData.users[username];
+                if (!userToManage) return jsonResponse({ error: '用户未找到' }, 404);
+                if (request.method === 'PUT') {
+                    const { roles, permissions, password, defaultCategoryId } = await request.json();
+                    if (password) {
+                        const passwordError = validatePassword(password); if (passwordError) return jsonResponse({ error: passwordError }, 400);
+                        userToManage.salt = generateSalt();
+                        userToManage.passwordHash = await hashPassword(password, userToManage.salt);
+                    }
+                    if (roles) userToManage.roles = roles;
+                    if (permissions && permissions.visibleCategories !== undefined) userToManage.permissions.visibleCategories = permissions.visibleCategories;
+                    if (defaultCategoryId !== undefined) userToManage.defaultCategoryId = defaultCategoryId;
+                    await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(userToManage));
+                    await purgeDataCache(context);
+                    const { passwordHash: p, salt: s, ...safeUser } = userToManage;
+                    return jsonResponse(safeUser);
+                }
+                if (request.method === 'DELETE') {
+                    if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
+                    if (username === 'public' && siteData.publicModeEnabled) return jsonResponse({ error: '公共模式已启用，无法删除 public 账户。' }, 403);
+                    if (userToManage.roles.includes('admin')) {
+                        const adminCount = Object.values(siteData.users).filter(u => u.roles.includes('admin')).length;
+                        if (adminCount <= 1) return jsonResponse({ error: '无法删除最后一个管理员账户' }, 403);
+                    }
+                    await env.NAVI_DATA.delete(`user:${username}`);
+                    const newIndex = Object.keys(siteData.users).filter(u => u !== username);
+                    await env.NAVI_DATA.put('_index:users', JSON.stringify(newIndex));
+                    await purgeDataCache(context);
+                    return jsonResponse(null);
+                }
+            }
+        }
+        if (apiPath === 'import-data' && request.method === 'POST') {
+            if (!currentUser.permissions.canEditCategories || !currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
+            const { newCategories, newBookmarks } = await request.json();
+            if (newCategories && newCategories.length > 0) {
+                const categoryPuts = newCategories.map(c => env.NAVI_DATA.put(`category:${c.id}`, JSON.stringify(c)));
+                await Promise.all(categoryPuts);
+                const latestCategoryIndex = await env.NAVI_DATA.get('_index:categories', 'json') || [];
+                const newCategoryIds = newCategories.map(c => c.id).filter(id => !latestCategoryIndex.includes(id));
+                await env.NAVI_DATA.put('_index:categories', JSON.stringify([...latestCategoryIndex, ...newCategoryIds]));
+            }
+            if (newBookmarks && newBookmarks.length > 0) {
+                const bookmarkPuts = newBookmarks.map(b => env.NAVI_DATA.put(`bookmark:${b.id}`, JSON.stringify(b)));
+                await Promise.all(bookmarkPuts);
+                const latestBookmarkIndex = await env.NAVI_DATA.get('_index:bookmarks', 'json') || [];
+                const newBookmarkIds = newBookmarks.map(b => b.id).filter(id => !latestBookmarkIndex.includes(id));
+                await env.NAVI_DATA.put('_index:bookmarks', JSON.stringify([...latestBookmarkIndex, ...newBookmarkIds]));
+            }
+            await purgeDataCache(context);
+            return jsonResponse({ success: true, importedCategories: newCategories.length, importedBookmarks: newBookmarks.length });
+        }
         return jsonResponse({ error: 'API endpoint not found' }, 404);
     } catch (error) {
         console.error("Unhandled API Exception:", error);
