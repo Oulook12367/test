@@ -72,10 +72,8 @@ const getSiteData = async (context) => {
     const cacheKey = new Request(CACHE_KEY_STRING);
     const cachedResponse = await cache.match(cacheKey);
     if (cachedResponse) {
-        console.log("缓存命中！直接从Cache API返回数据。");
         return cachedResponse.json();
     }
-    console.log("缓存未命中。正在从KV获取数据...");
     const [userIndex, categoryIndex, bookmarkIndex, jwtSecret, publicModeSetting] = await Promise.all([
         env.NAVI_DATA.get('_index:users', 'json').then(res => res || null),
         env.NAVI_DATA.get('_index:categories', 'json').then(res => res || []),
@@ -218,7 +216,7 @@ export async function onRequest(context) {
             if (!icon) { try { const iconUrl = new URL('/favicon.ico', targetUrl); const iconCheck = await fetch(iconUrl.toString(), { method: 'HEAD' }); if(iconCheck.ok) icon = iconUrl.toString(); } catch (e) {} }
             return jsonResponse({ title: cleanTitle(title), description: description || '', icon: icon || '' });
         }
-
+        
         if (apiPath === 'export-data' && request.method === 'GET') {
             let categoriesToExport = []; let bookmarksToExport = [];
             if (currentUser.roles.includes('admin')) {
@@ -250,22 +248,22 @@ export async function onRequest(context) {
                 });
                 const buildDl = (nodes, visited) => {
                     if (!nodes || nodes.length === 0) return '';
-                    let dlContent = '<DL><p>\n';
+                    let html = '<DL><p>\n';
                     nodes.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(node => {
                         if (visited.has(node.id)) return;
                         visited.add(node.id);
-                        dlContent += `    <DT><H3>${escapeHTMLExport(node.name)}</H3>\n`;
+                        html += `    <DT><H3>${escapeHTMLExport(node.name)}</H3>\n`;
                         const childrenBookmarks = bookmarks.filter(b => b && b.categoryId === node.id).sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
                         const childrenCategories = node.children;
                         if(childrenBookmarks.length > 0 || (childrenCategories && childrenCategories.length > 0)) {
-                            dlContent += '    <DL><p>\n';
-                            childrenBookmarks.forEach(bm => { dlContent += `        <DT><A HREF="${escapeHTMLExport(bm.url)}" ICON="${escapeHTMLExport(bm.icon || '')}">${escapeHTMLExport(bm.name)}</A>\n`; });
-                            dlContent += buildDl(childrenCategories, visited);
-                            dlContent += '    </DL><p>\n';
+                           html += buildDl(childrenCategories, visited);
+                           childrenBookmarks.forEach(bm => {
+                               html += `    <DT><A HREF="${escapeHTMLExport(bm.url)}" ICON="${escapeHTMLExport(bm.icon || '')}">${escapeHTMLExport(bm.name)}</A>\n`;
+                           });
                         }
                     });
-                    dlContent += '</DL><p>\n';
-                    return dlContent;
+                    html += '</DL><p>\n';
+                    return html;
                 }
                 return buildDl(tree, new Set());
             };
@@ -287,7 +285,7 @@ export async function onRequest(context) {
             }
             const fixPromises = orphanBookmarks.map(bm => { bm.categoryId = uncategorizedCat.id; return env.NAVI_DATA.put(`bookmark:${bm.id}`, JSON.stringify(bm)); });
             await Promise.all(fixPromises);
-            await purgeDataCache(context);
+            await purgeDataCache();
             return jsonResponse({ message: `成功修复了 ${orphanBookmarks.length} 个书签。`, fixedCount: orphanBookmarks.length });
         }
         if (apiPath === 'system-settings' && request.method === 'PUT') {
