@@ -18,7 +18,9 @@ function renderSystemSettingsTab(container) {
                 <input type="file" id="import-file-input-admin" accept=".html,.htm" style="display: none;">
             </div>
         </div>
+        
         <div style="border-top: 1px solid rgba(255,255,255,0.2); margin: 2rem 0;"></div>
+        
         <div class="system-setting-item">
             <p style="margin-bottom: 1.5rem;">如果因之前导入错误等原因导致部分书签无法显示，可以尝试使用此工具进行修复。它会自动找出所有“无家可归”的书签，并将它们放入一个名为“未分类书签”的文件夹中。</p>
             <div style="display: flex; align-items: center; gap: 1rem;">
@@ -88,6 +90,7 @@ async function parseAndImport(htmlContent) {
                 }
                 let subList = child.querySelector('dl');
                 if (subList) parseNode(subList, categoryToUseId);
+
             } else if (link) {
                 const highestBmSortOrder = allBookmarks.filter(b => b.categoryId === parentId).length > 0 ? Math.max(-1, ...allBookmarks.filter(b => b.categoryId === parentId).map(bm => bm.sortOrder || 0)) : -1;
                 importedBookmarks.push({
@@ -224,4 +227,3 @@ document.addEventListener('change', event => {
         }
     }
 });
-
