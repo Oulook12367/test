@@ -44,6 +44,13 @@ function validatePassword(password) {
     if (!/(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/.test(password)) return "密码必须包含至少一个特殊符号。";
     return null;
 }
+function escapeHTMLExport(str) {
+    if (typeof str !== 'string') return '';
+    return str.replace(/[&<>"']/g, (match) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[match]));
+}
+
 
 // --- 缓存处理函数 ---
 async function purgeDataCache(context) {
@@ -64,10 +71,8 @@ const getSiteData = async (context) => {
     const cacheKey = new Request(new URL(request.url).origin + '/api/data_cache_key');
     const cachedResponse = await cache.match(cacheKey);
     if (cachedResponse) {
-        console.log("缓存命中！直接从Cache API返回数据。");
         return cachedResponse.json();
     }
-    console.log("缓存未命中。正在从KV获取数据...");
     const [userIndex, categoryIndex, bookmarkIndex, jwtSecret, publicModeSetting] = await Promise.all([
         env.NAVI_DATA.get('_index:users', 'json').then(res => res || null),
         env.NAVI_DATA.get('_index:categories', 'json').then(res => res || []),
@@ -76,7 +81,6 @@ const getSiteData = async (context) => {
         env.NAVI_DATA.get('setting:publicModeEnabled')
     ]);
     if (userIndex === null) {
-        console.log("首次运行检测到，正在初始化原子数据...");
         const adminSalt = generateSalt();
         const adminPasswordHash = await hashPassword('admin123', adminSalt);
         const parentCatId = `cat-${Date.now()}`;
@@ -129,7 +133,7 @@ const getSiteData = async (context) => {
         }
     }
     const responseToCache = new Response(JSON.stringify(siteData), { headers: { 'Content-Type': 'application/json' } });
-    context.waitUntil(cache.put(cacheKey, responseToCache.clone(), { expirationTtl: 2592000 }));
+    context.waitUntil(cache.put(cacheKey, responseToCache.clone(), { expirationTtl: 86400 }));
     return siteData;
 };
 
@@ -229,21 +233,30 @@ export async function onRequest(context) {
                 bookmarksToExport = siteData.bookmarks.filter(b => visibleCategoryIds.has(b.categoryId));
             }
             const buildHtml = (categories, bookmarks) => {
-                const categoryMap = new Map(categories.map(c => ({...c, children: []})));
+                const categoryMap = new Map(categories.map(c => c && c.id ? [c.id, {...c, children: []}] : null).filter(Boolean));
                 const tree = [];
-                categories.forEach(c => { const node = categoryMap.get(c.id); if (node && c.parentId && categoryMap.has(c.parentId)) { const parent = categoryMap.get(c.parentId); if (parent) parent.children.push(node); } else if (node) { tree.push(node); } });
+                categories.forEach(c => { 
+                    if (!c || !c.id) return;
+                    const node = categoryMap.get(c.id); 
+                    if (node && c.parentId && categoryMap.has(c.parentId)) { 
+                        const parent = categoryMap.get(c.parentId); 
+                        if (parent) parent.children.push(node);
+                    } else if (node) { 
+                        tree.push(node); 
+                    } 
+                });
                 const buildDl = (nodes, visited) => {
                     if (!nodes || nodes.length === 0) return '';
                     let dlContent = '<DL><p>\n';
                     nodes.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(node => {
                         if (visited.has(node.id)) return;
                         visited.add(node.id);
-                        dlContent += `    <DT><H3>${node.name}</H3>\n`;
-                        const childrenBookmarks = bookmarks.filter(b => b.categoryId === node.id).sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+                        dlContent += `    <DT><H3>${escapeHTMLExport(node.name)}</H3>\n`;
+                        const childrenBookmarks = bookmarks.filter(b => b && b.categoryId === node.id).sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
                         const childrenCategories = node.children;
                         if(childrenBookmarks.length > 0 || (childrenCategories && childrenCategories.length > 0)) {
                             dlContent += '    <DL><p>\n';
-                            childrenBookmarks.forEach(bm => { dlContent += `        <DT><A HREF="${bm.url}" ICON="${bm.icon || ''}">${bm.name}</A>\n`; });
+                            childrenBookmarks.forEach(bm => { dlContent += `        <DT><A HREF="${escapeHTMLExport(bm.url)}" ICON="${escapeHTMLExport(bm.icon || '')}">${escapeHTMLExport(bm.name)}</A>\n`; });
                             dlContent += buildDl(childrenCategories, visited);
                             dlContent += '    </DL><p>\n';
                         }
