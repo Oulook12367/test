@@ -129,7 +129,7 @@ const getSiteData = async (context) => {
         }
     }
     const responseToCache = new Response(JSON.stringify(siteData), { headers: { 'Content-Type': 'application/json' } });
-    context.waitUntil(cache.put(cacheKey, responseToCache.clone(), { expirationTtl: 86400 }));
+    context.waitUntil(cache.put(cacheKey, responseToCache.clone(), { expirationTtl: 2592000 }));
     return siteData;
 };
 
@@ -212,10 +212,8 @@ export async function onRequest(context) {
         if (authResult.error) return jsonResponse(authResult, authResult.status);
         const currentUser = authResult.user;
 
-        // 【新增】导出数据API
         if (apiPath === 'export-data' && request.method === 'GET') {
-            let categoriesToExport = [];
-            let bookmarksToExport = [];
+            let categoriesToExport = []; let bookmarksToExport = [];
             if (currentUser.roles.includes('admin')) {
                 categoriesToExport = siteData.categories;
                 bookmarksToExport = siteData.bookmarks;
@@ -225,12 +223,7 @@ export async function onRequest(context) {
                  while (queue.length > 0) {
                     const parentId = queue.shift();
                     const children = siteData.categories.filter(c => c.parentId === parentId);
-                    for (const child of children) {
-                        if (!visibleCategoryIds.has(child.id)) {
-                            visibleCategoryIds.add(child.id);
-                            queue.push(child.id);
-                        }
-                    }
+                    for (const child of children) { if (!visibleCategoryIds.has(child.id)) { visibleCategoryIds.add(child.id); queue.push(child.id); } }
                 }
                 categoriesToExport = siteData.categories.filter(c => visibleCategoryIds.has(c.id));
                 bookmarksToExport = siteData.bookmarks.filter(b => visibleCategoryIds.has(b.categoryId));
@@ -238,29 +231,23 @@ export async function onRequest(context) {
             const buildHtml = (categories, bookmarks) => {
                 const categoryMap = new Map(categories.map(c => ({...c, children: []})));
                 const tree = [];
-                categories.forEach(c => {
-                    const node = categoryMap.get(c.id);
-                    if (c.parentId && categoryMap.has(c.parentId)) {
-                        categoryMap.get(c.parentId).children.push(node);
-                    } else {
-                        tree.push(node);
-                    }
-                });
-                const buildDl = (nodes) => {
+                categories.forEach(c => { const node = categoryMap.get(c.id); if (node && c.parentId && categoryMap.has(c.parentId)) { categoryMap.get(c.parentId).children.push(node); } else if (node) { tree.push(node); } });
+                const buildDl = (nodes, visited = new Set()) => {
                     if (!nodes || nodes.length === 0) return '';
                     let dlContent = '<DL><p>\n';
                     nodes.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(node => {
+                        if (visited.has(node.id)) return;
+                        visited.add(node.id);
                         dlContent += `    <DT><H3>${node.name}</H3>\n`;
                         const childrenBookmarks = bookmarks.filter(b => b.categoryId === node.id).sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
                         const childrenCategories = node.children;
                         if(childrenBookmarks.length > 0 || (childrenCategories && childrenCategories.length > 0)) {
                             dlContent += '    <DL><p>\n';
-                            childrenBookmarks.forEach(bm => {
-                                dlContent += `        <DT><A HREF="${bm.url}" ICON="${bm.icon || ''}">${bm.name}</A>\n`;
-                            });
-                            dlContent += buildDl(childrenCategories);
+                            childrenBookmarks.forEach(bm => { dlContent += `        <DT><A HREF="${bm.url}" ICON="${bm.icon || ''}">${bm.name}</A>\n`; });
+                            dlContent += buildDl(childrenCategories, visited);
                             dlContent += '    </DL><p>\n';
                         }
+                        visited.delete(node.id);
                     });
                     dlContent += '</DL><p>\n';
                     return dlContent;
@@ -268,14 +255,8 @@ export async function onRequest(context) {
                 return buildDl(tree);
             };
             let htmlContent = `<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n${buildHtml(categoriesToExport, bookmarksToExport)}`;
-            return new Response(htmlContent, {
-                headers: {
-                    'Content-Type': 'text/html; charset=utf-8',
-                    'Content-Disposition': `attachment; filename="navicenter_bookmarks_${new Date().toISOString().split('T')[0]}.html"`
-                }
-            });
+            return new Response(htmlContent, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Disposition': `attachment; filename="navicenter_bookmarks_${new Date().toISOString().split('T')[0]}.html"` } });
         }
-        
         if (apiPath === 'cleanup-orphan-bookmarks' && request.method === 'POST') {
             if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
             const categoryIds = new Set(siteData.categories.map(c => c.id));
@@ -289,10 +270,7 @@ export async function onRequest(context) {
                 categoryIndex.push(uncategorizedCat.id);
                 await env.NAVI_DATA.put('_index:categories', JSON.stringify(categoryIndex));
             }
-            const fixPromises = orphanBookmarks.map(bm => {
-                bm.categoryId = uncategorizedCat.id;
-                return env.NAVI_DATA.put(`bookmark:${bm.id}`, JSON.stringify(bm));
-            });
+            const fixPromises = orphanBookmarks.map(bm => { bm.categoryId = uncategorizedCat.id; return env.NAVI_DATA.put(`bookmark:${bm.id}`, JSON.stringify(bm)); });
             await Promise.all(fixPromises);
             await purgeDataCache(context);
             return jsonResponse({ message: `成功修复了 ${orphanBookmarks.length} 个书签。`, fixedCount: orphanBookmarks.length });
