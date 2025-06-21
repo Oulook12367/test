@@ -8,7 +8,6 @@ function renderSystemSettingsTab(container) {
     const usersArray = Array.isArray(allUsers) ? allUsers : Object.values(allUsers);
     const currentUser = usersArray.find(u => u.username === parseJwtPayload(localStorage.getItem('jwt_token'))?.sub);
 
-    // 基础HTML结构
     container.innerHTML = `
         <div class="system-setting-item">
             <p style="margin-bottom: 1.5rem;">从浏览器导出的HTML文件（Netscape书签格式）导入书签。此操作会合并现有书签，不会清空原有数据。</p>
@@ -18,8 +17,6 @@ function renderSystemSettingsTab(container) {
                 <input type="file" id="import-file-input-admin" accept=".html,.htm" style="display: none;">
             </div>
         </div>
-
-        <!-- 【新增】导出功能区 -->
         <div style="border-top: 1px solid rgba(255,255,255,0.2); margin: 2rem 0;"></div>
         <div class="system-setting-item">
             <p style="margin-bottom: 1.5rem;">将您有权访问的所有分类和书签导出为一个标准的HTML文件，该文件可被所有现代浏览器导入。</p>
@@ -28,18 +25,15 @@ function renderSystemSettingsTab(container) {
                 <button id="export-data-btn" class="button">开始导出</button>
             </div>
         </div>
-        
         <div style="border-top: 1px solid rgba(255,255,255,0.2); margin: 2rem 0;"></div>
-        
         <div class="system-setting-item">
-            <p style="margin-bottom: 1.5rem;">如果因之前导入错误等原因导致部分书签无法显示，可以尝试使用此工具进行修复。它会自动找出所有“无家可归”的书签，并将它们放入一个名为“未分类书签”的文件夹中。</p>
+            <p style="margin-bottom: 1.5rem;">如果因之前导入错误等原因导致部分书签无法显示，可以尝试使用此工具进行修复。</p>
             <div style="display: flex; align-items: center; gap: 1rem;">
                 <h3 style="margin: 0; flex-shrink: 0;"><i class="fas fa-medkit"></i> 数据修复</h3>
                 <button id="cleanup-orphan-bookmarks-btn" class="button">修复孤儿书签</button>
             </div>
         </div>`;
 
-    // 只有管理员才能看到公共模式的设置
     if (currentUser && currentUser.roles.includes('admin')) {
         const publicModeSection = document.createElement('div');
         publicModeSection.className = 'system-setting-item';
@@ -48,9 +42,7 @@ function renderSystemSettingsTab(container) {
             borderTop: '1px solid rgba(255,255,255,0.2)',
             paddingTop: '2rem'
         });
-
         const isChecked = siteSettings.publicModeEnabled ? 'checked' : '';
-
         publicModeSection.innerHTML = `
             <p style="margin-bottom: 1.5rem;">开启后，未登录的访客将可以看到您在“用户管理”中为'public'账户分配的分类和书签。</p>
             <div style="display: flex; align-items: center; gap: 1rem;">
@@ -66,7 +58,7 @@ function renderSystemSettingsTab(container) {
 }
 
 /**
- * 解析浏览器导出的HTML书签文件并准备导入数据。
+ * 【修复】解析浏览器导出的HTML书签文件并准备导入数据。
  * @param {string} htmlContent - 从文件读取的HTML字符串内容。
  */
 async function parseAndImport(htmlContent) {
@@ -84,7 +76,8 @@ async function parseAndImport(htmlContent) {
     function parseNode(node, parentId) {
         if (!node || !node.children) return;
 
-        for (const child of node.children) {
+        for (let i = 0; i < node.children.length; i++) {
+            const child = node.children[i];
             if (child.tagName !== 'DT') continue;
             
             const folderHeader = child.querySelector('h3');
@@ -93,23 +86,26 @@ async function parseAndImport(htmlContent) {
             if (folderHeader) {
                 const newCategoryId = generateId('cat');
                 const categoryName = folderHeader.textContent.trim();
-                let existingCategory = allCategories.find(c => c.name === categoryName && c.parentId === parentId);
+                
+                const existingCategory = [...allCategories, ...importedCategories].find(c => c.name === categoryName && c.parentId === parentId);
                 let categoryToUseId = existingCategory ? existingCategory.id : newCategoryId;
+                
                 if (!existingCategory) {
                     importedCategories.push({ id: categoryToUseId, name: categoryName, parentId: parentId, sortOrder: currentCatSort++ });
                 }
-                let subList = child.querySelector('dl');
-                if (subList) parseNode(subList, categoryToUseId);
-
+                
+                // 【修复】寻找下一个兄弟节点<DL>作为子列表进行递归
+                const nextElement = child.nextElementSibling;
+                if (nextElement && nextElement.tagName === 'DL') {
+                    parseNode(nextElement, categoryToUseId);
+                }
             } else if (link) {
-                const highestBmSortOrder = allBookmarks.filter(b => b.categoryId === parentId).length > 0 ? Math.max(-1, ...allBookmarks.filter(b => b.categoryId === parentId).map(bm => bm.sortOrder || 0)) : -1;
+                const highestBmSortOrder = [...allBookmarks, ...importedBookmarks].filter(b => b.categoryId === parentId).length > 0 
+                    ? Math.max(-1, ...[...allBookmarks, ...importedBookmarks].filter(b => b.categoryId === parentId).map(bm => bm.sortOrder || 0)) 
+                    : -1;
                 importedBookmarks.push({
-                    id: generateId('bm'), 
-                    name: link.textContent.trim(), 
-                    url: link.href, 
-                    categoryId: parentId,
-                    description: link.getAttribute('description') || '', 
-                    icon: link.getAttribute('icon') || '', 
+                    id: generateId('bm'), name: link.textContent.trim(), url: link.href, categoryId: parentId,
+                    description: link.getAttribute('description') || '', icon: link.getAttribute('icon') || '', 
                     sortOrder: highestBmSortOrder + 1
                 });
             }
@@ -159,40 +155,30 @@ async function parseAndImport(htmlContent) {
 
 
 // --- 事件监听器 ---
-
 document.addEventListener('click', event => {
     if (document.getElementById('tab-system')?.classList.contains('active')) {
         const target = event.target;
-        
         if (target.closest('#import-bookmarks-btn-admin')) {
             document.getElementById('import-file-input-admin')?.click();
         }
-
         if (target.closest('#export-data-btn')) {
             const button = target.closest('#export-data-btn');
             const originalText = button.innerHTML;
             button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在生成...';
             button.disabled = true;
-
             (async () => {
                 try {
-                    const response = await fetch('/api/export-data', {
-                        headers: { 'Authorization': `Bearer ${localStorage.getItem('jwt_token')}` }
-                    });
-
+                    const response = await fetch('/api/export-data', { headers: { 'Authorization': `Bearer ${localStorage.getItem('jwt_token')}` } });
                     if (!response.ok) {
                         const errorData = await response.json();
                         throw new Error(errorData.error || '导出失败');
                     }
-                    
                     const htmlContent = await response.text();
                     const blob = new Blob([htmlContent], { type: 'text/html' });
                     const url = window.URL.createObjectURL(blob);
-                    
                     const a = document.createElement('a');
                     a.style.display = 'none';
                     a.href = url;
-                    
                     const contentDisposition = response.headers.get('content-disposition');
                     let filename = `navicenter_bookmarks.html`;
                     if (contentDisposition && contentDisposition.indexOf('attachment') !== -1) {
@@ -208,7 +194,6 @@ document.addEventListener('click', event => {
                     window.URL.revokeObjectURL(url);
                     a.remove();
                     showToast("导出文件已开始下载！");
-
                 } catch (error) {
                     showToast(`导出失败: ${error.message}`, true);
                 } finally {
@@ -217,7 +202,6 @@ document.addEventListener('click', event => {
                 }
             })();
         }
-
         if (target.closest('#cleanup-orphan-bookmarks-btn')) {
             showConfirm(
                 '确认修复数据？', 
@@ -227,7 +211,6 @@ document.addEventListener('click', event => {
                     const originalText = button.innerHTML;
                     button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在修复...';
                     button.disabled = true;
-
                     try {
                         const result = await apiRequest('cleanup-orphan-bookmarks', 'POST');
                         showToast(result.message || "操作完成。");
@@ -246,11 +229,9 @@ document.addEventListener('click', event => {
         }
     }
 });
-
 document.addEventListener('change', event => {
     if (document.getElementById('tab-system')?.classList.contains('active')) {
         const target = event.target;
-        
         if (target.id === 'import-file-input-admin') {
             const file = target.files[0];
             if (!file) return;
@@ -268,7 +249,6 @@ document.addEventListener('change', event => {
             reader.readAsText(file);
             target.value = '';
         }
-
         if (target.id === 'public-mode-toggle') {
             const isEnabled = target.checked;
             (async () => {
