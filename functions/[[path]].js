@@ -177,7 +177,7 @@ export async function onRequest(context) {
             const passwordHash = await hashPassword(password, user.salt);
             if (user.passwordHash !== passwordHash) return jsonResponse({ error: '用户名或密码错误' }, 401);
             const { passwordHash: removed, salt: removedSalt, ...safeUser } = user;
-            const token = await new SignJWT({ sub: safeUser.username, roles: safeUser.roles }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('1d').sign(await JWT_SECRET());
+            const token = await new SignJWT({ sub: safeUser.username, roles: safeUser.roles }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('30d').sign(await JWT_SECRET());
             return jsonResponse({ token, user: safeUser });
         }
         if (apiPath === 'data' && request.method === 'GET') {
