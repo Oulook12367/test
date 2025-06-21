@@ -73,42 +73,42 @@ async function parseAndImport(htmlContent) {
     const highestCatSortOrder = allCategories.length > 0 ? Math.max(-1, ...allCategories.map(c => c.sortOrder || 0)) : -1;
     let currentCatSort = highestCatSortOrder + 1;
 
+    // 【修复】全新的、更健壮的递归解析函数
     function parseNode(node, parentId) {
-        if (!node || !node.children) return;
+        if (!node) return;
+        
+        let currentElement = node.firstElementChild;
+        while(currentElement) {
+            if (currentElement.tagName === 'DT') {
+                const folderHeader = currentElement.querySelector('h3');
+                const link = currentElement.querySelector('a');
 
-        for (let i = 0; i < node.children.length; i++) {
-            const child = node.children[i];
-            if (child.tagName !== 'DT') continue;
-            
-            const folderHeader = child.querySelector('h3');
-            const link = child.querySelector('a');
-            
-            if (folderHeader) {
-                const newCategoryId = generateId('cat');
-                const categoryName = folderHeader.textContent.trim();
-                
-                const existingCategory = [...allCategories, ...importedCategories].find(c => c.name === categoryName && c.parentId === parentId);
-                let categoryToUseId = existingCategory ? existingCategory.id : newCategoryId;
-                
-                if (!existingCategory) {
-                    importedCategories.push({ id: categoryToUseId, name: categoryName, parentId: parentId, sortOrder: currentCatSort++ });
+                if (folderHeader) {
+                    const categoryName = folderHeader.textContent.trim();
+                    const existingCategory = [...allCategories, ...importedCategories].find(c => c.name === categoryName && c.parentId === parentId);
+                    let categoryToUseId = existingCategory ? existingCategory.id : generateId('cat');
+                    
+                    if (!existingCategory) {
+                        importedCategories.push({ id: categoryToUseId, name: categoryName, parentId: parentId, sortOrder: currentCatSort++ });
+                    }
+                    
+                    const subList = currentElement.nextElementSibling;
+                    if (subList && subList.tagName === 'DL') {
+                        parseNode(subList, categoryToUseId);
+                        currentElement = subList; // 【关键】处理完子列表后，将指针跳过它
+                    }
+                } else if (link) {
+                    const highestBmSortOrder = [...allBookmarks, ...importedBookmarks].filter(b => b.categoryId === parentId).length > 0 
+                        ? Math.max(-1, ...[...allBookmarks, ...importedBookmarks].filter(b => b.categoryId === parentId).map(bm => bm.sortOrder || 0)) 
+                        : -1;
+                    importedBookmarks.push({
+                        id: generateId('bm'), name: link.textContent.trim(), url: link.href, categoryId: parentId,
+                        description: link.getAttribute('description') || '', icon: link.getAttribute('icon') || '', 
+                        sortOrder: highestBmSortOrder + 1
+                    });
                 }
-                
-                // 【修复】寻找下一个兄弟节点<DL>作为子列表进行递归
-                const nextElement = child.nextElementSibling;
-                if (nextElement && nextElement.tagName === 'DL') {
-                    parseNode(nextElement, categoryToUseId);
-                }
-            } else if (link) {
-                const highestBmSortOrder = [...allBookmarks, ...importedBookmarks].filter(b => b.categoryId === parentId).length > 0 
-                    ? Math.max(-1, ...[...allBookmarks, ...importedBookmarks].filter(b => b.categoryId === parentId).map(bm => bm.sortOrder || 0)) 
-                    : -1;
-                importedBookmarks.push({
-                    id: generateId('bm'), name: link.textContent.trim(), url: link.href, categoryId: parentId,
-                    description: link.getAttribute('description') || '', icon: link.getAttribute('icon') || '', 
-                    sortOrder: highestBmSortOrder + 1
-                });
             }
+            currentElement = currentElement.nextElementSibling;
         }
     }
 
