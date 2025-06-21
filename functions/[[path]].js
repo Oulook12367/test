@@ -53,10 +53,12 @@ function escapeHTMLExport(str) {
 
 
 // --- 缓存处理函数 ---
-async function purgeDataCache(context) {
+const CACHE_KEY_STRING = "https://navicenter.cache/api/data";
+
+async function purgeDataCache() {
     try {
         const cache = caches.default;
-        const cacheKey = new Request(new URL(context.request.url).origin + '/api/data_cache_key');
+        const cacheKey = new Request(CACHE_KEY_STRING);
         await cache.delete(cacheKey);
         console.log("数据缓存已清除。");
     } catch (e) {
@@ -68,11 +70,13 @@ async function purgeDataCache(context) {
 const getSiteData = async (context) => {
     const { request, env } = context;
     const cache = caches.default;
-    const cacheKey = new Request(new URL(request.url).origin + '/api/data_cache_key');
+    const cacheKey = new Request(CACHE_KEY_STRING);
     const cachedResponse = await cache.match(cacheKey);
     if (cachedResponse) {
+        console.log("缓存命中！直接从Cache API返回数据。");
         return cachedResponse.json();
     }
+    console.log("缓存未命中。正在从KV获取数据...");
     const [userIndex, categoryIndex, bookmarkIndex, jwtSecret, publicModeSetting] = await Promise.all([
         env.NAVI_DATA.get('_index:users', 'json').then(res => res || null),
         env.NAVI_DATA.get('_index:categories', 'json').then(res => res || []),
@@ -81,6 +85,7 @@ const getSiteData = async (context) => {
         env.NAVI_DATA.get('setting:publicModeEnabled')
     ]);
     if (userIndex === null) {
+        console.log("首次运行检测到，正在初始化原子数据...");
         const adminSalt = generateSalt();
         const adminPasswordHash = await hashPassword('admin123', adminSalt);
         const parentCatId = `cat-${Date.now()}`;
@@ -284,7 +289,7 @@ export async function onRequest(context) {
             }
             const fixPromises = orphanBookmarks.map(bm => { bm.categoryId = uncategorizedCat.id; return env.NAVI_DATA.put(`bookmark:${bm.id}`, JSON.stringify(bm)); });
             await Promise.all(fixPromises);
-            await purgeDataCache(context);
+            await purgeDataCache();
             return jsonResponse({ message: `成功修复了 ${orphanBookmarks.length} 个书签。`, fixedCount: orphanBookmarks.length });
         }
         if (apiPath === 'system-settings' && request.method === 'PUT') {
@@ -292,7 +297,7 @@ export async function onRequest(context) {
             const { publicModeEnabled } = await request.json();
             if (typeof publicModeEnabled !== 'boolean') return jsonResponse({ error: '无效的参数。' }, 400);
             await env.NAVI_DATA.put('setting:publicModeEnabled', String(publicModeEnabled));
-            await purgeDataCache(context);
+            await purgeDataCache();
             return jsonResponse({ success: true, publicModeEnabled });
         }
         if (apiPath === 'bookmarks' && request.method === 'POST') {
@@ -305,7 +310,7 @@ export async function onRequest(context) {
             await env.NAVI_DATA.put(`bookmark:${bookmark.id}`, JSON.stringify(bookmark));
             const latestBookmarkIndex = await env.NAVI_DATA.get('_index:bookmarks', 'json') || [];
             if (!latestBookmarkIndex.includes(bookmark.id)) { latestBookmarkIndex.push(bookmark.id); await env.NAVI_DATA.put('_index:bookmarks', JSON.stringify(latestBookmarkIndex)); }
-            await purgeDataCache(context);
+            await purgeDataCache();
             return jsonResponse(bookmark, 201);
         }
         if (apiPath.startsWith('bookmarks/')) {
@@ -314,7 +319,7 @@ export async function onRequest(context) {
                 if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
                 const updatedBookmark = await request.json();
                 await env.NAVI_DATA.put(`bookmark:${id}`, JSON.stringify(updatedBookmark));
-                await purgeDataCache(context);
+                await purgeDataCache();
                 return jsonResponse(updatedBookmark);
             }
             if (request.method === 'DELETE') {
@@ -322,7 +327,7 @@ export async function onRequest(context) {
                 await env.NAVI_DATA.delete(`bookmark:${id}`);
                 const newIndex = siteData.bookmarks.filter(b => b.id !== id).map(b => b.id);
                 await env.NAVI_DATA.put('_index:bookmarks', JSON.stringify(newIndex));
-                await purgeDataCache(context);
+                await purgeDataCache();
                 return jsonResponse(null);
             }
         }
@@ -333,7 +338,7 @@ export async function onRequest(context) {
             await env.NAVI_DATA.put(`category:${newCategory.id}`, JSON.stringify(newCategory));
             const latestCategoryIndex = await env.NAVI_DATA.get('_index:categories', 'json') || [];
             if (!latestCategoryIndex.includes(newCategory.id)) { latestCategoryIndex.push(newCategory.id); await env.NAVI_DATA.put('_index:categories', JSON.stringify(latestCategoryIndex)); }
-            await purgeDataCache(context);
+            await purgeDataCache();
             return jsonResponse(newCategory, 201);
         }
         if (apiPath.startsWith('categories/')) {
@@ -342,7 +347,7 @@ export async function onRequest(context) {
                 if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
                 const updatedCategory = await request.json();
                 await env.NAVI_DATA.put(`category:${id}`, JSON.stringify(updatedCategory));
-                await purgeDataCache(context);
+                await purgeDataCache();
                 return jsonResponse(updatedCategory);
             }
             if (request.method === 'DELETE') {
@@ -358,7 +363,7 @@ export async function onRequest(context) {
                 const newBookmarkIndex = siteData.bookmarks.filter(b => !allBookmarkIdsToDelete.includes(b.id)).map(b => b.id);
                 await env.NAVI_DATA.put('_index:categories', JSON.stringify(newCategoryIndex));
                 await env.NAVI_DATA.put('_index:bookmarks', JSON.stringify(newBookmarkIndex));
-                await purgeDataCache(context);
+                await purgeDataCache();
                 return jsonResponse(null);
             }
         }
@@ -374,7 +379,7 @@ export async function onRequest(context) {
                 await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(newUser));
                 const latestUserIndex = await env.NAVI_DATA.get('_index:users', 'json') || [];
                 if (!latestUserIndex.includes(username)) { latestUserIndex.push(username); await env.NAVI_DATA.put('_index:users', JSON.stringify(latestUserIndex)); }
-                await purgeDataCache(context);
+                await purgeDataCache();
                 const { passwordHash: p, salt: s, ...safeUser } = newUser;
                 Object.assign(safeUser.permissions, { canEditBookmarks: roles.includes('editor') || roles.includes('admin'), canEditCategories: roles.includes('editor') || roles.includes('admin'), canEditUsers: roles.includes('admin') });
                 return jsonResponse(safeUser, 201);
@@ -388,7 +393,7 @@ export async function onRequest(context) {
                      if (userToUpdate) {
                          userToUpdate.defaultCategoryId = defaultCategoryId;
                          await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(userToUpdate));
-                         await purgeDataCache(context);
+                         await purgeDataCache();
                          const { passwordHash, salt, ...safeUser } = userToUpdate;
                          return jsonResponse(safeUser);
                      }
@@ -407,7 +412,7 @@ export async function onRequest(context) {
                     if (permissions && permissions.visibleCategories !== undefined) userToManage.permissions.visibleCategories = permissions.visibleCategories;
                     if (defaultCategoryId !== undefined) userToManage.defaultCategoryId = defaultCategoryId;
                     await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(userToManage));
-                    await purgeDataCache(context);
+                    await purgeDataCache();
                     const { passwordHash: p, salt: s, ...safeUser } = userToManage;
                     return jsonResponse(safeUser);
                 }
@@ -421,7 +426,7 @@ export async function onRequest(context) {
                     await env.NAVI_DATA.delete(`user:${username}`);
                     const newIndex = Object.keys(siteData.users).filter(u => u !== username);
                     await env.NAVI_DATA.put('_index:users', JSON.stringify(newIndex));
-                    await purgeDataCache(context);
+                    await purgeDataCache();
                     return jsonResponse(null);
                 }
             }
@@ -443,7 +448,7 @@ export async function onRequest(context) {
                 const newBookmarkIds = newBookmarks.map(b => b.id).filter(id => !latestBookmarkIndex.includes(id));
                 await env.NAVI_DATA.put('_index:bookmarks', JSON.stringify([...latestBookmarkIndex, ...newBookmarkIds]));
             }
-            await purgeDataCache(context);
+            await purgeDataCache();
             return jsonResponse({ success: true, importedCategories: newCategories.length, importedBookmarks: newBookmarks.length });
         }
         return jsonResponse({ error: 'API endpoint not found' }, 404);
