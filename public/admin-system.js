@@ -18,6 +18,16 @@ function renderSystemSettingsTab(container) {
                 <input type="file" id="import-file-input-admin" accept=".html,.htm" style="display: none;">
             </div>
         </div>
+
+        <!-- 【新增】导出功能区 -->
+        <div style="border-top: 1px solid rgba(255,255,255,0.2); margin: 2rem 0;"></div>
+        <div class="system-setting-item">
+            <p style="margin-bottom: 1.5rem;">将您有权访问的所有分类和书签导出为一个标准的HTML文件，该文件可被所有现代浏览器导入。</p>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <h3 style="margin: 0; flex-shrink: 0;"><i class="fas fa-file-export"></i> 导出数据</h3>
+                <button id="export-data-btn" class="button">开始导出</button>
+            </div>
+        </div>
         
         <div style="border-top: 1px solid rgba(255,255,255,0.2); margin: 2rem 0;"></div>
         
@@ -156,6 +166,56 @@ document.addEventListener('click', event => {
         
         if (target.closest('#import-bookmarks-btn-admin')) {
             document.getElementById('import-file-input-admin')?.click();
+        }
+
+        if (target.closest('#export-data-btn')) {
+            const button = target.closest('#export-data-btn');
+            const originalText = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在生成...';
+            button.disabled = true;
+
+            (async () => {
+                try {
+                    const response = await fetch('/api/export-data', {
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('jwt_token')}` }
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || '导出失败');
+                    }
+                    
+                    const htmlContent = await response.text();
+                    const blob = new Blob([htmlContent], { type: 'text/html' });
+                    const url = window.URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    
+                    const contentDisposition = response.headers.get('content-disposition');
+                    let filename = `navicenter_bookmarks.html`;
+                    if (contentDisposition && contentDisposition.indexOf('attachment') !== -1) {
+                        const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                        const matches = filenameRegex.exec(contentDisposition);
+                        if (matches != null && matches[1]) {
+                            filename = matches[1].replace(/['"]/g, '');
+                        }
+                    }
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    a.remove();
+                    showToast("导出文件已开始下载！");
+
+                } catch (error) {
+                    showToast(`导出失败: ${error.message}`, true);
+                } finally {
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                }
+            })();
         }
 
         if (target.closest('#cleanup-orphan-bookmarks-btn')) {
