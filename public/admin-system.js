@@ -77,38 +77,40 @@ async function parseAndImport(htmlContent) {
     function parseNode(node, parentId) {
         if (!node) return;
         
-        let currentElement = node.firstElementChild;
-        while(currentElement) {
-            if (currentElement.tagName === 'DT') {
-                const folderHeader = currentElement.querySelector('h3');
-                const link = currentElement.querySelector('a');
+        const children = Array.from(node.children);
+        for (let i = 0; i < children.length; i++) {
+            const child = children[i];
+            if (child.tagName !== 'DT') continue;
 
-                if (folderHeader) {
-                    const categoryName = folderHeader.textContent.trim();
-                    const existingCategory = [...allCategories, ...importedCategories].find(c => c.name === categoryName && c.parentId === parentId);
-                    let categoryToUseId = existingCategory ? existingCategory.id : generateId('cat');
-                    
-                    if (!existingCategory) {
-                        importedCategories.push({ id: categoryToUseId, name: categoryName, parentId: parentId, sortOrder: currentCatSort++ });
-                    }
-                    
-                    const subList = currentElement.nextElementSibling;
-                    if (subList && subList.tagName === 'DL') {
-                        parseNode(subList, categoryToUseId);
-                        currentElement = subList; // 【关键】处理完子列表后，将指针跳过它
-                    }
-                } else if (link) {
-                    const highestBmSortOrder = [...allBookmarks, ...importedBookmarks].filter(b => b.categoryId === parentId).length > 0 
-                        ? Math.max(-1, ...[...allBookmarks, ...importedBookmarks].filter(b => b.categoryId === parentId).map(bm => bm.sortOrder || 0)) 
-                        : -1;
-                    importedBookmarks.push({
-                        id: generateId('bm'), name: link.textContent.trim(), url: link.href, categoryId: parentId,
-                        description: link.getAttribute('description') || '', icon: link.getAttribute('icon') || '', 
-                        sortOrder: highestBmSortOrder + 1
-                    });
+            const folderHeader = child.querySelector('h3');
+            const link = child.querySelector('a');
+
+            if (folderHeader) {
+                const categoryName = folderHeader.textContent.trim();
+                const existingCategory = [...allCategories, ...importedCategories].find(c => c.name === categoryName && c.parentId === parentId);
+                let categoryToUseId = existingCategory ? existingCategory.id : generateId('cat');
+                
+                if (!existingCategory) {
+                    importedCategories.push({ id: categoryToUseId, name: categoryName, parentId: parentId, sortOrder: currentCatSort++ });
                 }
+                
+                // 【关键修复】寻找下一个兄弟节点<DL>作为子列表进行递归
+                const subList = child.nextElementSibling;
+                if (subList && subList.tagName === 'DL') {
+                    parseNode(subList, categoryToUseId);
+                    // 由于subList不是node的直接子节点，我们不需要手动跳过，
+                    // 循环会自然地处理下一个<DT>
+                }
+            } else if (link) {
+                const highestBmSortOrder = [...allBookmarks, ...importedBookmarks].filter(b => b.categoryId === parentId).length > 0 
+                    ? Math.max(-1, ...[...allBookmarks, ...importedBookmarks].filter(b => b.categoryId === parentId).map(bm => bm.sortOrder || 0)) 
+                    : -1;
+                importedBookmarks.push({
+                    id: generateId('bm'), name: link.textContent.trim(), url: link.href, categoryId: parentId,
+                    description: link.getAttribute('description') || '', icon: link.getAttribute('icon') || '', 
+                    sortOrder: highestBmSortOrder + 1
+                });
             }
-            currentElement = currentElement.nextElementSibling;
         }
     }
 
