@@ -129,7 +129,7 @@ const getSiteData = async (context) => {
         }
     }
     const responseToCache = new Response(JSON.stringify(siteData), { headers: { 'Content-Type': 'application/json' } });
-    context.waitUntil(cache.put(cacheKey, responseToCache.clone(), { expirationTtl: 2592000 }));
+    context.waitUntil(cache.put(cacheKey, responseToCache.clone(), { expirationTtl: 86400 }));
     return siteData;
 };
 
@@ -207,9 +207,75 @@ export async function onRequest(context) {
             const { passwordHash, salt, ...safeUser } = currentUserForData;
             return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks, users: [safeUser], publicModeEnabled: siteData.publicModeEnabled });
         }
+        
         const authResult = await authenticateRequest(request, siteData);
         if (authResult.error) return jsonResponse(authResult, authResult.status);
         const currentUser = authResult.user;
+
+        // 【新增】导出数据API
+        if (apiPath === 'export-data' && request.method === 'GET') {
+            let categoriesToExport = [];
+            let bookmarksToExport = [];
+            if (currentUser.roles.includes('admin')) {
+                categoriesToExport = siteData.categories;
+                bookmarksToExport = siteData.bookmarks;
+            } else {
+                const visibleCategoryIds = new Set(currentUser.permissions.visibleCategories || []);
+                const queue = [...visibleCategoryIds];
+                 while (queue.length > 0) {
+                    const parentId = queue.shift();
+                    const children = siteData.categories.filter(c => c.parentId === parentId);
+                    for (const child of children) {
+                        if (!visibleCategoryIds.has(child.id)) {
+                            visibleCategoryIds.add(child.id);
+                            queue.push(child.id);
+                        }
+                    }
+                }
+                categoriesToExport = siteData.categories.filter(c => visibleCategoryIds.has(c.id));
+                bookmarksToExport = siteData.bookmarks.filter(b => visibleCategoryIds.has(b.categoryId));
+            }
+            const buildHtml = (categories, bookmarks) => {
+                const categoryMap = new Map(categories.map(c => ({...c, children: []})));
+                const tree = [];
+                categories.forEach(c => {
+                    const node = categoryMap.get(c.id);
+                    if (c.parentId && categoryMap.has(c.parentId)) {
+                        categoryMap.get(c.parentId).children.push(node);
+                    } else {
+                        tree.push(node);
+                    }
+                });
+                const buildDl = (nodes) => {
+                    if (!nodes || nodes.length === 0) return '';
+                    let dlContent = '<DL><p>\n';
+                    nodes.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(node => {
+                        dlContent += `    <DT><H3>${node.name}</H3>\n`;
+                        const childrenBookmarks = bookmarks.filter(b => b.categoryId === node.id).sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+                        const childrenCategories = node.children;
+                        if(childrenBookmarks.length > 0 || (childrenCategories && childrenCategories.length > 0)) {
+                            dlContent += '    <DL><p>\n';
+                            childrenBookmarks.forEach(bm => {
+                                dlContent += `        <DT><A HREF="${bm.url}" ICON="${bm.icon || ''}">${bm.name}</A>\n`;
+                            });
+                            dlContent += buildDl(childrenCategories);
+                            dlContent += '    </DL><p>\n';
+                        }
+                    });
+                    dlContent += '</DL><p>\n';
+                    return dlContent;
+                }
+                return buildDl(tree);
+            };
+            let htmlContent = `<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n${buildHtml(categoriesToExport, bookmarksToExport)}`;
+            return new Response(htmlContent, {
+                headers: {
+                    'Content-Type': 'text/html; charset=utf-8',
+                    'Content-Disposition': `attachment; filename="navicenter_bookmarks_${new Date().toISOString().split('T')[0]}.html"`
+                }
+            });
+        }
+        
         if (apiPath === 'cleanup-orphan-bookmarks' && request.method === 'POST') {
             if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
             const categoryIds = new Set(siteData.categories.map(c => c.id));
