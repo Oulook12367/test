@@ -231,8 +231,8 @@ export async function onRequest(context) {
             const buildHtml = (categories, bookmarks) => {
                 const categoryMap = new Map(categories.map(c => ({...c, children: []})));
                 const tree = [];
-                categories.forEach(c => { const node = categoryMap.get(c.id); if (node && c.parentId && categoryMap.has(c.parentId)) { categoryMap.get(c.parentId).children.push(node); } else if (node) { tree.push(node); } });
-                const buildDl = (nodes, visited = new Set()) => {
+                categories.forEach(c => { const node = categoryMap.get(c.id); if (node && c.parentId && categoryMap.has(c.parentId)) { const parent = categoryMap.get(c.parentId); if (parent) parent.children.push(node); } else if (node) { tree.push(node); } });
+                const buildDl = (nodes, visited) => {
                     if (!nodes || nodes.length === 0) return '';
                     let dlContent = '<DL><p>\n';
                     nodes.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0)).forEach(node => {
@@ -247,12 +247,11 @@ export async function onRequest(context) {
                             dlContent += buildDl(childrenCategories, visited);
                             dlContent += '    </DL><p>\n';
                         }
-                        visited.delete(node.id);
                     });
                     dlContent += '</DL><p>\n';
                     return dlContent;
                 }
-                return buildDl(tree);
+                return buildDl(tree, new Set());
             };
             let htmlContent = `<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n${buildHtml(categoriesToExport, bookmarksToExport)}`;
             return new Response(htmlContent, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Disposition': `attachment; filename="navicenter_bookmarks_${new Date().toISOString().split('T')[0]}.html"` } });
