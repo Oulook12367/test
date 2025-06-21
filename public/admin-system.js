@@ -1,3 +1,5 @@
+// admin-system.js
+
 /**
  * 渲染“系统工具”标签页的UI结构。
  * @param {HTMLElement} container - 用于承载内容的DOM元素。
@@ -6,6 +8,7 @@ function renderSystemSettingsTab(container) {
     const usersArray = Array.isArray(allUsers) ? allUsers : Object.values(allUsers);
     const currentUser = usersArray.find(u => u.username === parseJwtPayload(localStorage.getItem('jwt_token'))?.sub);
 
+    // 基础HTML结构
     container.innerHTML = `
         <div class="system-setting-item">
             <p style="margin-bottom: 1.5rem;">从浏览器导出的HTML文件（Netscape书签格式）导入书签。此操作会合并现有书签，不会清空原有数据。</p>
@@ -15,6 +18,7 @@ function renderSystemSettingsTab(container) {
                 <input type="file" id="import-file-input-admin" accept=".html,.htm" style="display: none;">
             </div>
         </div>
+
         <div style="border-top: 1px solid rgba(255,255,255,0.2); margin: 2rem 0;"></div>
         <div class="system-setting-item">
             <p style="margin-bottom: 1.5rem;">将您有权访问的所有分类和书签导出为一个标准的HTML文件，该文件可被所有现代浏览器导入。</p>
@@ -23,15 +27,18 @@ function renderSystemSettingsTab(container) {
                 <button id="export-data-btn" class="button">开始导出</button>
             </div>
         </div>
+        
         <div style="border-top: 1px solid rgba(255,255,255,0.2); margin: 2rem 0;"></div>
+        
         <div class="system-setting-item">
-            <p style="margin-bottom: 1.5rem;">如果因之前导入错误等原因导致部分书签无法显示，可以尝试使用此工具进行修复。</p>
+            <p style="margin-bottom: 1.5rem;">如果因之前导入错误等原因导致部分书签无法显示，可以尝试使用此工具进行修复。它会自动找出所有“无家可归”的书签，并将它们放入一个名为“未分类书签”的文件夹中。</p>
             <div style="display: flex; align-items: center; gap: 1rem;">
                 <h3 style="margin: 0; flex-shrink: 0;"><i class="fas fa-medkit"></i> 数据修复</h3>
                 <button id="cleanup-orphan-bookmarks-btn" class="button">修复孤儿书签</button>
             </div>
         </div>`;
 
+    // 只有管理员才能看到公共模式的设置
     if (currentUser && currentUser.roles.includes('admin')) {
         const publicModeSection = document.createElement('div');
         publicModeSection.className = 'system-setting-item';
@@ -56,8 +63,7 @@ function renderSystemSettingsTab(container) {
 }
 
 /**
- * 【最终修正版】解析浏览器导出的HTML书签文件并准备导入数据。
- * 此版本修复了无法解析多级分类的问题。
+ * 解析浏览器导出的HTML书签文件并准备导入数据。
  * @param {string} htmlContent - 从文件读取的HTML字符串内容。
  */
 async function parseAndImport(htmlContent) {
@@ -72,33 +78,21 @@ async function parseAndImport(htmlContent) {
     const highestCatSortOrder = allCategories.length > 0 ? Math.max(-1, ...allCategories.map(c => c.sortOrder || 0)) : -1;
     let currentCatSort = highestCatSortOrder + 1;
 
-    /**
-     * 递归解析DOM节点，提取分类和书签。
-     * @param {HTMLElement} node - 当前要解析的HTML元素（通常是 <DL>）。
-     * @param {string|null} parentId - 父分类的ID，顶级分类为null。
-     */
     function parseNode(node, parentId) {
         if (!node) return;
+        
+        const container = (node.children.length === 1 && node.children[0].tagName === 'P') ? node.children[0] : node;
+        const children = Array.from(container.children);
 
-        // 核心修复：检查是否存在 <p> 标签作为容器的情况，这是导致无法识别二级分类的根源。
-        // 如果 <DL> 元素只有一个子元素且该子元素是 <P>，则实际的书签列表在 <P> 内部。
-        let itemsContainer = node;
-        if (node.children.length === 1 && node.children[0].tagName === 'P') {
-            itemsContainer = node.children[0];
-        }
-
-        // 使用修正后的 itemsContainer 来遍历子元素
-        for (const child of itemsContainer.children) {
-            // 我们只关心 <DT> 元素，因为它们代表了文件夹或书签
+        for (let i = 0; i < children.length; i++) {
+            const child = children[i];
             if (child.tagName !== 'DT') continue;
-            
+
             const folderHeader = child.querySelector('h3');
             const link = child.querySelector('a');
 
             if (folderHeader) {
                 const categoryName = folderHeader.textContent.trim();
-                
-                // 通过 name 和 parentId 来区分不同父级下的同名文件夹
                 const existingCategory = [...allCategories, ...importedCategories].find(c => c.name === categoryName && c.parentId === parentId);
                 let categoryToUseId = existingCategory ? existingCategory.id : generateId('cat');
                 
@@ -106,17 +100,15 @@ async function parseAndImport(htmlContent) {
                     importedCategories.push({ id: categoryToUseId, name: categoryName, parentId: parentId, sortOrder: currentCatSort++ });
                 }
                 
-                // 查找与此 <DT> 关联的 <DL> 子列表，此逻辑能处理 <DL> 在 <DT> 内部或作为其兄弟节点的两种情况
                 let subList = child.querySelector('dl');
                 if (!subList) {
-                    let nextSibling = child.nextElementSibling;
-                    while(nextSibling && nextSibling.tagName !== 'DL') {
-                        nextSibling = nextSibling.nextElementSibling; 
+                    const nextElement = children[i + 1];
+                    if (nextElement && nextElement.tagName === 'DL') {
+                        subList = nextElement;
+                        i++;
                     }
-                    subList = nextSibling;
                 }
                 
-                // 如果找到了子列表，则递归解析，并将当前分类ID作为父ID传入
                 if (subList) {
                     parseNode(subList, categoryToUseId);
                 }
@@ -125,14 +117,9 @@ async function parseAndImport(htmlContent) {
                 const highestBmSortOrder = [...allBookmarks, ...importedBookmarks].filter(b => b.categoryId === parentId).length > 0 
                     ? Math.max(-1, ...[...allBookmarks, ...importedBookmarks].filter(b => b.categoryId === parentId).map(bm => bm.sortOrder || 0)) 
                     : -1;
-                    
                 importedBookmarks.push({
-                    id: generateId('bm'),
-                    name: link.textContent.trim(),
-                    url: link.href,
-                    categoryId: parentId,
-                    description: link.getAttribute('description') || '',
-                    icon: link.getAttribute('icon') || '', 
+                    id: generateId('bm'), name: link.textContent.trim(), url: link.href, categoryId: parentId,
+                    description: link.getAttribute('description') || '', icon: link.getAttribute('icon') || '', 
                     sortOrder: highestBmSortOrder + 1
                 });
             }
@@ -143,18 +130,7 @@ async function parseAndImport(htmlContent) {
     if (!rootDl) throw new Error('无效的书签文件格式，未找到根<DL>元素。');
     
     let uncategorizedCatId = null;
-    // 检查根目录是否直接包含书签（而不是在文件夹内）
-    const hasRootBookmarks = Array.from(rootDl.children).some(child => {
-        if (child.tagName === 'DT') {
-            return !!child.querySelector('A');
-        }
-        if (child.tagName === 'P') {
-            return Array.from(child.children).some(pChild => pChild.tagName === 'DT' && pChild.querySelector('A'));
-        }
-        return false;
-    });
-
-    if (hasRootBookmarks) {
+    if (Array.from(rootDl.children).some(child => child.tagName === 'DT' && child.querySelector('A'))) {
         let uncategorizedCat = allCategories.find(c => c.name === '导入的未分类书签' && c.parentId === null);
         if (uncategorizedCat) {
             uncategorizedCatId = uncategorizedCat.id;
@@ -166,7 +142,6 @@ async function parseAndImport(htmlContent) {
 
     parseNode(rootDl, null);
 
-    // 将所有在根目录找到的书签（即 parentId 为 null 的）归入“导入的未分类书签”
     importedBookmarks.forEach(bm => {
         if (bm.categoryId === null && uncategorizedCatId) {
             bm.categoryId = uncategorizedCatId;
