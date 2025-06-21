@@ -45,7 +45,6 @@ function validatePassword(password) {
     return null;
 }
 
-
 // --- 缓存处理函数 ---
 async function purgeDataCache(context) {
     try {
@@ -58,19 +57,16 @@ async function purgeDataCache(context) {
     }
 }
 
-
 // --- 数据获取与认证函数 ---
 const getSiteData = async (context) => {
     const { request, env } = context;
     const cache = caches.default;
     const cacheKey = new Request(new URL(request.url).origin + '/api/data_cache_key');
-
     const cachedResponse = await cache.match(cacheKey);
     if (cachedResponse) {
         console.log("缓存命中！直接从Cache API返回数据。");
         return cachedResponse.json();
     }
-
     console.log("缓存未命中。正在从KV获取数据...");
     const [userIndex, categoryIndex, bookmarkIndex, jwtSecret, publicModeSetting] = await Promise.all([
         env.NAVI_DATA.get('_index:users', 'json').then(res => res || null),
@@ -79,7 +75,6 @@ const getSiteData = async (context) => {
         env.NAVI_DATA.get('jwtSecret'),
         env.NAVI_DATA.get('setting:publicModeEnabled')
     ]);
-
     if (userIndex === null) {
         console.log("首次运行检测到，正在初始化原子数据...");
         const adminSalt = generateSalt();
@@ -104,17 +99,14 @@ const getSiteData = async (context) => {
         ]);
         return getSiteData(context);
     }
-    
     const userKeys = userIndex.map(username => `user:${username}`);
     const categoryKeys = categoryIndex.map(id => `category:${id}`);
     const bookmarkKeys = bookmarkIndex.map(id => `bookmark:${id}`);
-
     const [usersData, categoriesData, bookmarksData] = await Promise.all([
         userKeys.length > 0 ? Promise.all(userKeys.map(key => env.NAVI_DATA.get(key, 'json'))) : Promise.resolve([]),
         categoryKeys.length > 0 ? Promise.all(categoryKeys.map(key => env.NAVI_DATA.get(key, 'json'))) : Promise.resolve([]),
         bookmarkKeys.length > 0 ? Promise.all(bookmarkKeys.map(key => env.NAVI_DATA.get(key, 'json'))) : Promise.resolve([])
     ]);
-
     const siteData = {
         users: Object.fromEntries(usersData.filter(Boolean).map(user => [user.username, user])),
         categories: categoriesData.filter(Boolean),
@@ -122,7 +114,6 @@ const getSiteData = async (context) => {
         jwtSecret: jwtSecret,
         publicModeEnabled: publicModeSetting === 'true'
     };
-    
     if (siteData.users) {
         for (const username in siteData.users) {
             const user = siteData.users[username];
@@ -137,11 +128,8 @@ const getSiteData = async (context) => {
             if (!user.permissions.visibleCategories) user.permissions.visibleCategories = [];
         }
     }
-    
     const responseToCache = new Response(JSON.stringify(siteData), { headers: { 'Content-Type': 'application/json' } });
-    // 【修改】将缓存过期时间设置为30天 (30 * 24 * 60 * 60 = 2592000 秒)
     context.waitUntil(cache.put(cacheKey, responseToCache.clone(), { expirationTtl: 2592000 }));
-    
     return siteData;
 };
 
@@ -194,7 +182,6 @@ export async function onRequest(context) {
             const passwordHash = await hashPassword(password, user.salt);
             if (user.passwordHash !== passwordHash) return jsonResponse({ error: '用户名或密码错误' }, 401);
             const { passwordHash: removed, salt: removedSalt, ...safeUser } = user;
-            // 【修改】将登录有效期设置为30天
             const token = await new SignJWT({ sub: safeUser.username, roles: safeUser.roles }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('30d').sign(await JWT_SECRET());
             return jsonResponse({ token, user: safeUser });
         }
