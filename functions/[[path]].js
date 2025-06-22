@@ -1,13 +1,12 @@
 /**
  * NaviCenter Backend for Cloudflare Workers
- * * This code implements a CQRS-like pattern for a bookmarking application.
+ * FINAL, COMPLETE VERSION
+ *
+ * This code implements a CQRS-like pattern for a bookmarking application.
  * - READ operations (GET requests) are served from a fast, full-data cache.
  * - WRITE operations (POST, PUT, DELETE) are optimized to perform the minimum
  * number of KV store reads, significantly improving performance and reducing cost.
- * * Key optimizations include:
- * - A separate, lightweight authentication function for write operations.
- * - Storing bookmark IDs within category objects to speed up sorting.
- * - Direct writes for modifications, bypassing any pre-emptive reads.
+ * - Features robust, self-healing, and conditional protection for the 'public' user.
  */
 import { SignJWT, jwtVerify } from 'jose';
 
@@ -87,9 +86,9 @@ async function purgeDataCache(context) {
 
 /**
  * [Read Path] 获取全站数据，并使用缓存。
- * 用于GET请求和少数需要全量数据的复杂写操作。
+ * 已集成“自我修复”逻辑：如果公共模式开启但public用户不存在，则自动创建。
  */
-const getSiteData = async (context) => {
+async function getSiteData(context) {
     const { request, env } = context;
     const cache = caches.default;
     const cacheKey = new Request(CACHE_KEY_STRING);
@@ -98,13 +97,34 @@ const getSiteData = async (context) => {
         return cachedResponse.json();
     }
 
-    const [userIndex, categoryIndex, bookmarkIndex, jwtSecret, publicModeSetting] = await Promise.all([
+    let [userIndex, categoryIndex, bookmarkIndex, jwtSecret, publicModeSetting] = await Promise.all([
         env.NAVI_DATA.get('_index:users', 'json').then(res => res || null),
         env.NAVI_DATA.get('_index:categories', 'json').then(res => res || []),
         env.NAVI_DATA.get('_index:bookmarks', 'json').then(res => res || []),
         env.NAVI_DATA.get('jwtSecret'),
         env.NAVI_DATA.get('setting:publicModeEnabled')
     ]);
+
+    if (userIndex !== null && publicModeSetting === 'true' && !userIndex.includes('public')) {
+        console.log("自我修复：公共模式开启但 'public' 用户缺失，正在自动重建...");
+        const allCategoryKeys = categoryIndex.map(id => `category:${id}`);
+        const allCategories = allCategoryKeys.length > 0 ? await Promise.all(allCategoryKeys.map(key => env.NAVI_DATA.get(key, 'json'))) : [];
+        let publicCat = allCategories.find(c => c && c.name === '公共分类');
+
+        if (!publicCat) {
+            publicCat = { id: `cat-${Date.now() + 2}`, name: '公共分类', parentId: null, sortOrder: 999, bookmarks: [] };
+            categoryIndex.push(publicCat.id);
+            await env.NAVI_DATA.put(`category:${publicCat.id}`, JSON.stringify(publicCat));
+            await env.NAVI_DATA.put('_index:categories', JSON.stringify(categoryIndex));
+        }
+        
+        const publicUser = { username: 'public', roles: ['viewer'], permissions: { visibleCategories: [publicCat.id] }, defaultCategoryId: publicCat.id };
+        userIndex.push('public');
+        await env.NAVI_DATA.put('user:public', JSON.stringify(publicUser));
+        await env.NAVI_DATA.put('_index:users', JSON.stringify(userIndex));
+        
+        await purgeDataCache(context);
+    }
 
     if (userIndex === null) {
         console.log("首次运行检测到，正在初始化原子数据...");
@@ -150,7 +170,6 @@ const getSiteData = async (context) => {
         publicModeEnabled: publicModeSetting === 'true'
     };
     
-    // 动态附加权限信息
     if (siteData.users) {
         for (const username in siteData.users) {
             const user = siteData.users[username];
@@ -177,7 +196,7 @@ const getSiteData = async (context) => {
  * [Write Path] 轻量级认证函数。
  * 专为写操作设计，只从KV读取单个用户的信息以进行权限验证。
  */
-const authenticateAndFetchUser = async (request, env) => {
+async function authenticateAndFetchUser(request, env) {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return { error: '认证失败：缺少 Token', status: 401 };
@@ -206,11 +225,9 @@ const authenticateAndFetchUser = async (request, env) => {
     }
 };
 
-
-
-
-// --- onRequest 主函数 (完整版) ---
-// 该函数是Cloudflare Worker的入口点，处理所有/api/路径下的请求。
+/**
+ * 主处理函数
+ */
 export async function onRequest(context) {
     try {
         const { request, env, next } = context;
@@ -220,11 +237,10 @@ export async function onRequest(context) {
         let apiPath = path.substring(5);
         if (apiPath.endsWith('/')) apiPath = apiPath.slice(0, -1);
 
-        // JWT_SECRET 必须首先被设置，以供所有认证流程使用
         const jwtSecretFromKV = await env.NAVI_DATA.get('jwtSecret');
         globalThis.JWT_SECRET_STRING = env.JWT_SECRET || jwtSecretFromKV;
         if (!globalThis.JWT_SECRET_STRING) {
-            await getSiteData(context); // 尝试通过首次运行来初始化
+            await getSiteData(context);
             const newJwtSecret = await env.NAVI_DATA.get('jwtSecret');
             if (newJwtSecret) {
                 globalThis.JWT_SECRET_STRING = newJwtSecret;
@@ -233,8 +249,6 @@ export async function onRequest(context) {
             }
         }
 
-        // --- 路由分发 ---
-        // 判断请求是否应走“全量数据加载”路径（用于读取和复杂操作）
         const useFullDataLoad =
             request.method === 'GET' ||
             apiPath === 'login' ||
@@ -242,11 +256,9 @@ export async function onRequest(context) {
             apiPath === 'import-data' ||
             (apiPath.startsWith('categories/') && request.method === 'DELETE');
 
-        // --- 路径1: 读取密集型和复杂操作 (使用缓存和全量数据) ---
         if (useFullDataLoad) {
             const siteData = await getSiteData(context);
 
-            // 公开或登录接口 (可能无需认证)
             if (apiPath === 'login' && request.method === 'POST') {
                 const { username, password } = await request.json();
                 const user = siteData.users[username];
@@ -279,8 +291,7 @@ export async function onRequest(context) {
                 const { passwordHash, salt, ...safeUser } = currentUserForData;
                 return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks, users: [safeUser], publicModeEnabled: siteData.publicModeEnabled });
             }
-
-            // 后续所有操作都需要认证
+            
             const authResult = await authenticateAndFetchUser(request, env);
             if (authResult.error) return jsonResponse(authResult, authResult.status);
             const currentUser = authResult.user;
@@ -415,7 +426,7 @@ export async function onRequest(context) {
             return jsonResponse({ error: 'API endpoint not found in read path.' }, 404);
         }
 
-        // --- 路径2: 写入密集型操作 (优化路径，不使用全量数据) ---
+        // --- 路径2: 写入密集型操作 (优化路径) ---
         
         const authResult = await authenticateAndFetchUser(request, env);
         if (authResult.error) return jsonResponse(authResult, authResult.status);
@@ -516,10 +527,17 @@ export async function onRequest(context) {
             if (apiPath === 'users' && request.method === 'POST') {
                 if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
                 const { username, password, roles, permissions, defaultCategoryId } = await request.json();
+                
+                if (username === 'public') {
+                    return jsonResponse({ error: '用户名 "public" 是系统保留名称，无法创建。' }, 400);
+                }
+
                 const usernameError = validateUsername(username); if (usernameError) return jsonResponse({ error: usernameError }, 400);
                 const passwordError = validatePassword(password); if (passwordError) return jsonResponse({ error: passwordError }, 400);
+                
                 const existingUser = await env.NAVI_DATA.get(`user:${username}`);
                 if (existingUser) return jsonResponse({ error: '用户名已存在' }, 400);
+
                 const salt = generateSalt();
                 const passwordHash = await hashPassword(password, salt);
                 const newUser = { username, passwordHash, salt, roles, permissions, defaultCategoryId: defaultCategoryId || 'all' };
@@ -540,15 +558,15 @@ export async function onRequest(context) {
                 if (isSelf) {
                     username = currentUser.username;
                 }
-                
-                const userToManage = await env.NAVI_DATA.get(`user:${username}`, 'json');
-                if (!userToManage) return jsonResponse({ error: '用户未找到' }, 404);
 
                 if(request.method === 'PUT') {
-                    if (isSelf) { // 用户修改自己的设置
+                    const userToManage = await env.NAVI_DATA.get(`user:${username}`, 'json');
+                    if (!userToManage) return jsonResponse({ error: '用户未找到' }, 404);
+                    
+                    if (isSelf) {
                          const { defaultCategoryId } = await request.json();
                          if (defaultCategoryId !== undefined) userToManage.defaultCategoryId = defaultCategoryId;
-                    } else { // 管理员修改他人
+                    } else {
                         if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
                         const { roles, permissions, password, defaultCategoryId } = await request.json();
                         if (password) {
@@ -571,10 +589,19 @@ export async function onRequest(context) {
                     if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
                     if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
                     
-                    const userIndex = await env.NAVI_DATA.get('_index:users', 'json') || [];
-                    const allUsersData = await Promise.all(userIndex.map(u => env.NAVI_DATA.get(`user:${u}`, 'json')));
+                    if (username === 'public') {
+                        const publicMode = await env.NAVI_DATA.get('setting:publicModeEnabled');
+                        if (publicMode === 'true') {
+                             return jsonResponse({ error: '公共模式已开启，无法删除 public 用户。请先在系统设置中关闭公共模式。' }, 403);
+                        }
+                    }
                     
-                    if (userToManage.roles.includes('admin')) {
+                    const userIndex = await env.NAVI_DATA.get('_index:users', 'json') || [];
+                    const userToDelete = await env.NAVI_DATA.get(`user:${username}`, 'json');
+                    if (!userToDelete) return jsonResponse({ error: '用户未找到' }, 404);
+
+                    if (userToDelete.roles.includes('admin')) {
+                        const allUsersData = await Promise.all(userIndex.map(u => env.NAVI_DATA.get(`user:${u}`, 'json')));
                         const adminCount = allUsersData.filter(u => u && u.roles.includes('admin')).length;
                         if (adminCount <= 1) return jsonResponse({ error: '无法删除最后一个管理员账户' }, 403);
                     }
@@ -594,4 +621,3 @@ export async function onRequest(context) {
         return jsonResponse({ error: "服务器发生了一个意外错误。", details: error.message }, 500);
     }
 }
-   
