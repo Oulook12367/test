@@ -4,8 +4,7 @@
  *
  * This version uses an explicit, manually triggered setup endpoint (/api/system/initialize)
  * guided by the frontend. This approach eliminates all race conditions and ensures a
- * reliable setup process while maintaining a good user experience.
- * It combines the robustness of a professional architecture with the convenience of a guided setup.
+ * reliable setup process by pre-warming the cache upon successful initialization.
  */
 import { SignJWT, jwtVerify } from 'jose';
 
@@ -186,6 +185,7 @@ export async function onRequest(context) {
             const publicUser = { username: 'public', roles: ['viewer'], permissions: { visibleCategories: [publicCatId] }, defaultCategoryId: publicCatId };
             const defaultCategory = { id: parentCatId, name: '默认分类', parentId: null, sortOrder: 0, bookmarks: [] };
             const publicCategory = { id: publicCatId, name: '公共分类', parentId: null, sortOrder: 1, bookmarks: [] };
+
             await Promise.all([
                 env.NAVI_DATA.put('user:admin', JSON.stringify(adminUser)),
                 env.NAVI_DATA.put('user:public', JSON.stringify(publicUser)),
@@ -197,6 +197,23 @@ export async function onRequest(context) {
                 env.NAVI_DATA.put('jwtSecret', newJwtSecret),
                 env.NAVI_DATA.put('setting:publicModeEnabled', 'false')
             ]);
+            
+            const initialSiteData = {
+                users: {
+                    'admin': { ...adminUser, permissions: { canEditBookmarks: true, canEditCategories: true, canEditUsers: true, visibleCategories: [parentCatId, publicCatId] }},
+                    'public': { ...publicUser, permissions: { canEditBookmarks: false, canEditCategories: false, canEditUsers: false, visibleCategories: [publicCatId] }}
+                },
+                categories: [defaultCategory, publicCategory],
+                bookmarks: [],
+                jwtSecret: newJwtSecret,
+                publicModeEnabled: false
+            };
+            const cache = caches.default;
+            const cacheKey = new Request(CACHE_KEY_STRING);
+            const responseToCache = new Response(JSON.stringify(initialSiteData), { headers: { 'Content-Type': 'application/json' } });
+            context.waitUntil(cache.put(cacheKey, responseToCache.clone()));
+            console.log("初始化成功，并已预热缓存。");
+
             return jsonResponse({ success: true, message: '系统初始化成功！请使用默认账户 admin/admin123 登录。' });
         }
 
