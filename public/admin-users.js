@@ -1,4 +1,5 @@
 // admin-users.js
+// FINAL, COMPLETE VERSION
 
 // --- 前端验证函数 ---
 function validateUsername_fe(username) {
@@ -40,10 +41,10 @@ function updateFeedback(element, message, isHint = false) {
     if (!element) return;
     if (message) {
         element.textContent = message;
-        element.style.color = isHint ? '#888' : '#f87171'; // 灰色用于提示，红色用于错误
+        element.style.color = isHint ? '#888' : '#f87171';
     } else {
         element.textContent = '✓';
-        element.style.color = '#34d399'; // 绿色用于验证通过
+        element.style.color = '#34d399';
     }
 }
 
@@ -103,7 +104,13 @@ function renderUserAdminTab(container) {
         const li = document.createElement('li');
         li.dataset.username = user.username;
         li.innerHTML = `<span>${user.username === 'public' ? `<i class="fas fa-eye fa-fw"></i> ${user.username} (公共模式)` : `${user.username} (${(user.roles || []).join(', ')})`}</span>`;
-        if (user.username !== currentUsername) {
+        
+        // [UI同步] 根据规则决定是否可以删除该用户
+        const canDelete = 
+            user.username !== currentUsername && 
+            !(user.username === 'public' && siteSettings.publicModeEnabled);
+
+        if (canDelete) {
             const delBtn = document.createElement('button');
             delBtn.className = 'button-icon danger delete-user-btn';
             delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
@@ -255,7 +262,9 @@ document.addEventListener('click', event => {
                     await apiRequest(`users/${encodeURIComponent(username)}`, 'DELETE');
                     showToast("用户删除成功！");
                     invalidateCache();
-                    allUsers = allUsers.filter(u => u.username !== username);
+                    // Manually update local state to reflect deletion
+                    const usersArray = Array.isArray(allUsers) ? allUsers : Object.values(allUsers);
+                    allUsers = usersArray.filter(u => u.username !== username);
                     renderUserAdminTab(document.getElementById('tab-users'));
                 } catch (error) { showToast(`删除失败: ${error.message}`, true); }
             });
@@ -347,12 +356,14 @@ document.addEventListener('submit', async (e) => {
             const savedUser = await apiRequest(endpoint, method, userData);
             showToast('用户保存成功！');
             invalidateCache();
-
+            
+            const usersArray = Array.isArray(allUsers) ? allUsers : Object.values(allUsers);
             if (isEditing) {
-                const userIndex = allUsers.findIndex(u => u.username === savedUser.username);
+                const userIndex = usersArray.findIndex(u => u.username === savedUser.username);
                 if (userIndex > -1) allUsers[userIndex] = savedUser;
             } else {
-                allUsers.push(savedUser);
+                usersArray.push(savedUser);
+                allUsers = usersArray;
             }
 
             const token = localStorage.getItem('jwt_token');
@@ -378,6 +389,17 @@ document.addEventListener('change', event => {
     if (document.getElementById('tab-users')?.classList.contains('active')) {
         const target = event.target;
         if (target.closest('#user-form-categories')) {
+            updateDefaultCategoryDropdown(document.getElementById('user-form'));
+        }
+        // When role changes, we might need to update category visibility/enabled state
+        if(target.name === 'role-selection') {
+            const username = document.getElementById('user-form-username').value;
+            const isPublicUser = username === 'public';
+            const isAdmin = target.value === 'admin';
+            renderUserFormCategories(
+                isAdmin ? allCategories.map(c => c.id) : [], 
+                isPublicUser ? false : isAdmin
+            );
             updateDefaultCategoryDropdown(document.getElementById('user-form'));
         }
     }
