@@ -228,6 +228,9 @@ async function authenticateAndFetchUser(request, env) {
 /**
  * 主处理函数
  */
+/**
+ * 主处理函数 (已修复初始化时的竞争条件问题)
+ */
 export async function onRequest(context) {
     try {
         const { request, env, next } = context;
@@ -237,27 +240,40 @@ export async function onRequest(context) {
         let apiPath = path.substring(5);
         if (apiPath.endsWith('/')) apiPath = apiPath.slice(0, -1);
 
+        // [修复] 增强的JWT密钥加载和自我修复逻辑
         let secret = env.JWT_SECRET || await env.NAVI_DATA.get('jwtSecret');
+
         if (!secret) {
             console.log("JWT_SECRET 未找到，开始执行检查和修复流程...");
             const userIndex = await env.NAVI_DATA.get('_index:users', 'json');
+
             if (userIndex === null) {
+                // 场景一：全新安装。
                 console.log("检测到为全新安装，将执行完整初始化...");
-                await getSiteData(context);
-                secret = await env.NAVI_DATA.get('jwtSecret');
-                if (!secret) return jsonResponse({ error: '初始化失败，无法创建 JWT_SECRET。' }, 500);
-                console.log("初始化成功，JWT_SECRET 已创建。");
+                // 调用 getSiteData 来执行初始化，并直接从其返回结果中获取新密钥
+                const siteDataFromInit = await getSiteData(context); 
+                secret = siteDataFromInit.jwtSecret; 
+
+                if (!secret) {
+                    return jsonResponse({ error: '初始化失败，无法从初始化流程中获取 JWT_SECRET。' }, 500);
+                }
+                console.log("初始化成功，JWT_SECRET 已获取。");
             } else {
+                // 场景二：数据已存在，但密钥丢失。
                 console.warn("警告：数据已初始化，但 JWT_SECRET 丢失。将重新生成一个新的密钥。");
                 console.warn("此操作将导致所有用户现有的登录状态失效，需要重新登录。");
+                
                 secret = crypto.randomUUID() + '-' + crypto.randomUUID();
                 await env.NAVI_DATA.put('jwtSecret', secret);
-                await purgeDataCache(context);
+                
+                await purgeDataCache(context); 
                 console.log("新的 JWT_SECRET 已生成并保存。");
             }
         }
         globalThis.JWT_SECRET_STRING = secret;
 
+
+        // --- 路由分发 ---
         const useFullDataLoad =
             request.method === 'GET' ||
             apiPath === 'login' ||
@@ -596,6 +612,7 @@ export async function onRequest(context) {
                 }
             }
         }
+
         return jsonResponse({ error: 'API endpoint not found.' }, 404);
     } catch (error) {
         console.error("Unhandled API Exception:", error);
