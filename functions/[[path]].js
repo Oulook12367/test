@@ -207,8 +207,7 @@ const authenticateAndFetchUser = async (request, env) => {
 };
 
 
-// --- onRequest 主函数 (已重构) ---
-import { SignJWT, jwtVerify } from 'jose';
+
 
 // --- onRequest 主函数 (完整版) ---
 // 该函数是Cloudflare Worker的入口点，处理所有/api/路径下的请求。
