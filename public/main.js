@@ -72,9 +72,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- 4. Data Loading & Rendering ---
+
+
+    
     async function initializePage() {
+
+        
         try {
             const data = await apiRequest('data');
+
+             // [新增检查] 如果访问主页时发现系统未初始化，则跳转到登录/安装页
+        if (data && data.not_initialized) {
+            window.location.href = 'login.html';
+            return;
+        }
             
             allCategories = getHierarchicalSortedData(data.categories || []);
             categoryMap = new Map(allCategories.map(c => [c.id, c]));
