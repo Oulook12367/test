@@ -1,6 +1,6 @@
 /**
  * NaviCenter Backend for Cloudflare Workers
- * FINAL, COMPLETE VERSION
+ * FINAL, COMPLETE AND UNABBREVIATED VERSION
  *
  * This code implements a CQRS-like pattern for a bookmarking application.
  * - READ operations (GET requests) are served from a fast, full-data cache.
@@ -237,17 +237,26 @@ export async function onRequest(context) {
         let apiPath = path.substring(5);
         if (apiPath.endsWith('/')) apiPath = apiPath.slice(0, -1);
 
-        const jwtSecretFromKV = await env.NAVI_DATA.get('jwtSecret');
-        globalThis.JWT_SECRET_STRING = env.JWT_SECRET || jwtSecretFromKV;
-        if (!globalThis.JWT_SECRET_STRING) {
-            await getSiteData(context);
-            const newJwtSecret = await env.NAVI_DATA.get('jwtSecret');
-            if (newJwtSecret) {
-                globalThis.JWT_SECRET_STRING = newJwtSecret;
+        let secret = env.JWT_SECRET || await env.NAVI_DATA.get('jwtSecret');
+        if (!secret) {
+            console.log("JWT_SECRET 未找到，开始执行检查和修复流程...");
+            const userIndex = await env.NAVI_DATA.get('_index:users', 'json');
+            if (userIndex === null) {
+                console.log("检测到为全新安装，将执行完整初始化...");
+                await getSiteData(context);
+                secret = await env.NAVI_DATA.get('jwtSecret');
+                if (!secret) return jsonResponse({ error: '初始化失败，无法创建 JWT_SECRET。' }, 500);
+                console.log("初始化成功，JWT_SECRET 已创建。");
             } else {
-                return jsonResponse({ error: 'Critical Configuration Error: JWT_SECRET is missing.' }, 500);
+                console.warn("警告：数据已初始化，但 JWT_SECRET 丢失。将重新生成一个新的密钥。");
+                console.warn("此操作将导致所有用户现有的登录状态失效，需要重新登录。");
+                secret = crypto.randomUUID() + '-' + crypto.randomUUID();
+                await env.NAVI_DATA.put('jwtSecret', secret);
+                await purgeDataCache(context);
+                console.log("新的 JWT_SECRET 已生成并保存。");
             }
         }
+        globalThis.JWT_SECRET_STRING = secret;
 
         const useFullDataLoad =
             request.method === 'GET' ||
@@ -258,7 +267,6 @@ export async function onRequest(context) {
 
         if (useFullDataLoad) {
             const siteData = await getSiteData(context);
-
             if (apiPath === 'login' && request.method === 'POST') {
                 const { username, password } = await request.json();
                 const user = siteData.users[username];
@@ -291,11 +299,9 @@ export async function onRequest(context) {
                 const { passwordHash, salt, ...safeUser } = currentUserForData;
                 return jsonResponse({ categories: visibleCategories, bookmarks: visibleBookmarks, users: [safeUser], publicModeEnabled: siteData.publicModeEnabled });
             }
-            
             const authResult = await authenticateAndFetchUser(request, env);
             if (authResult.error) return jsonResponse(authResult, authResult.status);
             const currentUser = authResult.user;
-
             if (apiPath === 'scrape-url' && request.method === 'GET') {
                 const targetUrl = url.searchParams.get('url');
                 if (!targetUrl) return jsonResponse({ error: 'URL parameter is missing' }, 400);
@@ -307,7 +313,6 @@ export async function onRequest(context) {
                 if (!icon) { try { const iconUrl = new URL('/favicon.ico', targetUrl); const iconCheck = await fetch(iconUrl.toString(), { method: 'HEAD' }); if(iconCheck.ok) icon = iconUrl.toString(); } catch (e) {} }
                 return jsonResponse({ title: cleanTitle(title), description: description || '', icon: icon || '' });
             }
-
             if (apiPath === 'export-data' && request.method === 'GET') {
                 let categoriesToExport = []; let bookmarksToExport = [];
                 if (currentUser.roles.includes('admin')) {
@@ -361,7 +366,6 @@ export async function onRequest(context) {
                 let htmlContent = `<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n${buildHtml(categoriesToExport, bookmarksToExport)}`;
                 return new Response(htmlContent, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Disposition': `attachment; filename="navicenter_bookmarks_${new Date().toISOString().split('T')[0]}.html"` } });
             }
-
             if (apiPath === 'cleanup-orphan-bookmarks' && request.method === 'POST') {
                 if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
                 const categoryIds = new Set(siteData.categories.map(c => c.id));
@@ -380,7 +384,6 @@ export async function onRequest(context) {
                 await purgeDataCache(context);
                 return jsonResponse({ message: `成功修复了 ${orphanBookmarks.length} 个书签。`, fixedCount: orphanBookmarks.length });
             }
-
             if (apiPath.startsWith('categories/') && request.method === 'DELETE') {
                 if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
                 const id = apiPath.split('/')[1];
@@ -398,7 +401,6 @@ export async function onRequest(context) {
                 await purgeDataCache(context);
                 return jsonResponse(null);
             }
-            
             if (apiPath === 'import-data' && request.method === 'POST') {
                 if (!currentUser.permissions.canEditCategories || !currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
                 const { newCategories, newBookmarks } = await request.json();
@@ -422,7 +424,6 @@ export async function onRequest(context) {
                 await purgeDataCache(context);
                 return jsonResponse({ success: true, importedCategories: newCategories.length, importedBookmarks: newBookmarks.length });
             }
-            
             return jsonResponse({ error: 'API endpoint not found in read path.' }, 404);
         }
 
@@ -439,7 +440,6 @@ export async function onRequest(context) {
             await purgeDataCache(context);
             return jsonResponse({ success: true, publicModeEnabled });
         }
-
         if (apiPath === 'bookmarks' && request.method === 'POST') {
             if (!currentUser.permissions.canEditBookmarks) return jsonResponse({ error: '权限不足' }, 403);
             const bookmark = await request.json();
@@ -460,7 +460,6 @@ export async function onRequest(context) {
             await purgeDataCache(context);
             return jsonResponse(bookmark, 201);
         }
-
         if (apiPath.startsWith('bookmarks/')) {
             const id = apiPath.split('/')[1];
             if (request.method === 'PUT') {
@@ -491,7 +490,6 @@ export async function onRequest(context) {
                 return jsonResponse(null);
             }
         }
-
         if (apiPath === 'categories' && request.method === 'POST') {
             if (!currentUser.permissions.canEditCategories) return jsonResponse({ error: '权限不足' }, 403);
             const { name, parentId, sortOrder } = await request.json();
@@ -505,7 +503,6 @@ export async function onRequest(context) {
             await purgeDataCache(context);
             return jsonResponse(newCategory, 201);
         }
-
         if (apiPath.startsWith('categories/')) {
             const id = apiPath.split('/')[1];
             if (request.method === 'PUT') {
@@ -518,26 +515,20 @@ export async function onRequest(context) {
                 return jsonResponse(finalCategory);
             }
         }
-        
         if (apiPath.startsWith('users')) {
             if (!currentUser.permissions.canEditUsers && apiPath !== `users/${currentUser.username}` && apiPath !== 'users/self') {
                  return jsonResponse({ error: '权限不足' }, 403);
             }
-
             if (apiPath === 'users' && request.method === 'POST') {
                 if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
                 const { username, password, roles, permissions, defaultCategoryId } = await request.json();
-                
                 if (username === 'public') {
                     return jsonResponse({ error: '用户名 "public" 是系统保留名称，无法创建。' }, 400);
                 }
-
                 const usernameError = validateUsername(username); if (usernameError) return jsonResponse({ error: usernameError }, 400);
                 const passwordError = validatePassword(password); if (passwordError) return jsonResponse({ error: passwordError }, 400);
-                
                 const existingUser = await env.NAVI_DATA.get(`user:${username}`);
                 if (existingUser) return jsonResponse({ error: '用户名已存在' }, 400);
-
                 const salt = generateSalt();
                 const passwordHash = await hashPassword(password, salt);
                 const newUser = { username, passwordHash, salt, roles, permissions, defaultCategoryId: defaultCategoryId || 'all' };
@@ -551,18 +542,15 @@ export async function onRequest(context) {
                 const { passwordHash: p, salt: s, ...safeUser } = newUser;
                 return jsonResponse(safeUser, 201);
             }
-
             if (apiPath.startsWith('users/')) {
                 let username = decodeURIComponent(apiPath.substring('users/'.length));
                 const isSelf = username === 'self';
                 if (isSelf) {
                     username = currentUser.username;
                 }
-
                 if(request.method === 'PUT') {
                     const userToManage = await env.NAVI_DATA.get(`user:${username}`, 'json');
                     if (!userToManage) return jsonResponse({ error: '用户未找到' }, 404);
-                    
                     if (isSelf) {
                          const { defaultCategoryId } = await request.json();
                          if (defaultCategoryId !== undefined) userToManage.defaultCategoryId = defaultCategoryId;
@@ -578,34 +566,28 @@ export async function onRequest(context) {
                         if (permissions && permissions.visibleCategories !== undefined) userToManage.permissions.visibleCategories = permissions.visibleCategories;
                         if (defaultCategoryId !== undefined) userToManage.defaultCategoryId = defaultCategoryId;
                     }
-
                     await env.NAVI_DATA.put(`user:${username}`, JSON.stringify(userToManage));
                     await purgeDataCache(context);
                     const { passwordHash: p, salt: s, ...safeUser } = userToManage;
                     return jsonResponse(safeUser);
                 }
-
                 if (request.method === 'DELETE') {
                     if (!currentUser.permissions.canEditUsers) return jsonResponse({ error: '权限不足' }, 403);
                     if (username === currentUser.username) return jsonResponse({ error: '无法删除自己' }, 403);
-                    
                     if (username === 'public') {
                         const publicMode = await env.NAVI_DATA.get('setting:publicModeEnabled');
                         if (publicMode === 'true') {
                              return jsonResponse({ error: '公共模式已开启，无法删除 public 用户。请先在系统设置中关闭公共模式。' }, 403);
                         }
                     }
-                    
                     const userIndex = await env.NAVI_DATA.get('_index:users', 'json') || [];
                     const userToDelete = await env.NAVI_DATA.get(`user:${username}`, 'json');
                     if (!userToDelete) return jsonResponse({ error: '用户未找到' }, 404);
-
                     if (userToDelete.roles.includes('admin')) {
                         const allUsersData = await Promise.all(userIndex.map(u => env.NAVI_DATA.get(`user:${u}`, 'json')));
                         const adminCount = allUsersData.filter(u => u && u.roles.includes('admin')).length;
                         if (adminCount <= 1) return jsonResponse({ error: '无法删除最后一个管理员账户' }, 403);
                     }
-
                     await env.NAVI_DATA.delete(`user:${username}`);
                     const newIndex = userIndex.filter(u => u !== username);
                     await env.NAVI_DATA.put('_index:users', JSON.stringify(newIndex));
@@ -614,7 +596,6 @@ export async function onRequest(context) {
                 }
             }
         }
-
         return jsonResponse({ error: 'API endpoint not found.' }, 404);
     } catch (error) {
         console.error("Unhandled API Exception:", error);
