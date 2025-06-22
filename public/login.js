@@ -7,7 +7,7 @@
 function renderInstaller(container) {
     // 使用您原始 login.html 的 class 来保持样式一致性
     container.innerHTML = `
-        <div class="installer-container">
+        <div class="installer-container" style="text-align: center;">
             <h1 class="auth-title">欢迎使用 NaviCenter</h1>
             <p class="auth-subtitle">系统需要初始化才能开始使用。此过程将创建默认的管理员账户和基础设置。</p>
             <button id="install-btn" class="button button-primary full-width">一键安装</button>
@@ -19,28 +19,25 @@ function renderInstaller(container) {
         const btn = e.target;
         const statusEl = document.getElementById('install-status');
 
-        // 禁用按钮并显示加载状态
         btn.disabled = true;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在安装...';
         statusEl.textContent = '正在创建数据库和默认用户，请稍候...';
-        statusEl.style.color = '#cbd5e0'; // 使用中性颜色提示
+        statusEl.style.color = '#cbd5e0';
 
         try {
-            // 调用后端的专用安装接口
             const response = await fetch('/api/system/initialize', { method: 'POST' });
             const result = await response.json();
 
             if (response.ok && result.success) {
                 statusEl.textContent = `安装成功！默认管理员: admin / admin123。页面将在3秒后自动刷新...`;
-                statusEl.style.color = '#34d399'; // 成功状态的绿色
+                statusEl.style.color = '#34d399';
                 setTimeout(() => window.location.reload(), 3000);
             } else {
-                // 如果后端返回错误，则抛出
                 throw new Error(result.error || '未知错误，请检查后端函数日志。');
             }
         } catch (error) {
             statusEl.textContent = `安装失败: ${error.message}`;
-            statusEl.style.color = '#f87171'; // 失败状态的红色
+            statusEl.style.color = '#f87171';
             btn.disabled = false;
             btn.textContent = '重试安装';
         }
@@ -82,7 +79,7 @@ function renderLoginPage(container) {
         submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 登录中...';
 
         try {
-            // 使用 fetch 调用后端的 /api/login 接口
+            // 您可能有一个全局的 apiRequest 函数，但为了独立性这里直接使用 fetch
             const response = await fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -94,10 +91,8 @@ function renderLoginPage(container) {
                 throw new Error(result.error || '登录失败');
             }
 
-            // 登录成功，保存 token 并跳转
             localStorage.setItem('jwt_token', result.token);
             window.location.href = 'index.html';
-
         } catch (error) {
             if (loginError) loginError.textContent = error.message;
         } finally {
@@ -117,33 +112,29 @@ async function initializeApp() {
         document.body.innerHTML = '<p style="color:red; text-align:center;">页面HTML结构错误，缺少ID为"app-container"的元素。</p>';
         return;
     }
-
-    // 移除您 body 上的 is-loading class (如果有的话)
+    
     document.body.classList.remove('is-loading');
 
-    // 如果用户已经登录，直接跳转到主页，避免不必要的数据请求
+    // 如果已登录，直接跳转
     if (localStorage.getItem('jwt_token')) {
         window.location.href = 'index.html';
         return;
     }
 
     try {
-        // 发起第一个探查请求
         const response = await fetch('/api/data');
         const data = await response.json();
 
         // 核心检查点：检查后端返回的信号
         if (data && data.not_initialized) {
-            // 后端明确告知未初始化，渲染安装程序
             renderInstaller(container);
         } else {
-            // 系统已初始化，渲染登录页面
             renderLoginPage(container);
         }
     } catch (error) {
         console.error("加载初始数据失败:", error);
         container.innerHTML = `
-            <div class="installer-container">
+            <div style="text-align: center;">
                 <h1 class="auth-title">连接错误</h1>
                 <p class="auth-subtitle">无法连接到后端服务，请检查网络连接或后端部署状态。</p>
                 <p class="error-message">${error.message}</p>
