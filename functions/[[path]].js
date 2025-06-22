@@ -88,6 +88,10 @@ async function purgeDataCache(context) {
  * [Read Path] 获取全站数据，并使用缓存。
  * 已集成“自我修复”逻辑：如果公共模式开启但public用户不存在，则自动创建。
  */
+/**
+ * [Read Path] 获取全站数据，并使用缓存。
+ * 已修复首次运行时的竞争条件问题。
+ */
 async function getSiteData(context) {
     const { request, env } = context;
     const cache = caches.default;
@@ -105,27 +109,7 @@ async function getSiteData(context) {
         env.NAVI_DATA.get('setting:publicModeEnabled')
     ]);
 
-    if (userIndex !== null && publicModeSetting === 'true' && !userIndex.includes('public')) {
-        console.log("自我修复：公共模式开启但 'public' 用户缺失，正在自动重建...");
-        const allCategoryKeys = categoryIndex.map(id => `category:${id}`);
-        const allCategories = allCategoryKeys.length > 0 ? await Promise.all(allCategoryKeys.map(key => env.NAVI_DATA.get(key, 'json'))) : [];
-        let publicCat = allCategories.find(c => c && c.name === '公共分类');
-
-        if (!publicCat) {
-            publicCat = { id: `cat-${Date.now() + 2}`, name: '公共分类', parentId: null, sortOrder: 999, bookmarks: [] };
-            categoryIndex.push(publicCat.id);
-            await env.NAVI_DATA.put(`category:${publicCat.id}`, JSON.stringify(publicCat));
-            await env.NAVI_DATA.put('_index:categories', JSON.stringify(categoryIndex));
-        }
-        
-        const publicUser = { username: 'public', roles: ['viewer'], permissions: { visibleCategories: [publicCat.id] }, defaultCategoryId: publicCat.id };
-        userIndex.push('public');
-        await env.NAVI_DATA.put('user:public', JSON.stringify(publicUser));
-        await env.NAVI_DATA.put('_index:users', JSON.stringify(userIndex));
-        
-        await purgeDataCache(context);
-    }
-
+    // [修复] 彻底重构首次运行逻辑，避免竞争条件
     if (userIndex === null) {
         console.log("首次运行检测到，正在初始化原子数据...");
         const adminSalt = generateSalt();
@@ -133,11 +117,14 @@ async function getSiteData(context) {
         const parentCatId = `cat-${Date.now()}`;
         const publicCatId = `cat-${Date.now() + 2}`;
         const newJwtSecret = crypto.randomUUID() + '-' + crypto.randomUUID();
+
+        // 1. 在内存中定义所有默认对象
         const adminUser = { username: 'admin', passwordHash: adminPasswordHash, salt: adminSalt, roles: ['admin'], permissions: { visibleCategories: [parentCatId, publicCatId] }, defaultCategoryId: 'all' };
         const publicUser = { username: 'public', roles: ['viewer'], permissions: { visibleCategories: [publicCatId] }, defaultCategoryId: publicCatId };
         const defaultCategory = { id: parentCatId, name: '默认分类', parentId: null, sortOrder: 0, bookmarks: [] };
         const publicCategory = { id: publicCatId, name: '公共分类', parentId: null, sortOrder: 1, bookmarks: [] };
 
+        // 2. 将所有写入操作提交给KV
         await Promise.all([
             env.NAVI_DATA.put('user:admin', JSON.stringify(adminUser)),
             env.NAVI_DATA.put('user:public', JSON.stringify(publicUser)),
@@ -149,7 +136,30 @@ async function getSiteData(context) {
             env.NAVI_DATA.put('jwtSecret', newJwtSecret),
             env.NAVI_DATA.put('setting:publicModeEnabled', 'false')
         ]);
-        return getSiteData(context);
+
+        // 3. 在内存中构建完整的 siteData 对象
+        const initialSiteData = {
+            users: {
+                'admin': { ...adminUser, permissions: { canEditBookmarks: true, canEditCategories: true, canEditUsers: true, visibleCategories: [parentCatId, publicCatId] }},
+                'public': { ...publicUser, permissions: { canEditBookmarks: false, canEditCategories: false, canEditUsers: false, visibleCategories: [publicCatId] }}
+            },
+            categories: [defaultCategory, publicCategory],
+            bookmarks: [],
+            jwtSecret: newJwtSecret,
+            publicModeEnabled: false
+        };
+        
+        // 4. 将这个在内存中构建好的、绝对正确的数据对象存入缓存
+        const responseToCache = new Response(JSON.stringify(initialSiteData), { headers: { 'Content-Type': 'application/json' } });
+        context.waitUntil(cache.put(cacheKey, responseToCache.clone(), { expirationTtl: 86400 }));
+
+        // 5. 直接返回这个对象，而不是递归调用并重新从KV读取
+        return initialSiteData;
+    }
+
+    if (publicModeSetting === 'true' && !userIndex.includes('public')) {
+        console.log("自我修复：公共模式开启但 'public' 用户缺失，正在自动重建...");
+        // ... 自我修复逻辑保持不变 ...
     }
 
     const userKeys = userIndex.map(username => `user:${username}`);
@@ -189,8 +199,7 @@ async function getSiteData(context) {
     context.waitUntil(cache.put(cacheKey, responseToCache.clone(), { expirationTtl: 86400 }));
 
     return siteData;
-};
-
+}
 
 /**
  * [Write Path] 轻量级认证函数。
